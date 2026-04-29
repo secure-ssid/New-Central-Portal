@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Health Report - New Central Portal{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="flex items-center gap-2 text-xs text-gray-600 mb-2"><a href="/lab/" style="color:#f97316;">← Lab</a></div>
+    <h1 class="text-2xl font-bold text-white">Network Health Report</h1>
+    <p class="text-sm text-gray-500 mt-0.5">AI-generated summary using live network data</p>
+</div>
+
+<div class="card" x-data="{loading:false}">
+    <div class="flex items-center justify-between mb-6">
+        <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;">Generate Report</p>
+    </div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:20px;">Pulls live data from all devices, alerts, and clients then asks Claude to summarize network health and flag issues.</p>
+    <button
+        hx-post="/lab/health-report"
+        hx-target="#report-output"
+        hx-indicator="#spinner"
+        @click="loading=true" @htmx:after-request.window="loading=false"
+        style="padding:10px 24px;background:#f97316;border:none;border-radius:7px;color:#fff;font-size:.875rem;font-weight:600;cursor:pointer;">
+        Generate Report
+    </button>
+    <span id="spinner" style="display:none;margin-left:12px;font-size:.8rem;color:#6b7280;" class="htmx-indicator">Generating... (may take 10–20s)</span>
+
+    <div id="report-output" style="margin-top:24px;padding-top:24px;border-top:1px solid #1e2535;min-height:40px;"></div>
+</div>
+{% endblock %}

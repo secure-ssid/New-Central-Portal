@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Devices - HPE Networking Portal{% endblock %}
+{% block content %}
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('devicesTable', () => ({
+        tab: 'all',
+        search: '',
+        sortCol: '',
+        sortDir: 1,
+        devices: [],
+        groups: [],
+        sites: [],
+        // Manage modal (group + site)
+        manageModal: false, mSerial: '', mName: '', mType: '', mGroup: '', mSite: '', mBusy: false, mError: '', mSuccess: '',
+        mCurrentGroup: '', mCurrentSite: '',
+        init() {
+            this.devices = JSON.parse(document.getElementById('devices-json').textContent);
+            this.groups = JSON.parse(document.getElementById('groups-json').textContent);
+            this.sites = JSON.parse(document.getElementById('sites-json').textContent);
+        },
+        sortBy(col) {
+            if (this.sortCol === col) this.sortDir *= -1;
+            else { this.sortCol = col; this.sortDir = 1; }
+        },
+        sortIcon(col) {
+            if (this.sortCol !== col) return '\u21C5';
+            return this.sortDir === 1 ? '\u2191' : '\u2193';
+        },
+        get switchCount()  { return this.devices.filter(d => d.type === 'switch').length; },
+        get apCount()      { return this.devices.filter(d => d.type === 'access_point').length; },
+        get gwCount()      { return this.devices.filter(d => d.type === 'gateway').length; },
+        get rows() {
+            let r = this.devices;
+            if (this.tab !== 'all') r = r.filter(d => d.type === this.tab);
+            if (this.search) {
+                const s = this.search.toLowerCase();
+                r = r.filter(d => [d.name, d.serial, d.model, d.mac, d.type, d.site, d.persona, d.deployment, d.device_function, d.ip]
+                    .some(v => v && String(v).toLowerCase().includes(s)));
+            }
+            if (this.sortCol) {
+                const col = this.sortCol, dir = this.sortDir;
+                r = [...r].sort((a, b) => {
+                    const av = String(a[col] ?? '').toLowerCase();
+                    const bv = String(b[col] ?? '').toLowerCase();
+                    return av < bv ? -dir : av > bv ? dir : 0;
+                });
+            }
+            return r;
+        },
+        typeLabel(d) {
+            let lbl = (d.type || '').replace(/_/g, ' ');
+            if (d.persona && d.persona !== '-') lbl += ' \u00b7 ' + d.persona;
+            if (d.deployment && d.deployment !== '-') lbl += ' \u00b7 ' + d.deployment;
+            return lbl;
+        },
+        // Manage modal (group + site)
+        openManageModal(d) {
+            this.mSerial = d.serial; this.mName = d.name; this.mType = d.type;
+            this.mGroup = ''; this.mSite = ''; this.mError = ''; this.mSuccess = ''; this.mBusy = false;
+            this.mCurrentGroup = d.group_name || '';
+            this.mCurrentSite = d.site || '';
+            // Pre-select current group by name
+            if (d.group_name) {
+                const match = this.groups.find(g => g.groupName === d.group_name);
+                if (match) this.mGroup = match.groupName;
+            }
+            // Pre-select current site by id
+            if (d.site_id) {
+                const match = this.sites.find(s => String(s.site_id) === String(d.site_id));
+                if (match) this.mSite = String(match.site_id);
+            }
+            this.manageModal = true;
+        },
+        async doAssignGroup() {
+            if (!this.mGroup) { this.mError = 'Select a group'; return; }
+            this.mBusy = true; this.mError = '';
+            try {
+                const r = await fetch('/devices/assign-group', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({group_name: this.mGroup, serial_numbers: [this.mSerial]})
+                });
+                const j = await r.json();
+                if (j.ok) { this.mSuccess = 'Group assigned!'; }
+                else { this.mError = j.error || 'Failed'; }
+            } catch(e) { this.mError = e.message; }
+            this.mBusy = false;
+        },
+        async doAssignSite() {
+            if (!this.mSite) { this.mError = 'Select a site'; return; }
+            this.mBusy = true; this.mError = '';
+            try {
+                const r = await fetch('/devices/assign-site', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({serial_numbers: [this.mSerial], site_id: parseInt(this.mSite), device_type: this.mType})
+                });
+                const j = await r.json();
+                if (j.ok) { this.mSuccess = (this.mSuccess ? this.mSuccess + ' ' : '') + 'Site assigned!'; }
+                else { this.mError = j.error || 'Failed'; }
+            } catch(e) { this.mError = e.message; }
+            this.mBusy = false;
+        }
+    }));
+});
+</script>
+
+<script id="devices-json" type="application/json">{{ devices | tojson }}</script>
+<script id="groups-json" type="application/json">{{ groups | tojson }}</script>
+<script id="sites-json" type="application/json">{{ sites | tojson }}</script>
+
+<div class="page-header flex items-end justify-between">
+    <div>
+        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Central</p>
+        <h1 class="text-2xl font-bold text-white">Network Devices</h1>
+        <p class="text-sm text-gray-500 mt-0.5">View and manage all devices in your network</p>
+    </div>
+</div>
+
+<div x-data="devicesTable" class="mb-4">
+    <!-- Manage Device Modal (group + site) -->
+    <div x-show="manageModal" x-cloak @click.self="manageModal=false"
+         style="position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
+        <div @click.stop style="background:#141922;border:1px solid #1e2535;border-radius:12px;padding:24px;width:460px;max-width:90vw;">
+            <h3 style="font-size:.9rem;font-weight:700;color:#f1f5f9;margin:0 0 4px;">Manage Device</h3>
+            <p style="font-size:.72rem;color:#6b7280;margin:0 0 16px;">
+                <span x-text="mName" style="color:#f97316;"></span>
+                <span style="color:#4b5563;font-family:monospace;margin-left:6px;" x-text="mSerial"></span>
+            </p>
+
+            <!-- Group assignment -->
+            <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;display:block;margin:0 0 4px;">Assign to Group</label>
+            <p x-show="mCurrentGroup" style="font-size:.72rem;color:#94a3b8;margin:0 0 8px;">Current: <span style="color:#f97316;" x-text="mCurrentGroup"></span></p>
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <select x-model="mGroup" style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.78rem;outline:none;">
+                    <option value="">&mdash; select group &mdash;</option>
+                    <template x-for="g in groups" :key="g.groupName">
+                        <option :value="g.groupName" x-text="g.groupName"></option>
+                    </template>
+                </select>
+                <button @click="doAssignGroup()" :disabled="mBusy||!mGroup" style="padding:7px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.72rem;font-weight:700;cursor:pointer;white-space:nowrap;" :style="mBusy&&{opacity:.5,cursor:'wait'}">Assign</button>
+            </div>
+
+            <!-- Site assignment -->
+            <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;display:block;margin:0 0 4px;">Assign to Site</label>
+            <p x-show="mCurrentSite" style="font-size:.72rem;color:#94a3b8;margin:0 0 8px;">Current: <span style="color:#f97316;" x-text="mCurrentSite"></span></p>
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <select x-model="mSite" style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.78rem;outline:none;">
+                    <option value="">&mdash; select site &mdash;</option>
+                    <template x-for="s in sites" :key="s.site_id">
+                        <option :value="String(s.site_id)" x-text="s.site_name + (s.city ? ' · ' + s.city : '')"></option>
+                    </template>
+                </select>
+                <button @click="doAssignSite()" :disabled="mBusy||!mSite" style="padding:7px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.72rem;font-weight:700;cursor:pointer;white-space:nowrap;" :style="mBusy&&{opacity:.5,cursor:'wait'}">Assign</button>
+            </div>
+
+            <p x-show="mError" style="font-size:.75rem;color:#f87171;margin:0 0 10px;" x-text="mError"></p>
+            <p x-show="mSuccess" style="font-size:.75rem;color:#4ade80;margin:0 0 10px;" x-text="mSuccess"></p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button @click="manageModal=false; if(mSuccess) location.reload();" style="padding:7px 14px;border:1px solid #1e2535;border-radius:6px;background:none;color:#94a3b8;font-size:.75rem;cursor:pointer;" x-text="mSuccess ? 'Done' : 'Close'"></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-3 mb-4">
+        <div style="position:relative;flex:1;max-width:380px;">
+            <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+            <input x-model="search" type="text" placeholder="Search by name, serial, model, MAC, type, site, persona…"
+                   style="width:100%;padding:8px 12px 8px 34px;background:#161b27;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;"
+                   onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#1e2535'">
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;align-items:stretch;border-bottom:1px solid #1e2535;margin-bottom:0;">
+        <button @click="tab='all'"
+            :style="tab==='all' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px 10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            All Devices
+            <span :style="tab==='all' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;" x-text="devices.length"></span>
+        </button>
+        <div style="width:1px;background:#1e2535;margin:8px 20px 8px 20px;"></div>
+        <button @click="tab='switch'"
+            :style="tab==='switch' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Switches
+            <span :style="tab==='switch' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;" x-text="switchCount"></span>
+        </button>
+        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
+        <button @click="tab='access_point'"
+            :style="tab==='access_point' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Access Points
+            <span :style="tab==='access_point' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;" x-text="apCount"></span>
+        </button>
+        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
+        <button @click="tab='gateway'"
+            :style="tab==='gateway' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Gateways
+            <span :style="tab==='gateway' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;" x-text="gwCount"></span>
+        </button>
+    </div>
+
+    <!-- Table -->
+    <div style="background:#161b27;border:1px solid #1e2535;border-top:none;border-radius:0 0 10px 10px;overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;min-width:800px;">
+            <thead>
+                <tr style="background:#0d1117;">
+                    <th @click="sortBy('name')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Name <span x-text="sortIcon('name')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th @click="sortBy('serial')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Serial <span x-text="sortIcon('serial')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th @click="sortBy('model')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Model <span x-text="sortIcon('model')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th @click="sortBy('mac')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">MAC <span x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th @click="sortBy('status')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Status <span x-text="sortIcon('status')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th @click="sortBy('ip')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">IP <span x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th style="padding:10px 10px;text-align:center;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;white-space:nowrap;width:40px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="d in rows" :key="d.serial">
+                    <tr class="tbl-row" style="cursor:pointer;" @click="window.location='/devices/' + d.serial">
+                        <td style="padding:11px 14px;">
+                            <p style="font-weight:500;color:#f1f5f9;font-size:.84rem;" x-text="d.name"></p>
+                            <p style="font-size:.65rem;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;" x-text="typeLabel(d)"></p>
+                        </td>
+                        <td style="padding:11px 14px;font-family:monospace;font-size:.78rem;color:#94a3b8;" x-text="d.serial"></td>
+                        <td style="padding:11px 14px;font-size:.82rem;color:#94a3b8;" x-text="d.model"></td>
+                        <td style="padding:11px 14px;font-family:monospace;font-size:.75rem;color:#64748b;" x-text="d.mac"></td>
+                        <td style="padding:11px 14px;">
+                            <template x-if="d.status === 'online'">
+                                <span class="status-badge-online"><span style="width:5px;height:5px;border-radius:50%;background:#4ade80;display:inline-block;"></span>Online</span>
+                            </template>
+                            <template x-if="d.status !== 'online'">
+                                <span class="status-badge-offline"><span style="width:5px;height:5px;border-radius:50%;background:#f87171;display:inline-block;"></span>Offline</span>
+                            </template>
+                        </td>
+                        <td style="padding:11px 14px;font-family:monospace;font-size:.78rem;color:#94a3b8;" x-text="d.ip"></td>
+                        <td style="padding:11px 8px;text-align:center;">
+                            <button @click.stop="openManageModal(d)" style="padding:5px 6px;border:1px solid #1e2535;border-radius:5px;background:#0d1117;color:#6b7280;cursor:pointer;line-height:0;transition:color .15s,border-color .15s;" title="Manage group & site" onmouseover="this.style.color='#f97316';this.style.borderColor='#f97316'" onmouseout="this.style.color='#6b7280';this.style.borderColor='#1e2535'">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
+                            </button>
+                        </td>
+                    </tr>
+                </template>
+                <template x-if="rows.length === 0">
+                    <tr><td colspan="7" style="padding:32px 20px;color:#4b5563;font-size:.85rem;text-align:center;">No devices match your search.</td></tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

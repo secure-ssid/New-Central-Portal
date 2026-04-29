@@ -1,0 +1,587 @@
+{% extends "base.html" %}
+{% block title %}GreenLake - New Central Portal{% endblock %}
+{% block content %}
+
+<script>
+document.addEventListener('alpine:init', () => {
+
+    Alpine.data('devicesTab', () => ({
+        search: '',
+        sortCol: '', sortDir: 1,
+        modal: false, mSerial: '', mDeviceType: '', mCurrentKey: '', mNewKey: '', mBusy: false, mError: '', mSuccess: '',
+        addModal: false, addTab: 'single', addSerial: '', addMac: '', addBusy: false, addError: '', addSuccess: '',
+        csvFile: null, csvName: '', csvParsed: 0, csvErrors: [],
+        devices: [],
+        allSubs: [],
+        init() {
+            this.devices = JSON.parse(document.getElementById('glp-devices-json').textContent);
+            this.allSubs = JSON.parse(document.getElementById('glp-subs-json').textContent);
+            this.devices.forEach(d => {
+                const s = Array.isArray(d.subscription) && d.subscription[0] ? d.subscription[0] : {};
+                d._sub_key = s.key || '';
+                d._sub_tier = s.tier || '';
+                d._sub_end = (s.endTime || '').slice(0, 10);
+                d._status = d.assignedState || '';
+            });
+        },
+        sortBy(col) {
+            if (this.sortCol === col) this.sortDir *= -1;
+            else { this.sortCol = col; this.sortDir = 1; }
+        },
+        sortIcon(col) {
+            if (this.sortCol !== col) return '\u21C5';
+            return this.sortDir === 1 ? '\u2191' : '\u2193';
+        },
+        get rows() {
+            let r = this.devices;
+            if (this.search) {
+                const s = this.search.toLowerCase();
+                r = r.filter(d => [d.serialNumber, d.partNumber, d.deviceType, d._sub_key]
+                    .some(v => v && String(v).toLowerCase().includes(s)));
+            }
+            if (this.sortCol) {
+                const col = this.sortCol, dir = this.sortDir;
+                r = [...r].sort((a, b) => {
+                    const av = String(a[col] ?? '').toLowerCase();
+                    const bv = String(b[col] ?? '').toLowerCase();
+                    return av < bv ? -dir : av > bv ? dir : 0;
+                });
+            }
+            return r;
+        },
+        get filteredSubs() {
+            const dt = (this.mDeviceType || '').toUpperCase();
+            let match = '';
+            if (['IAP','AP','ACCESS_POINT'].some(t => dt.includes(t))) match = 'AP';
+            else if (['SWITCH','CX'].some(t => dt.includes(t))) match = 'SWITCH';
+            else if (['GATEWAY','GW','VPNC'].some(t => dt.includes(t))) match = 'GATEWAY';
+            if (!match) return this.allSubs;
+            return this.allSubs.filter(s => {
+                const st = ((s.subscriptionType || '') + ' ' + (s.tier || '')).toUpperCase();
+                return st.includes(match);
+            });
+        },
+        openModal(d) {
+            this.mSerial = d.serialNumber;
+            this.mCurrentKey = d._sub_key;
+            this.mDeviceType = d.deviceType;
+            this.mNewKey = ''; this.mError = ''; this.mSuccess = ''; this.mBusy = false;
+            this.modal = true;
+        },
+        async doAssign() {
+            if (!this.mNewKey) { this.mError = 'Select a subscription'; return; }
+            this.mBusy = true; this.mError = '';
+            try {
+                const r = await fetch('/lab/greenlake/assign-subscription', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({serial_number: this.mSerial, subscription_id: this.mNewKey})
+                });
+                const j = await r.json();
+                if (j.ok) { this.mSuccess = 'Assigned — refreshing…'; setTimeout(() => location.reload(), 3000); }
+                else { this.mError = j.error || 'Failed'; }
+            } catch(e) { this.mError = e.message; }
+            this.mBusy = false;
+        },
+        async doUnassign() {
+            if (!confirm('Remove subscription from ' + this.mSerial + '?')) return;
+            this.mBusy = true; this.mError = '';
+            try {
+                const r = await fetch('/lab/greenlake/unassign-subscription', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({serial_number: this.mSerial})
+                });
+                const j = await r.json();
+                if (j.ok) { this.mSuccess = 'Unassigned — refreshing…'; setTimeout(() => location.reload(), 3000); }
+                else { this.mError = j.error || 'Failed'; }
+            } catch(e) { this.mError = e.message; }
+            this.mBusy = false;
+        },
+        openAddModal() {
+            this.addTab = 'single'; this.addSerial = ''; this.addMac = '';
+            this.addError = ''; this.addSuccess = ''; this.addBusy = false;
+            this.csvFile = null; this.csvName = ''; this.csvParsed = 0; this.csvErrors = [];
+            this.addModal = true;
+        },
+        pickCsv(e) {
+            const f = e.target.files[0];
+            if (f) { this.csvFile = f; this.csvName = f.name; }
+        },
+        async doAddSingle() {
+            if (!this.addSerial || !this.addMac) { this.addError = 'Serial and MAC are required'; return; }
+            this.addBusy = true; this.addError = '';
+            try {
+                const r = await fetch('/lab/greenlake/add-device', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({serial_number: this.addSerial.trim(), mac_address: this.addMac.trim()})
+                });
+                const j = await r.json();
+                if (j.ok) { this.addSuccess = 'Device added — refreshing…'; setTimeout(() => location.reload(), 3000); }
+                else { this.addError = j.error || 'Failed'; }
+            } catch(e) { this.addError = e.message; }
+            this.addBusy = false;
+        },
+        async doAddCsv() {
+            if (!this.csvFile) { this.addError = 'Select a CSV file'; return; }
+            this.addBusy = true; this.addError = ''; this.csvParsed = 0; this.csvErrors = [];
+            try {
+                const fd = new FormData();
+                fd.append('file', this.csvFile);
+                const r = await fetch('/lab/greenlake/add-devices-csv', { method: 'POST', body: fd });
+                const j = await r.json();
+                if (j.ok) {
+                    this.csvParsed = j.parsed || 0;
+                    this.csvErrors = j.errors || [];
+                    this.addSuccess = `${this.csvParsed} device(s) submitted — refreshing…`;
+                    setTimeout(() => location.reload(), 4000);
+                } else { this.addError = j.error || 'Failed'; }
+            } catch(e) { this.addError = e.message; }
+            this.addBusy = false;
+        },
+        downloadTemplate() {
+            const csv = 'serial_number,mac_address\nABCDEF12345,AA:BB:CC:DD:EE:FF\n';
+            const blob = new Blob([csv], {type:'text/csv'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = 'devices_template.csv'; a.click();
+        },
+        async assignToCentral(serial) {
+            const row = this.devices.find(d => d.serialNumber === serial);
+            if (row) row._assignBusy = true;
+            try {
+                const r = await fetch('/lab/greenlake/assign-to-central', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({serial_number: serial})
+                });
+                const j = await r.json();
+                if (j.ok) { if (row) row._status = 'Assigning…'; setTimeout(() => location.reload(), 3000); }
+                else { alert('Failed: ' + (j.results?.[0]?.error || j.error || 'Unknown')); }
+            } catch(e) { alert('Error: ' + e.message); }
+            if (row) row._assignBusy = false;
+        }
+    }));
+
+    Alpine.data('subscriptionsTab', () => ({
+        search: '', sortCol: '', sortDir: 1,
+        subscriptions: [],
+        init() { this.subscriptions = JSON.parse(document.getElementById('glp-subs-json').textContent); },
+        sortBy(col) { if (this.sortCol === col) this.sortDir *= -1; else { this.sortCol = col; this.sortDir = 1; } },
+        sortIcon(col) { if (this.sortCol !== col) return '\u21C5'; return this.sortDir === 1 ? '\u2191' : '\u2193'; },
+        get rows() {
+            let r = this.subscriptions;
+            if (this.search) {
+                const s = this.search.toLowerCase();
+                r = r.filter(x => [x.key, x.subscriptionType, x.tier]
+                    .some(v => v && String(v).toLowerCase().includes(s)));
+            }
+            if (this.sortCol) {
+                const col = this.sortCol, dir = this.sortDir;
+                r = [...r].sort((a, b) => {
+                    const av = String(a[col] ?? '').toLowerCase();
+                    const bv = String(b[col] ?? '').toLowerCase();
+                    return av < bv ? -dir : av > bv ? dir : 0;
+                });
+            }
+            return r;
+        }
+    }));
+
+    Alpine.data('usersTab', () => ({
+        search: '', sortCol: '', sortDir: 1,
+        users: [],
+        init() { this.users = JSON.parse(document.getElementById('glp-users-json').textContent); },
+        sortBy(col) { if (this.sortCol === col) this.sortDir *= -1; else { this.sortCol = col; this.sortDir = 1; } },
+        sortIcon(col) { if (this.sortCol !== col) return '\u21C5'; return this.sortDir === 1 ? '\u2191' : '\u2193'; },
+        fullName(u) { return ((u.firstName || '') + ' ' + (u.lastName || '')).trim() || u.username || '—'; },
+        get rows() {
+            let r = this.users;
+            if (this.search) {
+                const s = this.search.toLowerCase();
+                r = r.filter(u => [u.firstName, u.lastName, u.username, u.userStatus]
+                    .some(v => v && String(v).toLowerCase().includes(s)));
+            }
+            if (this.sortCol) {
+                const col = this.sortCol, dir = this.sortDir;
+                r = [...r].sort((a, b) => {
+                    const av = String(a[col] ?? '').toLowerCase();
+                    const bv = String(b[col] ?? '').toLowerCase();
+                    return av < bv ? -dir : av > bv ? dir : 0;
+                });
+            }
+            return r;
+        }
+    }));
+
+    Alpine.data('auditTab', () => ({
+        search: '', sortCol: '', sortDir: 1,
+        logs: [],
+        init() { this.logs = JSON.parse(document.getElementById('glp-audit-json').textContent); },
+        sortBy(col) { if (this.sortCol === col) this.sortDir *= -1; else { this.sortCol = col; this.sortDir = 1; } },
+        sortIcon(col) { if (this.sortCol !== col) return '\u21C5'; return this.sortDir === 1 ? '\u2191' : '\u2193'; },
+        userName(e) {
+            if (e.user && typeof e.user === 'object') return e.user.username || '—';
+            return e.user || '—';
+        },
+        appName(e) {
+            if (e.application && typeof e.application === 'object') return e.application.applicationName || '—';
+            return '—';
+        },
+        get rows() {
+            let r = this.logs;
+            if (this.search) {
+                const s = this.search.toLowerCase();
+                r = r.filter(e => [e.createdAt, this.userName(e), e.category, e.description]
+                    .some(v => v && String(v).toLowerCase().includes(s)));
+            }
+            if (this.sortCol) {
+                const col = this.sortCol, dir = this.sortDir;
+                r = [...r].sort((a, b) => {
+                    let av, bv;
+                    if (col === '_user') { av = this.userName(a); bv = this.userName(b); }
+                    else if (col === '_app') { av = this.appName(a); bv = this.appName(b); }
+                    else { av = String(a[col] ?? ''); bv = String(b[col] ?? ''); }
+                    av = av.toLowerCase(); bv = bv.toLowerCase();
+                    return av < bv ? -dir : av > bv ? dir : 0;
+                });
+            }
+            return r;
+        }
+    }));
+
+});
+</script>
+
+<!-- JSON data blocks -->
+<script id="glp-devices-json" type="application/json">{{ devices | tojson }}</script>
+<script id="glp-subs-json" type="application/json">{{ subscriptions | tojson }}</script>
+<script id="glp-users-json" type="application/json">{{ users | tojson }}</script>
+<script id="glp-audit-json" type="application/json">{{ audit_logs | tojson }}</script>
+
+<div class="page-header flex items-end justify-between">
+    <div>
+        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Platform</p>
+        <h1 class="text-2xl font-bold text-white">HPE GreenLake</h1>
+        <p class="text-sm text-gray-500 mt-0.5">Inventory, subscriptions, users, and audit from GLP workspace</p>
+    </div>
+    <!-- summary pills -->
+    <div style="display:flex;gap:8px;">
+        {% for label, count, color in [('Devices', devices|length, '#6366f1'), ('Subscriptions', subscriptions|length, '#10b981'), ('Users', users|length, '#3b82f6')] %}
+        <div style="padding:6px 14px;background:{{ color }}18;border:1px solid {{ color }}40;border-radius:20px;font-size:.72rem;color:{{ color }};font-weight:700;">
+            {{ count }} {{ label }}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div x-data="{tab:'devices'}" style="margin-top:0;">
+
+    <!-- Tab bar -->
+    <div style="display:flex;align-items:stretch;border-bottom:1px solid #1e2535;">
+        <button @click="tab='devices'"
+            :style="tab==='devices' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px 10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Devices
+            <span :style="tab==='devices' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;">{{ devices|length }}</span>
+        </button>
+        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
+        <button @click="tab='subscriptions'"
+            :style="tab==='subscriptions' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Subscriptions
+            <span :style="tab==='subscriptions' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;">{{ subscriptions|length }}</span>
+        </button>
+        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
+        <button @click="tab='users'"
+            :style="tab==='users' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Users
+            <span :style="tab==='users' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;">{{ users|length }}</span>
+        </button>
+        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
+        <button @click="tab='audit'"
+            :style="tab==='audit' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Audit Log
+            <span :style="tab==='audit' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;">{{ audit_logs|length }}</span>
+        </button>
+    </div>
+
+    <!-- ═══════════════  DEVICES  ═══════════════ -->
+    <div x-show="tab==='devices'" x-data="devicesTab" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+
+        <!-- Reassignment modal -->
+        <div x-show="modal" x-cloak @click.self="modal=false"
+             style="position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
+            <div @click.stop style="background:#141922;border:1px solid #1e2535;border-radius:12px;padding:24px;width:440px;max-width:90vw;">
+                <h3 style="font-size:.9rem;font-weight:700;color:#f1f5f9;margin:0 0 4px;">Reassign Subscription</h3>
+                <p style="font-size:.72rem;color:#6b7280;margin:0 0 16px;">Device: <span style="color:#f97316;font-family:monospace;" x-text="mSerial"></span></p>
+                <p style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;margin:0 0 6px;">Current subscription</p>
+                <p style="font-size:.78rem;color:#94a3b8;font-family:monospace;margin:0 0 16px;word-break:break-all;" x-text="mCurrentKey || '— none —'"></p>
+                <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;display:block;margin:0 0 6px;">Assign new subscription <span style="font-weight:400;text-transform:none;letter-spacing:0;" x-text="mDeviceType ? '(' + mDeviceType + ' compatible)' : ''"></span></label>
+                <select x-model="mNewKey" style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.78rem;font-family:monospace;outline:none;margin:0 0 6px;">
+                    <option value="">— select —</option>
+                    <template x-for="s in filteredSubs" :key="s.id">
+                        <option :value="s.id" x-text="s.key + ' · ' + (s.tier || s.subscriptionType || '') + ' (' + (s.availableQuantity || '0') + ' avail)'"></option>
+                    </template>
+                </select>
+                <p x-show="filteredSubs.length===0" style="font-size:.72rem;color:#f87171;margin:0 0 12px;">No matching subscriptions for this device type.</p>
+                <p x-show="filteredSubs.length>0" style="font-size:.6rem;color:#4b5563;margin:0 0 16px;">Only subscriptions with available quantity will succeed.</p>
+                <p x-show="mError" style="font-size:.75rem;color:#f87171;margin:0 0 10px;" x-text="mError"></p>
+                <p x-show="mSuccess" style="font-size:.75rem;color:#4ade80;margin:0 0 10px;" x-text="mSuccess"></p>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button @click="doUnassign()" :disabled="mBusy||!mCurrentKey" style="padding:7px 14px;border:1px solid #7f1d1d;border-radius:6px;background:#7f1d1d30;color:#f87171;font-size:.75rem;font-weight:600;cursor:pointer;" :style="mBusy&&{opacity:.5,cursor:'wait'}">Unassign</button>
+                    <button @click="modal=false" style="padding:7px 14px;border:1px solid #1e2535;border-radius:6px;background:none;color:#94a3b8;font-size:.75rem;cursor:pointer;">Cancel</button>
+                    <button @click="doAssign()" :disabled="mBusy||!mNewKey" style="padding:7px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.75rem;font-weight:700;cursor:pointer;" :style="mBusy&&{opacity:.5,cursor:'wait'}">Assign</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Device modal -->
+        <div x-show="addModal" x-cloak @click.self="addModal=false"
+             style="position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
+            <div @click.stop style="background:#141922;border:1px solid #1e2535;border-radius:12px;padding:24px;width:480px;max-width:90vw;">
+                <h3 style="font-size:.9rem;font-weight:700;color:#f1f5f9;margin:0 0 16px;">Add Device to GreenLake</h3>
+                <!-- tabs -->
+                <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid #1e2535;">
+                    <button @click="addTab='single'"
+                        :style="addTab==='single' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;'"
+                        style="padding:8px 16px;font-size:.75rem;font-weight:600;background:none;border:none;cursor:pointer;">
+                        Single Device
+                    </button>
+                    <button @click="addTab='csv'"
+                        :style="addTab==='csv' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;'"
+                        style="padding:8px 16px;font-size:.75rem;font-weight:600;background:none;border:none;cursor:pointer;">
+                        CSV Upload
+                    </button>
+                </div>
+                <!-- single device form -->
+                <div x-show="addTab==='single'">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;display:block;margin:0 0 6px;">Serial Number</label>
+                    <input x-model="addSerial" type="text" placeholder="e.g. SG30LMR164"
+                           style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.8rem;font-family:monospace;outline:none;margin:0 0 12px;box-sizing:border-box;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;display:block;margin:0 0 6px;">MAC Address</label>
+                    <input x-model="addMac" type="text" placeholder="e.g. AA:BB:CC:DD:EE:FF"
+                           style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.8rem;font-family:monospace;outline:none;margin:0 0 16px;box-sizing:border-box;">
+                </div>
+                <!-- csv upload form -->
+                <div x-show="addTab==='csv'">
+                    <p style="font-size:.72rem;color:#94a3b8;margin:0 0 8px;">Upload a CSV with columns: <span style="color:#f97316;font-family:monospace;">serial_number</span>, <span style="color:#f97316;font-family:monospace;">mac_address</span></p>
+                    <button @click="downloadTemplate()" style="font-size:.68rem;color:#3b82f6;background:none;border:none;cursor:pointer;padding:0;margin:0 0 12px;text-decoration:underline;">Download template CSV</button>
+                    <label style="display:block;padding:20px;border:2px dashed #1e2535;border-radius:8px;text-align:center;cursor:pointer;margin:0 0 8px;transition:border-color .15s;" :style="csvName && 'border-color:#f97316'">
+                        <input type="file" accept=".csv" @change="pickCsv($event)" style="display:none;">
+                        <template x-if="!csvName">
+                            <span style="font-size:.75rem;color:#6b7280;">Click to select CSV file</span>
+                        </template>
+                        <template x-if="csvName">
+                            <span style="font-size:.75rem;color:#f97316;" x-text="csvName"></span>
+                        </template>
+                    </label>
+                    <template x-if="csvParsed > 0">
+                        <p style="font-size:.72rem;color:#4ade80;margin:4px 0;" x-text="csvParsed + ' device(s) parsed'"></p>
+                    </template>
+                    <template x-for="err in csvErrors" :key="err">
+                        <p style="font-size:.68rem;color:#f87171;margin:2px 0;" x-text="err"></p>
+                    </template>
+                </div>
+                <!-- messages + buttons -->
+                <p x-show="addError" style="font-size:.75rem;color:#f87171;margin:0 0 10px;" x-text="addError"></p>
+                <p x-show="addSuccess" style="font-size:.75rem;color:#4ade80;margin:0 0 10px;" x-text="addSuccess"></p>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+                    <button @click="addModal=false" style="padding:7px 14px;border:1px solid #1e2535;border-radius:6px;background:none;color:#94a3b8;font-size:.75rem;cursor:pointer;">Cancel</button>
+                    <button x-show="addTab==='single'" @click="doAddSingle()" :disabled="addBusy||!addSerial||!addMac"
+                            style="padding:7px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.75rem;font-weight:700;cursor:pointer;"
+                            :style="addBusy&&{opacity:.5,cursor:'wait'}">Add Device</button>
+                    <button x-show="addTab==='csv'" @click="doAddCsv()" :disabled="addBusy||!csvFile"
+                            style="padding:7px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.75rem;font-weight:700;cursor:pointer;"
+                            :style="addBusy&&{opacity:.5,cursor:'wait'}">Upload &amp; Add</button>
+                </div>
+            </div>
+        </div>
+
+        <div style="padding:14px 20px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:12px;">
+            <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;flex:1;"><span x-text="rows.length"></span> devices</p>
+            <button @click="openAddModal()" style="padding:6px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.72rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                Add Device
+            </button>
+            <div style="position:relative;">
+                <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);" width="13" height="13" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+                <input x-model="search" type="text" placeholder="Filter…" style="padding:6px 12px 6px 30px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.8rem;outline:none;width:200px;">
+            </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#0d1117;">
+                <th @click="sortBy('serialNumber')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Serial <span x-text="sortIcon('serialNumber')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('partNumber')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Part Number <span x-text="sortIcon('partNumber')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('deviceType')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Type <span x-text="sortIcon('deviceType')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('_sub_key')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Subscription Key <span x-text="sortIcon('_sub_key')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('_sub_end')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Expiry <span x-text="sortIcon('_sub_end')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('_status')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Status <span x-text="sortIcon('_status')" style="opacity:.45;font-size:.6rem;"></span></th>
+            </tr></thead>
+            <tbody>
+                <template x-for="d in rows" :key="d.serialNumber">
+                    <tr class="tbl-row">
+                        <td style="padding:10px 20px;font-size:.78rem;color:#f1f5f9;font-weight:600;font-family:monospace;" x-text="d.serialNumber || '—'"></td>
+                        <td style="padding:10px 20px;font-size:.75rem;color:#94a3b8;" x-text="d.partNumber || '—'"></td>
+                        <td style="padding:10px 20px;font-size:.75rem;color:#94a3b8;" x-text="d.deviceType || '—'"></td>
+                        <td style="padding:10px 20px;font-family:monospace;cursor:pointer;" @click="openModal(d)">
+                            <template x-if="d._sub_key">
+                                <div>
+                                    <span style="font-size:.72rem;color:#e2e8f0;border-bottom:1px dashed #6b7280;" x-text="d._sub_key"></span><br>
+                                    <span x-show="d._sub_tier" style="font-size:.62rem;color:#6b7280;" x-text="d._sub_tier"></span>
+                                </div>
+                            </template>
+                            <template x-if="!d._sub_key">
+                                <span style="font-size:.72rem;color:#f97316;border-bottom:1px dashed #f97316;">+ assign</span>
+                            </template>
+                        </td>
+                        <td style="padding:10px 20px;font-size:.72rem;font-family:monospace;"
+                            :style="d._sub_end && d._sub_end < '2026-12-01' ? 'color:#f87171' : 'color:#4ade80'"
+                            x-text="d._sub_end || '—'"></td>
+                        <td style="padding:10px 20px;">
+                            <template x-if="(d._status||'').toUpperCase() === 'UNASSIGNED'">
+                                <button @click.stop="assignToCentral(d.serialNumber)" :disabled="d._assignBusy"
+                                    style="padding:3px 10px;border:1px solid #f97316;border-radius:4px;background:#f9731618;color:#f97316;font-size:.68rem;font-weight:700;cursor:pointer;"
+                                    :style="d._assignBusy && {opacity:.5,cursor:'wait'}">
+                                    <span x-text="d._assignBusy ? 'Assigning…' : 'Assign to Central'"></span>
+                                </button>
+                            </template>
+                            <template x-if="(d._status||'').toUpperCase() !== 'UNASSIGNED'">
+                                <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;"
+                                    :style="(d._status||'').toLowerCase().includes('assigned') ? 'color:#4ade80;background:#4ade8018' : (d._status||'').toLowerCase().includes('arch') ? 'color:#6b7280;background:#6b728018' : 'color:#94a3b8;background:#94a3b818'"
+                                    x-text="(d._status||'—').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())"></span>
+                            </template>
+                        </td>
+                    </tr>
+                </template>
+                <template x-if="devices.length===0">
+                    <tr><td colspan="6" style="padding:32px 20px;color:#4b5563;font-size:.85rem;text-align:center;">No devices returned.</td></tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ═══════════════  SUBSCRIPTIONS  ═══════════════ -->
+    <div x-show="tab==='subscriptions'" x-data="subscriptionsTab" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+        <div style="padding:14px 20px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:12px;">
+            <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;flex:1;"><span x-text="rows.length"></span> subscriptions</p>
+            <div style="position:relative;">
+                <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);" width="13" height="13" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+                <input x-model="search" type="text" placeholder="Filter…" style="padding:6px 12px 6px 30px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.8rem;outline:none;width:200px;">
+            </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#0d1117;">
+                <th @click="sortBy('key')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Key <span x-text="sortIcon('key')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('subscriptionType')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Type <span x-text="sortIcon('subscriptionType')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('quantity')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Qty <span x-text="sortIcon('quantity')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('availableQuantity')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Available <span x-text="sortIcon('availableQuantity')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('startTime')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Start <span x-text="sortIcon('startTime')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('endTime')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Expiry <span x-text="sortIcon('endTime')" style="opacity:.45;font-size:.6rem;"></span></th>
+            </tr></thead>
+            <tbody>
+                <template x-for="s in rows" :key="s.key">
+                    <tr class="tbl-row">
+                        <td style="padding:10px 20px;font-family:monospace;">
+                            <span style="font-size:.72rem;color:#f1f5f9;font-weight:600;" x-text="s.key || '—'"></span><br>
+                            <span x-show="s.subscriptionStatus" style="font-size:.6rem;font-weight:700;"
+                                :style="s.subscriptionStatus==='STARTED' ? 'color:#4ade80' : 'color:#6b7280'"
+                                x-text="s.subscriptionStatus"></span>
+                        </td>
+                        <td style="padding:10px 20px;">
+                            <span style="font-size:.75rem;color:#94a3b8;" x-text="s.subscriptionType || '—'"></span><br>
+                            <span x-show="s.tier" style="font-size:.62rem;color:#6b7280;" x-text="s.tier"></span>
+                        </td>
+                        <td style="padding:10px 20px;font-size:.8rem;color:#f97316;font-weight:700;" x-text="s.quantity || '—'"></td>
+                        <td style="padding:10px 20px;font-size:.8rem;"
+                            :style="s.availableQuantity && String(s.availableQuantity)!=='0' ? 'color:#4ade80' : 'color:#6b7280'"
+                            x-text="s.availableQuantity ?? '—'"></td>
+                        <td style="padding:10px 20px;font-size:.72rem;color:#6b7280;font-family:monospace;" x-text="(s.startTime||'').slice(0,10) || '—'"></td>
+                        <td style="padding:10px 20px;font-size:.72rem;font-family:monospace;"
+                            :style="(s.endTime||'').slice(0,10) && (s.endTime||'').slice(0,10) < '2026-12-01' ? 'color:#f87171' : 'color:#4ade80'"
+                            x-text="(s.endTime||'').slice(0,10) || '—'"></td>
+                    </tr>
+                </template>
+                <template x-if="subscriptions.length===0">
+                    <tr><td colspan="6" style="padding:32px 20px;color:#4b5563;font-size:.85rem;text-align:center;">No subscriptions found.</td></tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ═══════════════  USERS  ═══════════════ -->
+    <div x-show="tab==='users'" x-data="usersTab" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+        <div style="padding:14px 20px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:12px;">
+            <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;flex:1;"><span x-text="rows.length"></span> users</p>
+            <div style="position:relative;">
+                <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);" width="13" height="13" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+                <input x-model="search" type="text" placeholder="Filter…" style="padding:6px 12px 6px 30px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.8rem;outline:none;width:200px;">
+            </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#0d1117;">
+                <th @click="sortBy('firstName')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Name <span x-text="sortIcon('firstName')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('username')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Email <span x-text="sortIcon('username')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('userStatus')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Status <span x-text="sortIcon('userStatus')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('lastLogin')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Last Login <span x-text="sortIcon('lastLogin')" style="opacity:.45;font-size:.6rem;"></span></th>
+            </tr></thead>
+            <tbody>
+                <template x-for="u in rows" :key="u.username">
+                    <tr class="tbl-row">
+                        <td style="padding:10px 20px;font-size:.82rem;color:#f1f5f9;font-weight:500;" x-text="fullName(u)"></td>
+                        <td style="padding:10px 20px;font-size:.78rem;color:#94a3b8;" x-text="u.username || '—'"></td>
+                        <td style="padding:10px 20px;">
+                            <span style="display:inline-block;padding:2px 9px;border-radius:4px;font-size:.68rem;font-weight:700;"
+                                :style="(u.userStatus||'').toLowerCase().includes('verified') ? 'color:#4ade80;background:#4ade8018' : (u.userStatus||'').toLowerCase().includes('invited') ? 'color:#fbbf24;background:#fbbf2418' : 'color:#6b7280;background:#6b728018'"
+                                x-text="u.userStatus || '—'"></span>
+                        </td>
+                        <td style="padding:10px 20px;font-size:.7rem;color:#4b5563;font-family:monospace;" x-text="(u.lastLogin||'').slice(0,16).replace('T',' ') || '—'"></td>
+                    </tr>
+                </template>
+                <template x-if="users.length===0">
+                    <tr><td colspan="4" style="padding:32px 20px;color:#4b5563;font-size:.85rem;text-align:center;">No users found.</td></tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ═══════════════  AUDIT LOG  ═══════════════ -->
+    <div x-show="tab==='audit'" x-data="auditTab" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+        <div style="padding:14px 20px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:12px;">
+            <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;flex:1;"><span x-text="rows.length"></span> log entries</p>
+            <div style="position:relative;">
+                <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);" width="13" height="13" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+                <input x-model="search" type="text" placeholder="Filter…" style="padding:6px 12px 6px 30px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.8rem;outline:none;width:200px;">
+            </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#0d1117;">
+                <th @click="sortBy('createdAt')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">When <span x-text="sortIcon('createdAt')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('_user')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">User <span x-text="sortIcon('_user')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('category')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Category <span x-text="sortIcon('category')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th @click="sortBy('_app')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Application <span x-text="sortIcon('_app')" style="opacity:.45;font-size:.6rem;"></span></th>
+                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;">Description</th>
+            </tr></thead>
+            <tbody>
+                <template x-for="(e, i) in rows" :key="i">
+                    <tr class="tbl-row">
+                        <td style="padding:10px 20px;font-size:.7rem;color:#4b5563;font-family:monospace;white-space:nowrap;" x-text="(e.createdAt||'').slice(0,16).replace('T',' ')"></td>
+                        <td style="padding:10px 20px;font-size:.75rem;color:#94a3b8;" x-text="userName(e)"></td>
+                        <td style="padding:10px 20px;">
+                            <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;color:#f97316;background:#f9731618;" x-text="e.category || '—'"></span>
+                        </td>
+                        <td style="padding:10px 20px;font-size:.72rem;color:#6b7280;" x-text="appName(e)"></td>
+                        <td style="padding:10px 20px;font-size:.75rem;color:#6b7280;max-width:300px;" x-text="e.description || '—'"></td>
+                    </tr>
+                </template>
+                <template x-if="logs.length===0">
+                    <tr><td colspan="5" style="padding:32px 20px;color:#4b5563;font-size:.85rem;text-align:center;">No audit log entries found.</td></tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock %}

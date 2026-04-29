@@ -1,0 +1,28 @@
+<!-- User message -->
+<div class="p-4 bg-surface-900 rounded-lg border border-surface-700">
+    <p class="text-xs text-brand-500 font-semibold mb-1">YOU</p>
+    <p class="text-sm text-gray-200">{{ message }}</p>
+</div>
+
+{% if tools_used %}
+<!-- Tools used -->
+<div class="px-4 py-2 flex flex-wrap gap-2">
+    {% for tool in tools_used %}
+    {% if tool.name == 'search_docs' %}
+    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20">
+        🔧 {{ tool.name }} — {{ tool.summary }}
+    </span>
+    {% else %}
+    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-700 text-gray-300 border border-surface-600">
+        🔧 {{ tool.name }} — {{ tool.summary }}
+    </span>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- AI response -->
+<div class="p-4 bg-green-500/5 rounded-lg border border-green-500/20">
+    <p class="text-xs text-green-500 font-semibold mb-1">GPT-4o</p>
+    <p class="text-sm text-gray-200 whitespace-pre-wrap">{{ response }}</p>
+</div>

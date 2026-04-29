@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}Topology - New Central Portal{% endblock %}
+{% block content %}
+
+<div class="page-header flex items-end justify-between">
+    <div>
+        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Monitoring</p>
+        <h1 class="text-2xl font-bold text-white">Network Topology</h1>
+        <p class="text-sm text-gray-500 mt-0.5">Live infrastructure map — click any device to open its detail page</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+        <!-- Layout toggle -->
+        <div style="display:flex;gap:3px;background:#0d1117;border:1px solid #1e2535;border-radius:7px;padding:3px;">
+            <button onclick="setLayout('hierarchical')" id="btn-h"
+                style="padding:5px 13px;border:none;border-radius:5px;font-size:.72rem;font-weight:600;cursor:pointer;background:#f97316;color:#fff;transition:all .15s;">Hierarchy</button>
+            <button onclick="setLayout('physics')" id="btn-p"
+                style="padding:5px 13px;border:none;border-radius:5px;font-size:.72rem;font-weight:600;cursor:pointer;background:transparent;color:#6b7280;transition:all .15s;">Physics</button>
+        </div>
+        <!-- Legend -->
+        <div style="display:flex;gap:10px;align-items:center;border-left:1px solid #1e2535;padding-left:10px;">
+            {% for label, color in [('Switch','#6366f1'),('AP','#a855f7'),('Gateway','#f59e0b')] %}
+            <span style="display:flex;align-items:center;gap:5px;font-size:.7rem;color:#94a3b8;">
+                <span style="width:9px;height:9px;border-radius:50%;border:2px solid {{ color }};display:inline-block;"></span>{{ label }}
+            </span>
+            {% endfor %}
+        </div>
+        <button onclick="network.fit({animation:{duration:400,easingFunction:'easeInOutQuad'}})"
+            style="padding:6px 14px;background:#1e2535;border:1px solid #374151;border-radius:6px;color:#94a3b8;font-size:.75rem;cursor:pointer;">
+            Reset View
+        </button>
+    </div>
+</div>
+
+<!-- Tooltip -->
+<div id="topo-tooltip" style="display:none;position:fixed;z-index:1000;background:#0d1117;border:1px solid #1e2535;border-radius:8px;padding:12px 16px;min-width:190px;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.6);">
+    <p id="tt-name" style="font-weight:700;color:#f1f5f9;font-size:.875rem;margin-bottom:6px;"></p>
+    <p id="tt-model" style="font-size:.72rem;color:#6b7280;margin-bottom:2px;"></p>
+    <p id="tt-ip" style="font-size:.72rem;color:#6b7280;margin-bottom:2px;font-family:monospace;"></p>
+    <p id="tt-site" style="font-size:.72rem;color:#6b7280;margin-bottom:2px;"></p>
+    <p id="tt-status" style="font-size:.75rem;font-weight:700;margin-top:6px;"></p>
+</div>
+
+<!-- Canvas -->
+<div id="cy" style="width:100%;height:calc(100vh - 205px);background:#060a12;border:1px solid #1e2535;border-radius:10px;overflow:hidden;"></div>
+
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script>
+const raw = {{ graph_data | safe }};
+
+// ── Icons: clean, recognizable SVG paths inside a 24×24 viewBox ──────────
+function svgIcon(type, stroke, bg) {
+    const icons = {
+        // Wifi symbol: 3 concentric arcs + dot — classic AP look
+        ap: `
+          <circle cx="12" cy="19.5" r="1.8" fill="${stroke}"/>
+          <path d="M8.5 15.5 a5 5 0 0 1 7 0" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M5.5 12.2 a9.2 9.2 0 0 1 13 0" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M2.5 9 a13.7 13.7 0 0 1 19 0" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round"/>`,
+        // Rack switch: two rows with port LEDs
+        switch: `
+          <rect x="3" y="6.5" width="18" height="4" rx="1.5" fill="none" stroke="${stroke}" stroke-width="1.6"/>
+          <circle cx="6.2" cy="8.5" r="1" fill="${stroke}"/><circle cx="9" cy="8.5" r="1" fill="${stroke}"/><circle cx="11.8" cy="8.5" r="1" fill="${stroke}"/>
+          <rect x="3" y="13.5" width="18" height="4" rx="1.5" fill="none" stroke="${stroke}" stroke-width="1.6"/>
+          <circle cx="6.2" cy="15.5" r="1" fill="${stroke}"/><circle cx="9" cy="15.5" r="1" fill="${stroke}"/><circle cx="11.8" cy="15.5" r="1" fill="${stroke}"/>`,
+        // Router/gateway: box with uplink arrows
+        gateway: `
+          <rect x="3" y="9" width="18" height="8" rx="2" fill="none" stroke="${stroke}" stroke-width="1.6"/>
+          <line x1="8" y1="9" x2="8" y2="5.5" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M6 7.5 L8 5.5 L10 7.5" fill="none" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="16" y1="9" x2="16" y2="5.5" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M14 7.5 L16 5.5 L18 7.5" fill="none" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="8" cy="13" r="1.1" fill="${stroke}"/><circle cx="12" cy="13" r="1.1" fill="${stroke}"/><circle cx="16" cy="13" r="1.1" fill="${stroke}"/>`,
+        // Globe: circle + latitude waves + vertical meridian
+        internet: `
+          <circle cx="12" cy="12" r="8.5" fill="none" stroke="${stroke}" stroke-width="1.5"/>
+          <path d="M3.5 12 Q7.5 7.5 12 12 Q16.5 16.5 20.5 12" fill="none" stroke="${stroke}" stroke-width="1.2"/>
+          <path d="M3.5 12 Q7.5 16.5 12 12 Q16.5 7.5 20.5 12" fill="none" stroke="${stroke}" stroke-width="1.2"/>
+          <line x1="12" y1="3.5" x2="12" y2="20.5" stroke="${stroke}" stroke-width="1.2"/>`,
+    };
+    const body = icons[type] || icons.internet;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.5" fill="${bg}"/>${body}</svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+// ── Colors ────────────────────────────────────────────────────────────────
+const COLORS = {
+    switch:   { border: '#6366f1', bg: '#0c1130', hover: '#818cf8', icon: '#a5b4fc' },
+    ap:       { border: '#a855f7', bg: '#100825', hover: '#c084fc', icon: '#d8b4fe' },
+    gateway:  { border: '#f59e0b', bg: '#150a00', hover: '#fbbf24', icon: '#fcd34d' },
+    internet: { border: '#4b5563', bg: '#0c0f18', hover: '#6b7280', icon: '#6b7280' },
+};
+const colorFor = (type, _status) => COLORS[type] || COLORS.internet;
+
+// ── Build vis DataSets ─────────────────────────────────────────────────────
+const visNodes = new vis.DataSet();
+const visEdges = new vis.DataSet();
+
+function makeNode(id, label, type, status, extras) {
+    const c = colorFor(type, status);
+    return {
+        id, label, group: type, status,
+        shape: 'circularImage',
+        image: svgIcon(type, c.icon, c.bg),
+        size: 26, borderWidth: 2.5, borderWidthSelected: 3.5,
+        color: { border: c.border, background: c.bg,
+            highlight: { border: '#f97316', background: c.bg },
+            hover: { border: c.hover, background: c.bg } },
+        font: { color: '#94a3b8', size: 11, face: 'ui-monospace, monospace' },
+        ...extras,
+    };
+}
+
+// Internet node (slightly smaller, dimmer)
+visNodes.add({ ...makeNode('__internet__', 'Internet', 'internet', 'online', {}), size: 22,
+    font: { color: '#4b5563', size: 11, face: 'ui-monospace, monospace' } });
+
+// Device nodes
+raw.nodes.forEach(n => {
+    const d = n.data;
+    visNodes.add(makeNode(d.id, d.label, d.group, d.status, { _url: d.url, _model: d.model, _ip: d.ip, _site: d.site }));
+});
+
+// Real infrastructure edges
+raw.edges.forEach(e => {
+    visEdges.add({
+        id: e.data.id, from: e.data.source, to: e.data.target,
+        color: { color: '#1e2d45', highlight: '#14b8a6', hover: '#2d4a6e' },
+        width: 1.5, hoverWidth: 2.5, selectionWidth: 2.5, smooth: { enabled: false },
+    });
+});
+
+// ── Connectivity: Internet → gateways AND switches ─────────────────────────
+const gwNodes = raw.nodes.filter(n => n.data.group === 'gateway');
+const swNodes = raw.nodes.filter(n => n.data.group === 'switch');
+
+// Internet connects to all gateways
+gwNodes.forEach(g => {
+    visEdges.add({
+        id: '__inet_gw__' + g.data.id, from: '__internet__', to: g.data.id,
+        dashes: [8, 6], width: 1.2,
+        color: { color: '#1e2535', highlight: '#374151', hover: '#374151' },
+        smooth: { enabled: false },
+    });
+});
+
+// Internet connects to all switches
+swNodes.forEach(s => {
+    visEdges.add({
+        id: '__inet_sw__' + s.data.id, from: '__internet__', to: s.data.id,
+        dashes: [8, 6], width: 1.2,
+        color: { color: '#1e2535', highlight: '#374151', hover: '#374151' },
+        smooth: { enabled: false },
+    });
+});
+
+// Gateways → switches: add virtual edge if not already in raw data
+const existingEdgePairs = new Set(raw.edges.map(e => e.data.source + '|' + e.data.target));
+gwNodes.forEach(g => {
+    swNodes.forEach(s => {
+        const key1 = g.data.id + '|' + s.data.id;
+        const key2 = s.data.id + '|' + g.data.id;
+        if (!existingEdgePairs.has(key1) && !existingEdgePairs.has(key2)) {
+            visEdges.add({
+                id: '__gw_sw__' + g.data.id + '_' + s.data.id,
+                from: g.data.id, to: s.data.id,
+                dashes: [4, 4], width: 1,
+                color: { color: '#1e2d45', highlight: '#14b8a6', hover: '#2d4a6e' },
+                smooth: { enabled: false },
+            });
+        }
+    });
+});
+
+// ── Layout options ─────────────────────────────────────────────────────────
+function hierarchicalOptions() {
+    return {
+        layout: {
+            hierarchical: {
+                enabled: true, direction: 'LR', sortMethod: 'directed',
+                levelSeparation: 220, nodeSpacing: 80, treeSpacing: 120,
+                blockShifting: true, edgeMinimization: true, parentCentralization: true,
+            },
+        },
+        physics: { enabled: false },
+        interaction: { dragNodes: false }, // locked until we unlock after fit
+        edges: { smooth: { enabled: false } },
+    };
+}
+
+function physicsOptions() {
+    return {
+        layout: { hierarchical: { enabled: false } },
+        physics: {
+            enabled: true, solver: 'forceAtlas2Based',
+            forceAtlas2Based: { gravitationalConstant: -80, centralGravity: 0.005, springLength: 170, springConstant: 0.08 },
+            stabilization: { iterations: 200 },
+        },
+        interaction: { dragNodes: true },
+        edges: { smooth: { type: 'dynamic' } },
+    };
+}
+
+// ── Create network ─────────────────────────────────────────────────────────
+const container = document.getElementById('cy');
+let currentLayout = 'hierarchical';
+
+const network = new vis.Network(container, { nodes: visNodes, edges: visEdges }, {
+    interaction: {
+        hover: true, tooltipDelay: 9999999,
+        zoomView: true, dragView: true, dragNodes: false,
+        keyboard: { enabled: true, speed: { x: 10, y: 10, zoom: 0.02 } },
+    },
+    nodes: { scaling: { min: 20, max: 40 } },
+    edges: { color: { color: '#1e2d45', highlight: '#14b8a6', hover: '#2d4a6e' }, width: 1.5 },
+    ...hierarchicalOptions(),
+});
+
+// Unlock drag after hierarchical places nodes
+network.once('stabilized', () => {
+    network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+    // Store positions then unlock — nodes keep their spots but become freely draggable
+    setTimeout(() => {
+        network.storePositions();
+        network.setOptions({ layout: { hierarchical: { enabled: false } }, physics: { enabled: false }, interaction: { dragNodes: true } });
+    }, 600);
+});
+
+// ── Layout switch ──────────────────────────────────────────────────────────
+function setLayout(mode) {
+    currentLayout = mode;
+    const active = '#f97316', inactive = 'transparent';
+    document.getElementById('btn-h').style.cssText += `;background:${mode==='hierarchical'?active:inactive};color:${mode==='hierarchical'?'#fff':'#6b7280'}`;
+    document.getElementById('btn-p').style.cssText += `;background:${mode==='physics'?active:inactive};color:${mode==='physics'?'#fff':'#6b7280'}`;
+
+    if (mode === 'hierarchical') {
+        // Re-run hierarchical from scratch
+        network.setOptions({ layout: { hierarchical: { enabled: true, direction: 'LR', sortMethod: 'directed', levelSeparation: 220, nodeSpacing: 80, treeSpacing: 120 } }, physics: { enabled: false }, interaction: { dragNodes: false } });
+        network.once('stabilized', () => {
+            network.fit({ animation: true });
+            setTimeout(() => {
+                network.storePositions();
+                network.setOptions({ layout: { hierarchical: { enabled: false } }, physics: { enabled: false }, interaction: { dragNodes: true } });
+            }, 600);
+        });
+    } else {
+        network.setOptions(physicsOptions());
+        network.once('stabilized', () => network.fit({ animation: true }));
+    }
+}
+
+// ── Tooltip ────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('topo-tooltip');
+let tooltipNode = null;
+
+network.on('hoverNode', params => {
+    tooltipNode = params.node;
+    const d = visNodes.get(params.node);
+    if (!d || d.group === 'internet') { tooltip.style.display = 'none'; return; }
+    document.getElementById('tt-name').textContent = d.label;
+    document.getElementById('tt-model').textContent = d._model || '';
+    document.getElementById('tt-ip').textContent = d._ip ? 'IP: ' + d._ip : '';
+    document.getElementById('tt-site').textContent = d._site ? 'Site: ' + d._site : '';
+    const st = document.getElementById('tt-status');
+    st.textContent = (d.status || '').toUpperCase();
+    st.style.color = d.status === 'online' ? '#4ade80' : '#f87171';
+    tooltip.style.display = 'block';
+});
+network.on('blurNode', () => { tooltipNode = null; tooltip.style.display = 'none'; });
+container.addEventListener('mousemove', e => {
+    if (tooltipNode !== null) { tooltip.style.left = (e.clientX + 16) + 'px'; tooltip.style.top = (e.clientY - 12) + 'px'; }
+});
+
+// ── Click → device detail ──────────────────────────────────────────────────
+network.on('click', params => {
+    if (params.nodes.length > 0) {
+        const d = visNodes.get(params.nodes[0]);
+        if (d && d._url) window.location.href = d._url;
+    }
+});
+network.on('hoverNode', () => { container.style.cursor = 'pointer'; });
+network.on('blurNode',  () => { container.style.cursor = 'default'; });
+</script>
+
+{% endblock %}

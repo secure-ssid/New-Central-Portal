@@ -1,0 +1,37 @@
+<div class="space-y-4">
+    <div class="flex items-center justify-between mb-4">
+        <p class="text-sm text-gray-400">Found {{ results|length }} results for <span class="text-white font-medium">"{{ query }}"</span></p>
+    </div>
+
+    {% for result in results %}
+    <div class="card hover:border-brand-500 transition-colors" x-data="{ open: false }">
+        <div class="flex items-start justify-between mb-2 cursor-pointer" @click="open = !open">
+            <div class="flex items-center gap-2">
+                <svg :class="{ 'rotate-90': open }" class="w-4 h-4 text-gray-500 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                <h3 class="text-base font-semibold text-white">{{ result.title }}</h3>
+            </div>
+            <span class="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30 flex-shrink-0">
+                {{ (result.score * 100)|int }}% match
+            </span>
+        </div>
+        <p class="text-sm text-gray-400 ml-6" x-show="!open">{{ result.excerpt }}</p>
+        <div x-show="open" x-transition class="ml-6">
+            <p class="text-sm text-gray-300 leading-relaxed">{{ result.detail }}</p>
+        </div>
+        {% if result.source or result.file_path %}
+        <div class="mt-3 pt-3 border-t border-surface-700 ml-6 flex items-center gap-3">
+            {% if result.source %}<span class="text-xs text-gray-500">📁 {{ result.source }}</span>{% endif %}
+            {% if result.file_path %}<span class="text-xs text-gray-600">{{ result.file_path }}</span>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if not results %}
+    <div class="card text-center py-8">
+        <p class="text-gray-500">No results found. Try a different query.</p>
+    </div>
+    {% endif %}
+</div>

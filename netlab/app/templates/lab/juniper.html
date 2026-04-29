@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Juniper Corner - Lab - New Central Portal{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
+        <a href="/" class="hover:text-brand-500">Home</a>
+        <span>/</span>
+        <a href="/lab/" class="hover:text-brand-500">Lab</a>
+        <span>/</span>
+        <span class="text-gray-300">Juniper Corner</span>
+    </div>
+    <h1 class="text-3xl font-bold text-white mb-2">Juniper Corner</h1>
+    <p class="text-gray-400">Learning Junos - notes, configs, and experiments</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Notes/learning log -->
+    <div class="lg:col-span-2 space-y-4">
+        {% for note in notes %}
+        <div class="card">
+            <div class="flex items-start justify-between mb-3">
+                <h3 class="text-lg font-semibold text-white">{{ note.title }}</h3>
+                <span class="text-xs text-gray-500">{{ note.date }}</span>
+            </div>
+            <pre class="p-3 bg-surface-900 rounded-lg overflow-x-auto"><code class="text-sm text-gray-300">{{ note.content }}</code></pre>
+            <div class="mt-3 flex gap-2">
+                <button class="text-xs text-brand-500 hover:text-brand-400">Copy command</button>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Add note button -->
+        <button class="w-full card hover:border-brand-500 transition-colors text-center py-6">
+            <svg class="w-6 h-6 text-gray-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            <p class="text-sm text-gray-400">Add a new note</p>
+        </button>
+    </div>
+
+    <!-- Resources sidebar -->
+    <div class="space-y-4">
+        <div class="card">
+            <h3 class="text-sm font-semibold text-white mb-3">📚 Quick Links</h3>
+            <div class="space-y-2">
+                <a href="https://www.juniper.net/documentation/us/en/software/junos/junos-overview/index.html" target="_blank"
+                   class="block text-sm text-gray-400 hover:text-brand-500 transition-colors">
+                    → Junos Docs
+                </a>
+                <a href="https://www.juniper.net/documentation/us/en/software/junos/cli-reference/index.html" target="_blank"
+                   class="block text-sm text-gray-400 hover:text-brand-500 transition-colors">
+                    → CLI Reference
+                </a>
+                <a href="https://learningportal.juniper.net/juniper/default.aspx" target="_blank"
+                   class="block text-sm text-gray-400 hover:text-brand-500 transition-colors">
+                    → Learning Portal
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 class="text-sm font-semibold text-white mb-3">🎯 Topics to explore</h3>
+            <div class="space-y-1 text-xs text-gray-400">
+                <p>• BGP configuration</p>
+                <p>• OSPF areas</p>
+                <p>• Firewall filters</p>
+                <p>• VPN tunnels</p>
+                <p>• Chassis clustering</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 class="text-sm font-semibold text-white mb-3">💡 Tip</h3>
+            <p class="text-xs text-gray-400">
+                Use <code class="px-1.5 py-0.5 bg-surface-900 rounded text-brand-500">show | display set</code> 
+                to see config in set command format
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
