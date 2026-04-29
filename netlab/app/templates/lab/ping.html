@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Ping Tester - New Central Portal{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="flex items-center gap-2 text-xs text-gray-600 mb-2"><a href="/lab/" style="color:#f97316;">← Lab</a></div>
+    <h1 class="text-2xl font-bold text-white">Ping / Reachability Tester</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Run a ping from any online device to verify reachability</p>
+</div>
+
+<div class="card">
+    <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;margin-bottom:16px;">Ping</p>
+    <form hx-post="/lab/ping" hx-target="#ping-output" hx-indicator="#ping-spinner" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+        <div>
+            <label style="font-size:.65rem;color:#6b7280;display:block;margin-bottom:4px;text-transform:uppercase;">Source Device</label>
+            <select name="serial" style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;">
+                {% for d in devices %}
+                <option value="{{ d.serial }}">{{ d.name }} ({{ d.type | replace('_',' ') }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label style="font-size:.65rem;color:#6b7280;display:block;margin-bottom:4px;text-transform:uppercase;">Destination IP / Hostname</label>
+            <input name="destination" type="text" placeholder="8.8.8.8"
+                style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;">
+        </div>
+        <button type="submit" style="padding:8px 20px;background:#f97316;border:none;border-radius:7px;color:#fff;font-size:.875rem;font-weight:600;cursor:pointer;">
+            Ping
+        </button>
+    </form>
+    <span id="ping-spinner" class="htmx-indicator" style="display:none;font-size:.8rem;color:#6b7280;margin-top:8px;display:block;">Pinging... (may take a few seconds)</span>
+
+    <!-- Quick targets -->
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        {% for target in ['8.8.8.8', '1.1.1.1', '10.11.154.1', '192.168.1.1'] %}
+        <button type="button" onclick="document.querySelector('[name=destination]').value='{{ target }}'"
+            style="padding:4px 10px;background:#1e2535;border:1px solid #374151;border-radius:5px;color:#94a3b8;font-size:.7rem;cursor:pointer;">
+            {{ target }}
+        </button>
+        {% endfor %}
+    </div>
+
+    <div id="ping-output" style="margin-top:20px;padding-top:20px;border-top:1px solid #1e2535;background:#060a12;border-radius:6px;padding:16px;min-height:60px;font-family:monospace;"></div>
+</div>
+{% endblock %}

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Clients - New Central Portal{% endblock %}
+{% block content %}
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('clientsTable', () => ({
+        tab: 'all',
+        search: '',
+        sortCol: '',
+        sortDir: 1,
+        page: 1,
+        pageSize: 50,
+        clients: {{ clients | tojson }},
+
+        get rows() {
+            let r = this.clients.filter(c => {
+                if (this.tab !== 'all' && c.type !== this.tab) return false;
+                if (!this.search) return true;
+                const s = this.search.toLowerCase();
+                return [c.mac, c.ip, c.hostname, c.connected_to, c.category, c.os, c.vendor]
+                    .some(v => v && String(v).toLowerCase().includes(s));
+            });
+            if (this.sortCol) {
+                const col = this.sortCol, dir = this.sortDir;
+                r = [...r].sort((a, b) => {
+                    const av = String(a[col] ?? '').toLowerCase();
+                    const bv = String(b[col] ?? '').toLowerCase();
+                    return av < bv ? -dir : av > bv ? dir : 0;
+                });
+            }
+            return r;
+        },
+        get pagedRows() {
+            const start = (this.page - 1) * this.pageSize;
+            return this.rows.slice(start, start + this.pageSize);
+        },
+        get totalPages() { return Math.ceil(this.rows.length / this.pageSize) || 1; },
+        get wirelessCount() { return this.clients.filter(c => c.type === 'wireless').length; },
+        get wiredCount()    { return this.clients.filter(c => c.type === 'wired').length; },
+
+        setTab(t) { this.tab = t; this.page = 1; },
+        sortBy(col) {
+            if (this.sortCol === col) this.sortDir *= -1;
+            else { this.sortCol = col; this.sortDir = 1; }
+            this.page = 1;
+        },
+        sortIcon(col) {
+            if (this.sortCol !== col) return '⇅';
+            return this.sortDir === 1 ? '↑' : '↓';
+        }
+    }));
+});
+</script>
+
+<div x-data="clientsTable" class="mb-4">
+
+    <div class="page-header flex items-end justify-between" style="margin-bottom:1.25rem;">
+        <div>
+            <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Monitoring</p>
+            <h1 class="text-2xl font-bold text-white">Clients</h1>
+            <p class="text-sm text-gray-500 mt-0.5">
+                <span x-text="rows.length + ' of {{ clients|length }} sessions'">{{ clients|length }} connected sessions</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Search + page-size -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
+        <div style="position:relative;flex:1;max-width:400px;">
+            <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+            <input x-model="search" @input="page=1" type="text" placeholder="Search by MAC, IP, hostname, device type, OS…"
+                   style="width:100%;padding:8px 12px 8px 34px;background:#161b27;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;"
+                   onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#1e2535'">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+            <span style="font-size:.75rem;color:#6b7280;white-space:nowrap;">Rows</span>
+            <select x-model.number="pageSize" @change="page=1"
+                    style="background:#161b27;border:1px solid #1e2535;border-radius:6px;color:#94a3b8;font-size:.8rem;padding:5px 8px;outline:none;cursor:pointer;">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="250">250</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;align-items:stretch;border-bottom:1px solid #1e2535;">
+        <button @click="setTab('all')"
+            :style="tab==='all' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px 10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            All
+            <span :style="tab==='all' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;"
+                  x-text="clients.length"></span>
+        </button>
+        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
+        <button @click="setTab('wireless')"
+            :style="tab==='wireless' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Wireless
+            <span :style="tab==='wireless' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;"
+                  x-text="wirelessCount"></span>
+        </button>
+        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
+        <button @click="setTab('wired')"
+            :style="tab==='wired' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;'"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+            Wired
+            <span :style="tab==='wired' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
+                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;"
+                  x-text="wiredCount"></span>
+        </button>
+    </div>
+
+    <!-- Table -->
+    <div style="background:#161b27;border:1px solid #1e2535;border-top:none;border-radius:0 0 10px 10px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+            <thead>
+                <tr style="background:#0d1117;">
+                    <th @click="sortBy('mac')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">
+                        MAC Address <span x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span>
+                    </th>
+                    <th @click="sortBy('hostname')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">
+                        Hostname <span x-text="sortIcon('hostname')" style="opacity:.45;font-size:.6rem;"></span>
+                    </th>
+                    <th @click="sortBy('category')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">
+                        Device <span x-text="sortIcon('category')" style="opacity:.45;font-size:.6rem;"></span>
+                    </th>
+                    <th @click="sortBy('type')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">
+                        Type <span x-text="sortIcon('type')" style="opacity:.45;font-size:.6rem;"></span>
+                    </th>
+                    <th @click="sortBy('ip')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">
+                        IP Address <span x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span>
+                    </th>
+                    <th @click="sortBy('vlan')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">
+                        VLAN <span x-text="sortIcon('vlan')" style="opacity:.45;font-size:.6rem;"></span>
+                    </th>
+                    <th @click="sortBy('connected_to')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">
+                        Connected To <span x-text="sortIcon('connected_to')" style="opacity:.45;font-size:.6rem;"></span>
+                    </th>
+                    <th @click="sortBy('role')" style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">
+                        Role <span x-text="sortIcon('role')" style="opacity:.45;font-size:.6rem;"></span>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="client in pagedRows" :key="client.mac">
+                    <tr class="tbl-row" style="cursor:pointer;" @click="window.location='/clients/'+client.mac">
+                        <td style="padding:10px 20px;font-family:monospace;font-size:.78rem;color:#e2e8f0;" x-text="client.mac"></td>
+                        <td style="padding:10px 20px;font-size:.85rem;color:#94a3b8;" x-text="client.hostname || '—'"></td>
+                        <td style="padding:10px 20px;">
+                            <template x-if="client.category || client.os">
+                                <div style="display:flex;flex-direction:column;gap:1px;">
+                                    <span x-show="client.category" x-text="client.category" style="font-size:.8rem;font-weight:600;color:#e2e8f0;"></span>
+                                    <span x-show="client.os" x-text="client.os" style="font-size:.72rem;color:#6b7280;"></span>
+                                </div>
+                            </template>
+                            <template x-if="!(client.category || client.os)">
+                                <span x-text="client.vendor || '—'" style="font-size:.8rem;color:#64748b;"></span>
+                            </template>
+                        </td>
+                        <td style="padding:10px 20px;">
+                            <template x-if="client.type === 'wireless'">
+                                <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:4px;font-size:.68rem;font-weight:600;background:rgba(59,130,246,.12);color:#60a5fa;border:1px solid rgba(59,130,246,.2);">
+                                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0"/></svg>
+                                    Wireless
+                                </span>
+                            </template>
+                            <template x-if="client.type !== 'wireless'">
+                                <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:4px;font-size:.68rem;font-weight:600;background:rgba(168,85,247,.12);color:#c084fc;border:1px solid rgba(168,85,247,.2);">
+                                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="4" rx="1"/><rect x="2" y="14" width="20" height="4" rx="1"/></svg>
+                                    Wired
+                                </span>
+                            </template>
+                        </td>
+                        <td style="padding:10px 20px;font-family:monospace;font-size:.78rem;color:#94a3b8;" x-text="client.ip || '—'"></td>
+                        <td style="padding:10px 20px;font-size:.85rem;color:#64748b;" x-text="client.vlan || '—'"></td>
+                        <td style="padding:10px 20px;font-size:.85rem;color:#94a3b8;" x-text="client.connected_to || '—'"></td>
+                        <td style="padding:10px 20px;font-size:.85rem;color:#64748b;" x-text="client.role || '—'"></td>
+                    </tr>
+                </template>
+                <tr x-show="rows.length === 0">
+                    <td colspan="8" style="padding:48px;text-align:center;color:#4b5563;font-size:.875rem;">No clients match your search.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div x-show="totalPages > 1" style="display:flex;align-items:center;justify-content:space-between;padding:12px 2px;margin-top:2px;">
+        <span style="font-size:.78rem;color:#6b7280;">
+            Showing <span x-text="(page-1)*pageSize+1"></span>–<span x-text="Math.min(page*pageSize, rows.length)"></span>
+            of <span x-text="rows.length"></span>
+        </span>
+        <div style="display:flex;gap:4px;align-items:center;">
+            <button @click="page=1" :disabled="page===1"
+                    :style="page===1?'opacity:.35;cursor:default;':''"
+                    style="padding:5px 10px;border-radius:5px;border:1px solid #1e2535;background:#161b27;color:#94a3b8;font-size:.78rem;cursor:pointer;">«</button>
+            <button @click="page--" :disabled="page===1"
+                    :style="page===1?'opacity:.35;cursor:default;':''"
+                    style="padding:5px 10px;border-radius:5px;border:1px solid #1e2535;background:#161b27;color:#94a3b8;font-size:.78rem;cursor:pointer;">‹</button>
+            <span style="padding:5px 14px;border-radius:5px;border:1px solid #f97316;background:rgba(249,115,22,.1);color:#f97316;font-size:.78rem;"
+                  x-text="page + ' / ' + totalPages"></span>
+            <button @click="page++" :disabled="page===totalPages"
+                    :style="page===totalPages?'opacity:.35;cursor:default;':''"
+                    style="padding:5px 10px;border-radius:5px;border:1px solid #1e2535;background:#161b27;color:#94a3b8;font-size:.78rem;cursor:pointer;">›</button>
+            <button @click="page=totalPages" :disabled="page===totalPages"
+                    :style="page===totalPages?'opacity:.35;cursor:default;':''"
+                    style="padding:5px 10px;border-radius:5px;border:1px solid #1e2535;background:#161b27;color:#94a3b8;font-size:.78rem;cursor:pointer;">»</button>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}

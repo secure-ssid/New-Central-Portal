@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% block title %}Notifications - New Central Portal{% endblock %}
+{% block content %}
+
+<div class="page-header flex items-end justify-between">
+    <div>
+        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">GreenLake</p>
+        <h1 class="text-2xl font-bold text-white">Expiry Notifications</h1>
+        <p class="text-sm text-gray-500 mt-0.5">Subscription & SSL certificate expiry alerts — 90, 60, 30, 15 day warnings</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <button onclick="runCheckNow()" id="btn-check" style="padding:7px 16px;background:#1e2535;border:1px solid #374151;border-radius:6px;color:#94a3b8;font-size:.75rem;font-weight:600;cursor:pointer;">
+            Run Check Now
+        </button>
+    </div>
+</div>
+
+<div x-data="notificationsPage()" x-init="init()" style="display:flex;flex-direction:column;gap:20px;">
+
+    <!-- ── Upcoming Expirations ────────────────────────────────────────────── -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid #1e2535;display:flex;justify-content:space-between;align-items:center;">
+            <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Upcoming Expirations (≤ 90 days)</h2>
+        </div>
+
+        <!-- Subscriptions -->
+        <template x-if="upcomingSubs.length > 0">
+            <div>
+                <div style="padding:10px 20px;background:#0a0f1a;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;">GreenLake Subscriptions</div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead><tr style="border-bottom:1px solid #1e2535;">
+                        <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Key</th>
+                        <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Tier</th>
+                        <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Expires</th>
+                        <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Days Left</th>
+                        <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Qty</th>
+                    </tr></thead>
+                    <tbody>
+                        <template x-for="s in upcomingSubs" :key="s.key">
+                            <tr class="tbl-row">
+                                <td style="padding:10px 20px;font-size:.78rem;color:#e2e8f0;font-family:monospace;" x-text="s.key"></td>
+                                <td style="padding:10px 20px;font-size:.75rem;color:#94a3b8;" x-text="s.tier"></td>
+                                <td style="padding:10px 20px;font-size:.75rem;color:#94a3b8;" x-text="s.end_date"></td>
+                                <td style="padding:10px 20px;font-size:.78rem;font-weight:700;" :style="'color:' + (s.days_left <= 15 ? '#ef4444' : s.days_left <= 30 ? '#f59e0b' : '#fb923c')" x-text="s.days_left + 'd'"></td>
+                                <td style="padding:10px 20px;font-size:.75rem;color:#6b7280;" x-text="s.quantity + ' (' + s.available + ' avail)'"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+
+        <!-- SSL Certs -->
+        <template x-if="upcomingCerts.length > 0">
+            <div>
+                <div style="padding:10px 20px;background:#0a0f1a;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;border-top:1px solid #1e2535;">SSL Certificates</div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead><tr style="border-bottom:1px solid #1e2535;">
+                        <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Hostname</th>
+                        <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Expires</th>
+                        <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Days Left</th>
+                    </tr></thead>
+                    <tbody>
+                        <template x-for="c in upcomingCerts" :key="c.hostname">
+                            <tr class="tbl-row">
+                                <td style="padding:10px 20px;font-size:.78rem;color:#e2e8f0;font-family:monospace;" x-text="c.hostname"></td>
+                                <td style="padding:10px 20px;font-size:.75rem;color:#94a3b8;" x-text="c.end_date"></td>
+                                <td style="padding:10px 20px;font-size:.78rem;font-weight:700;" :style="'color:' + (c.days_left <= 15 ? '#ef4444' : c.days_left <= 30 ? '#f59e0b' : c.days_left < 0 ? '#ef4444' : '#fb923c')" x-text="c.days_left < 0 ? 'ERROR' : c.days_left + 'd'"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+
+        <template x-if="upcomingSubs.length === 0 && upcomingCerts.length === 0">
+            <p style="padding:32px 20px;text-align:center;color:#4b5563;font-size:.85rem;">No expirations within 90 days. ✓</p>
+        </template>
+    </div>
+
+    <!-- ── Two-column: Settings + Recipients ──────────────────────────────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+        <!-- Recipients -->
+        <div class="card" style="padding:0;overflow:hidden;">
+            <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
+                <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Alert Recipients</h2>
+                <p style="font-size:.7rem;color:#4b5563;margin:4px 0 0;">Admin emails that receive expiry alerts</p>
+            </div>
+            <div style="padding:16px 20px;">
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <input x-model="newEmail" type="email" placeholder="admin@example.com"
+                        style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.78rem;outline:none;"
+                        @keydown.enter="addRecipient()">
+                    <button @click="addRecipient()" style="padding:8px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Add</button>
+                </div>
+                <template x-for="r in recipients" :key="r.email">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0d1117;">
+                        <span style="font-size:.78rem;color:#e2e8f0;font-family:monospace;" x-text="r.email"></span>
+                        <button @click="removeRecipient(r.email)" style="padding:4px 10px;background:#7f1d1d30;border:1px solid #7f1d1d;border-radius:4px;color:#f87171;font-size:.68rem;cursor:pointer;">Remove</button>
+                    </div>
+                </template>
+                <template x-if="recipients.length === 0">
+                    <p style="color:#4b5563;font-size:.78rem;padding:8px 0;">No recipients configured.</p>
+                </template>
+            </div>
+        </div>
+
+        <!-- SMTP Settings -->
+        <div class="card" style="padding:0;overflow:hidden;">
+            <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
+                <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">SMTP Settings</h2>
+                <p style="font-size:.7rem;color:#4b5563;margin:4px 0 0;">Configure email delivery</p>
+            </div>
+            <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div>
+                        <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">SMTP Host</label>
+                        <input x-model="cfg.smtp_host" placeholder="smtp.gmail.com"
+                            style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
+                    </div>
+                    <div>
+                        <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Port</label>
+                        <input x-model="cfg.smtp_port" placeholder="587"
+                            style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Username</label>
+                    <input x-model="cfg.smtp_user" placeholder="your@email.com"
+                        style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
+                </div>
+                <div>
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Password</label>
+                    <input x-model="cfg.smtp_password" type="password" placeholder="••••••••"
+                        style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
+                </div>
+                <div>
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">From Address</label>
+                    <input x-model="cfg.smtp_from" placeholder="noreply@yourdomain.com"
+                        style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
+                </div>
+                <div style="display:flex;gap:12px;align-items:center;">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="checkbox" x-model="cfg.smtp_tls" true-value="true" false-value="false"
+                            style="accent-color:#f97316;">
+                        <span style="font-size:.75rem;color:#94a3b8;">Use TLS (STARTTLS)</span>
+                    </label>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:4px;">
+                    <button @click="saveSettings()" style="padding:7px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Save Settings</button>
+                    <button @click="testEmail()" style="padding:7px 16px;background:#1e2535;border:1px solid #374151;border-radius:6px;color:#94a3b8;font-size:.75rem;cursor:pointer;">Send Test Email</button>
+                </div>
+                <p x-show="smtpMsg" x-text="smtpMsg" :style="'font-size:.75rem;margin:0;color:' + (smtpOk ? '#4ade80' : '#f87171')"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Monitoring Config ──────────────────────────────────────────────── -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
+            <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Monitoring Configuration</h2>
+        </div>
+        <div style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+                <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Alert Thresholds (days)</label>
+                <input x-model="cfg.thresholds" placeholder="90,60,30,15"
+                    style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;font-family:monospace;">
+                <p style="font-size:.62rem;color:#4b5563;margin:4px 0 0;">Comma-separated days before expiry</p>
+            </div>
+            <div>
+                <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">SSL Hosts to Monitor</label>
+                <input x-model="cfg.ssl_hosts" placeholder="example.com, api.example.com:8443"
+                    style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;font-family:monospace;">
+                <p style="font-size:.62rem;color:#4b5563;margin:4px 0 0;">Comma-separated hostnames (port optional, default 443)</p>
+            </div>
+            <div style="display:flex;gap:20px;align-items:center;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="checkbox" x-model="cfg.check_subscriptions" true-value="true" false-value="false" style="accent-color:#f97316;">
+                    <span style="font-size:.75rem;color:#94a3b8;">Check GLP Subscriptions</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="checkbox" x-model="cfg.check_ssl" true-value="true" false-value="false" style="accent-color:#f97316;">
+                    <span style="font-size:.75rem;color:#94a3b8;">Check SSL Certificates</span>
+                </label>
+            </div>
+            <div style="display:flex;align-items:end;">
+                <button @click="saveSettings()" style="padding:7px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Notification History ───────────────────────────────────────────── -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
+            <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Notification History</h2>
+        </div>
+        <template x-if="history.length > 0">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="border-bottom:1px solid #1e2535;">
+                    <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Sent</th>
+                    <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Type</th>
+                    <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">ID</th>
+                    <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Threshold</th>
+                    <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Recipient</th>
+                    <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Details</th>
+                </tr></thead>
+                <tbody>
+                    <template x-for="n in history" :key="n.id">
+                        <tr class="tbl-row">
+                            <td style="padding:10px 20px;font-size:.72rem;color:#4b5563;white-space:nowrap;" x-text="(n.sent_at||'').slice(0,16).replace('T',' ')"></td>
+                            <td style="padding:10px 20px;">
+                                <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;"
+                                    :style="'color:' + (n.source_type==='subscription' ? '#f59e0b' : '#60a5fa') + ';background:' + (n.source_type==='subscription' ? '#f59e0b18' : '#60a5fa18')"
+                                    x-text="n.source_type"></span>
+                            </td>
+                            <td style="padding:10px 20px;font-size:.78rem;color:#e2e8f0;font-family:monospace;" x-text="n.source_id"></td>
+                            <td style="padding:10px 20px;font-size:.78rem;font-weight:700;color:#f97316;" x-text="n.threshold + 'd'"></td>
+                            <td style="padding:10px 20px;font-size:.75rem;color:#94a3b8;" x-text="n.recipient"></td>
+                            <td style="padding:10px 20px;font-size:.72rem;color:#6b7280;" x-text="n.details"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </template>
+        <template x-if="history.length === 0">
+            <p style="padding:32px 20px;text-align:center;color:#4b5563;font-size:.85rem;">No notifications sent yet.</p>
+        </template>
+    </div>
+</div>
+
+<script type="application/json" id="notif-settings-json">{{ settings | tojson }}</script>
+<script type="application/json" id="notif-recipients-json">{{ recipients | tojson }}</script>
+<script type="application/json" id="notif-history-json">{{ history | tojson }}</script>
+<script type="application/json" id="notif-upcoming-subs-json">{{ upcoming_subs | tojson }}</script>
+<script type="application/json" id="notif-upcoming-certs-json">{{ upcoming_certs | tojson }}</script>
+
+<script>
+function notificationsPage() {
+    return {
+        cfg: {}, recipients: [], history: [], upcomingSubs: [], upcomingCerts: [],
+        newEmail: '', smtpMsg: '', smtpOk: false,
+
+        init() {
+            this.cfg = JSON.parse(document.getElementById('notif-settings-json').textContent);
+            this.recipients = JSON.parse(document.getElementById('notif-recipients-json').textContent);
+            this.history = JSON.parse(document.getElementById('notif-history-json').textContent);
+            this.upcomingSubs = JSON.parse(document.getElementById('notif-upcoming-subs-json').textContent);
+            this.upcomingCerts = JSON.parse(document.getElementById('notif-upcoming-certs-json').textContent);
+        },
+
+        async saveSettings() {
+            this.smtpMsg = '';
+            const r = await fetch('/notifications/settings', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(this.cfg)
+            });
+            const j = await r.json();
+            this.smtpOk = j.ok;
+            this.smtpMsg = j.ok ? 'Settings saved ✓' : (j.error || 'Failed');
+            setTimeout(() => this.smtpMsg = '', 3000);
+        },
+
+        async addRecipient() {
+            if (!this.newEmail || !this.newEmail.includes('@')) return;
+            const r = await fetch('/notifications/recipients', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'add', email: this.newEmail})
+            });
+            if ((await r.json()).ok) {
+                this.recipients.push({email: this.newEmail.toLowerCase()});
+                this.newEmail = '';
+            }
+        },
+
+        async removeRecipient(email) {
+            const r = await fetch('/notifications/recipients', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'remove', email})
+            });
+            if ((await r.json()).ok) {
+                this.recipients = this.recipients.filter(x => x.email !== email);
+            }
+        },
+
+        async testEmail() {
+            this.smtpMsg = 'Sending…';
+            this.smtpOk = true;
+            const email = this.recipients.length ? this.recipients[0].email : this.cfg.smtp_user;
+            if (!email) { this.smtpMsg = 'Add a recipient first'; this.smtpOk = false; return; }
+            const r = await fetch('/notifications/test-email', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email})
+            });
+            const j = await r.json();
+            this.smtpOk = j.ok;
+            this.smtpMsg = j.ok ? 'Test email sent ✓' : (j.error || 'Failed');
+        },
+    };
+}
+
+async function runCheckNow() {
+    const btn = document.getElementById('btn-check');
+    btn.textContent = 'Checking…'; btn.disabled = true;
+    try {
+        const r = await fetch('/notifications/check-now', {method: 'POST'});
+        const j = await r.json();
+        btn.textContent = j.ok ? `Done — ${j.alerts.length} alerts` : 'Error';
+        setTimeout(() => { if (j.alerts.length > 0) location.reload(); }, 1500);
+    } catch (e) { btn.textContent = 'Error'; }
+    setTimeout(() => { btn.textContent = 'Run Check Now'; btn.disabled = false; }, 3000);
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,58 @@
+services:
+  app:
+    build: ./app
+    container_name: netlab-app
+    environment:
+      - DATABASE_URL=postgresql://netlab:netlab@db:5432/netlab
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - PYTHONPATH=/centralmcp
+      - CREDS_PATH=/centralmcp/config/credentials.yaml
+      - QDRANT_URL=http://host.docker.internal:6333
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - CENTRALMCP_GLP_V2BETA1_WRITES=1
+      - CLASSIC_CENTRAL_BASE_URL=https://internal-apigw.central.arubanetworks.com
+      - CLASSIC_CENTRAL_CLIENT_ID=8yoHqqqACss6A8Sdin9wqHvvF9zTKy54
+      - CLASSIC_CENTRAL_CLIENT_SECRET=KrCuvCZlFK4OLTVBEk4gcAWMJV9lEl7D
+      - CLASSIC_CENTRAL_ACCESS_TOKEN=hALHvyFJ25qVbKTia1J5l4TEZAitkF1j
+      - CLASSIC_CENTRAL_REFRESH_TOKEN=5bQR9BpJPhx2ZooSE1PJnQQGaRRJsEIT
+    depends_on:
+      - db
+    restart: unless-stopped
+    volumes:
+      - ./app:/app
+      - /Users/stephenchoate/Documents/Claude Projects/Active/MCP/centralmcp:/centralmcp:ro
+    ports:
+      - "8000:8000"
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: netlab-db
+    environment:
+      - POSTGRES_USER=netlab
+      - POSTGRES_PASSWORD=netlab
+      - POSTGRES_DB=netlab
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: netlab-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Self-Healing Sim - Lab - New Central Portal{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
+        <a href="/" class="hover:text-brand-500">Home</a>
+        <span>/</span>
+        <a href="/lab/" class="hover:text-brand-500">Lab</a>
+        <span>/</span>
+        <span class="text-gray-300">Self-Healing Sim</span>
+    </div>
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-white mb-2">Self-Healing Simulation</h1>
+            <p class="text-gray-400">Auto-remediation engine in dry-run mode (no actual changes)</p>
+        </div>
+        <span class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-medium">
+            DRY-RUN MODE
+        </span>
+    </div>
+</div>
+
+<!-- Issues detected -->
+<div class="card mb-6">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-white">Detected Issues</h2>
+        <span class="text-sm text-gray-500">{{ issues|length }} active</span>
+    </div>
+
+    <div class="space-y-3">
+        {% for issue in issues %}
+        <div class="p-4 bg-surface-900 rounded-lg border border-surface-700">
+            <div class="flex items-start justify-between mb-2">
+                <div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                        <h3 class="text-sm font-semibold text-white">{{ issue.device }}</h3>
+                    </div>
+                    <p class="text-sm text-gray-400">{{ issue.issue }}</p>
+                </div>
+                <span class="text-xs px-2 py-1 rounded
+                    {% if issue.status == 'detected' %}bg-red-500/20 text-red-400 border border-red-500/30
+                    {% elif issue.status == 'remediating' %}bg-amber-500/20 text-amber-400 border border-amber-500/30
+                    {% else %}bg-green-500/20 text-green-400 border border-green-500/30{% endif %}">
+                    {{ issue.status|upper }}
+                </span>
+            </div>
+
+            <div class="mt-3 pt-3 border-t border-surface-700/50 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 mb-1">Recommended action:</p>
+                    <p class="text-sm text-brand-500 font-medium">{{ issue.remediation }}</p>
+                </div>
+                <button hx-post="/lab/self-heal/{{ issue.id }}/remediate"
+                        hx-target="this"
+                        hx-swap="outerHTML"
+                        class="px-4 py-2 bg-brand-500 text-white text-sm rounded-lg hover:bg-brand-600 transition-colors">
+                    Simulate Fix
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- How it works -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card">
+        <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
+            <span class="text-amber-500 font-bold">1</span>
+        </div>
+        <h3 class="text-sm font-semibold text-white mb-1">Detect</h3>
+        <p class="text-xs text-gray-400">Monitor metrics and logs for anomalies</p>
+    </div>
+    <div class="card">
+        <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
+            <span class="text-amber-500 font-bold">2</span>
+        </div>
+        <h3 class="text-sm font-semibold text-white mb-1">Diagnose</h3>
+        <p class="text-xs text-gray-400">Classify issue and lookup known remediations</p>
+    </div>
+    <div class="card">
+        <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
+            <span class="text-amber-500 font-bold">3</span>
+        </div>
+        <h3 class="text-sm font-semibold text-white mb-1">Plan</h3>
+        <p class="text-xs text-gray-400">Generate remediation steps with safety checks</p>
+    </div>
+    <div class="card">
+        <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
+            <span class="text-amber-500 font-bold">4</span>
+        </div>
+        <h3 class="text-sm font-semibold text-white mb-1">Execute</h3>
+        <p class="text-xs text-gray-400">Apply fix and verify resolution</p>
+    </div>
+</div>
+{% endblock %}

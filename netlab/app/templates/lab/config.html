@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Config Viewer - New Central Portal{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="flex items-center gap-2 text-xs text-gray-600 mb-2"><a href="/lab/" style="color:#f97316;">← Lab</a></div>
+    <h1 class="text-2xl font-bold text-white">Config / Show Commands</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Run show commands on any device and inspect output</p>
+</div>
+
+<div class="card">
+    <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;margin-bottom:16px;">Run Command</p>
+    <form hx-post="/lab/config" hx-target="#config-output" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:12px;align-items:end;">
+            <div>
+                <label style="font-size:.65rem;color:#6b7280;display:block;margin-bottom:4px;text-transform:uppercase;">Device</label>
+                <select name="serial" style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;">
+                    {% for d in devices %}
+                    <option value="{{ d.serial }}">{{ d.name }} ({{ d.type | replace('_',' ') }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="font-size:.65rem;color:#6b7280;display:block;margin-bottom:4px;text-transform:uppercase;">Command (semicolon-separated)</label>
+                <input name="command" type="text" value="show version" 
+                    style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;"
+                    placeholder="show version; show interface brief">
+            </div>
+            <button type="submit" style="padding:8px 20px;background:#f97316;border:none;border-radius:7px;color:#fff;font-size:.875rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+                Run
+            </button>
+        </div>
+        <!-- Quick presets -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            {% set presets = [('show version','Version'), ('show running-config','Running Config'), ('show interface brief','Interfaces'), ('show ip route','Routes'), ('show vlan','VLANs'), ('show lldp neighbors','LLDP Neighbors')] %}
+            {% for cmd, label in presets %}
+            <button type="button" onclick="this.closest('form').querySelector('[name=command]').value='{{ cmd }}'"
+                style="padding:4px 10px;background:#1e2535;border:1px solid #374151;border-radius:5px;color:#94a3b8;font-size:.7rem;cursor:pointer;">
+                {{ label }}
+            </button>
+            {% endfor %}
+        </div>
+    </form>
+
+    <div id="config-output" style="margin-top:20px;padding-top:20px;border-top:1px solid #1e2535;font-family:monospace;background:#060a12;border-radius:6px;padding:16px;min-height:60px;max-height:600px;overflow-y:auto;"></div>
+</div>
+{% endblock %}

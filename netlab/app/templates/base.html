@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}New Central Portal{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'brand': { 500: '#f97316', 600: '#ea580c' },
+              'surface': { 950: '#060a14', 900: '#0d1117', 800: '#161b27', 700: '#1e2535', 600: '#2a3347' }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body { background: #060a14; }
+      .nav-link { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; color:#94a3b8; font-size:0.875rem; transition:all .15s; text-decoration:none; }
+      .nav-link:hover { background:#161b27; color:#e2e8f0; }
+      .nav-link.active { background:rgba(249,115,22,.1); color:#f97316; border-left:2px solid #f97316; padding-left:10px; }
+      .nav-section { font-size:.65rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#4b5563; padding:16px 12px 4px; }
+      .card { background:#161b27; border:1px solid #1e2535; border-radius:10px; padding:20px; }
+      .stat-card { background:#161b27; border:1px solid #1e2535; border-radius:10px; padding:18px 20px; }
+      .status-badge-online { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:4px; font-size:.7rem; font-weight:600; background:rgba(34,197,94,.12); color:#4ade80; border:1px solid rgba(34,197,94,.25); }
+      .status-badge-offline { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:4px; font-size:.7rem; font-weight:600; background:rgba(239,68,68,.12); color:#f87171; border:1px solid rgba(239,68,68,.25); }
+      .page-header { border-bottom:1px solid #1e2535; padding-bottom:18px; margin-bottom:24px; }
+      .tbl-row { border-bottom:1px solid #1e2535; transition:background .12s; cursor:pointer; }
+      .tbl-row:hover { background:#1e2535; }
+      .htmx-indicator { display:none; }
+      .htmx-request .htmx-indicator, .htmx-indicator.htmx-request { display:inline-block; }
+    </style>
+</head>
+<body class="text-slate-300 min-h-screen">
+<div class="flex h-screen overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside class="w-56 flex-shrink-0 bg-surface-900 border-r border-surface-700 flex flex-col overflow-y-auto">
+        <!-- Logo -->
+        <div class="px-4 py-4 border-b border-surface-700 flex items-center gap-3">
+            <div class="w-8 h-8 rounded-md bg-brand-500 flex items-center justify-center flex-shrink-0">
+                <svg width="16" height="16" fill="none" stroke="white" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+            </div>
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-white leading-tight">HPE Networking</p>
+                <p class="text-xs text-gray-500">Portal</p>
+            </div>
+        </div>
+
+        <nav class="flex-1 py-2">
+            <div class="nav-section">Central</div>
+            <a href="/" class="nav-link {% if active == 'home' %}active{% endif %}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                Dashboard
+            </a>
+            <a href="/devices/" class="nav-link {% if active == 'devices' %}active{% endif %}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+                Devices
+            </a>
+            <a href="/clients/" class="nav-link {% if active == 'clients' %}active{% endif %}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path stroke-linecap="round" d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                Clients
+            </a>
+            <a href="/topology/" class="nav-link {% if active == 'topology' %}active{% endif %}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path stroke-linecap="round" d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
+                Topology
+            </a>
+            <a href="/sites/" class="nav-link {% if active == 'sites' %}active{% endif %}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                Sites
+            </a>
+
+            <div class="nav-section" style="padding-top:20px">GreenLake</div>
+            <a href="/lab/greenlake" class="nav-link {% if active == 'greenlake' %}active{% endif %}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-4.9-6H7a4 4 0 00-4 4z"/></svg>
+                GreenLake
+            </a>
+            <a href="/notifications/" class="nav-link {% if active == 'notifications' %}active{% endif %}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                Notifications
+            </a>
+
+            <div class="nav-section" style="padding-top:20px">Playground</div>
+            <a href="/lab/" class="nav-link {% if active == 'lab' %}active{% endif %}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
+                Lab
+            </a>
+        </nav>
+
+        <div class="px-4 py-3 border-t border-surface-700">
+            <div class="flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0"></span>
+                <span class="text-xs text-gray-500 truncate">Aruba Central</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 overflow-y-auto">
+        <div class="max-w-7xl mx-auto px-6 py-6">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+</div>
+</body>
+</html>

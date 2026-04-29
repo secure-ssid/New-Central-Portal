@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Doc Search - Lab - New Central Portal{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
+        <a href="/" class="hover:text-brand-500">Home</a>
+        <span>/</span>
+        <a href="/lab/" class="hover:text-brand-500">Lab</a>
+        <span>/</span>
+        <span class="text-gray-300">Doc Search</span>
+    </div>
+    <h1 class="text-3xl font-bold text-white mb-2">Documentation Search</h1>
+    <p class="text-gray-400">Semantic search across New Central documentation using Qdrant + Ollama embeddings</p>
+</div>
+
+<div class="max-w-4xl">
+    <!-- Search form -->
+    <div class="card mb-6">
+        <form hx-post="/lab/rag" hx-target="#search-results" hx-indicator="#rag-spinner" hx-disabled-elt="#rag-btn" class="flex gap-2">
+            <input type="text" name="query" required
+                   placeholder="Search documentation (e.g., 'WLAN SSID', 'dot1x', 'VLAN setup')"
+                   class="flex-1 px-4 py-3 bg-surface-900 border border-surface-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-brand-500">
+            <button type="submit" id="rag-btn"
+                    class="px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <svg id="rag-spinner" class="htmx-indicator animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </button>
+        </form>
+    </div>
+
+    <!-- Results area -->
+    <div id="search-results">
+        <div class="card text-center py-12">
+            <svg class="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p class="text-gray-500">Enter a query to search documentation</p>
+            <p class="text-xs text-gray-600 mt-2">Searches datasheets, config guides, and KB articles</p>
+        </div>
+    </div>
+</div>
+
+<!-- How it works -->
+<div class="max-w-4xl mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="card">
+        <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3">
+            <span class="text-blue-500 font-bold">1</span>
+        </div>
+        <h3 class="text-sm font-semibold text-white mb-1">Embed Query</h3>
+        <p class="text-xs text-gray-400">Convert your search to a vector using Ollama (nomic-embed-text)</p>
+    </div>
+    <div class="card">
+        <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3">
+            <span class="text-blue-500 font-bold">2</span>
+        </div>
+        <h3 class="text-sm font-semibold text-white mb-1">Vector Search</h3>
+        <p class="text-xs text-gray-400">Find similar docs in Qdrant (51k+ New Central doc chunks)</p>
+    </div>
+    <div class="card">
+        <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3">
+            <span class="text-blue-500 font-bold">3</span>
+        </div>
+        <h3 class="text-sm font-semibold text-white mb-1">Rank Results</h3>
+        <p class="text-xs text-gray-400">Return top matches with similarity scores</p>
+    </div>
+</div>
+{% endblock %}
