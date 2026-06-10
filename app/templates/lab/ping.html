@@ -2,43 +2,71 @@
 {% block title %}Ping Tester - New Central Portal{% endblock %}
 {% block content %}
 <div class="page-header">
-    <div class="flex items-center gap-2 text-xs text-gray-600 mb-2"><a href="/lab/" style="color:#f97316;">← Lab</a></div>
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <a href="/lab/" class="hover:text-brand-400 transition-colors">Lab</a>
+        <span class="text-slate-700">/</span>
+        <span class="text-slate-400">Ping Tester</span>
+    </div>
     <h1 class="text-2xl font-bold text-white">Ping / Reachability Tester</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Run a ping from any online device to verify reachability</p>
+    <p class="text-sm text-slate-500 mt-0.5">Run a ping from any online device to verify reachability</p>
 </div>
 
-<div class="card">
-    <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;margin-bottom:16px;">Ping</p>
-    <form hx-post="/lab/ping" hx-target="#ping-output" hx-indicator="#ping-spinner" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+{% if load_error %}
+<div class="card mb-6" style="border-color:rgba(239,68,68,.35);">
+    <div class="flex items-start gap-3">
+        <svg class="flex-shrink-0 mt-0.5" width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
         <div>
-            <label style="font-size:.65rem;color:#6b7280;display:block;margin-bottom:4px;text-transform:uppercase;">Source Device</label>
-            <select name="serial" style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;">
+            <p class="text-sm font-semibold" style="color:#f87171;">Service unavailable</p>
+            <p class="text-xs text-slate-400 mt-1">{{ load_error }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <p class="section-label mb-4">Ping</p>
+    {% if devices %}
+    <form hx-post="/lab/ping" hx-target="#ping-output" hx-indicator="#ping-spinner, #ping-btn-spinner" hx-disabled-elt="#ping-run"
+          class="grid gap-3 items-end" style="grid-template-columns:1fr 1fr auto;">
+        <div>
+            <label class="section-label block mb-1.5">Source Device</label>
+            <select name="serial" class="select">
                 {% for d in devices %}
                 <option value="{{ d.serial }}">{{ d.name }} ({{ d.type | replace('_',' ') }})</option>
                 {% endfor %}
             </select>
         </div>
         <div>
-            <label style="font-size:.65rem;color:#6b7280;display:block;margin-bottom:4px;text-transform:uppercase;">Destination IP / Hostname</label>
-            <input name="destination" type="text" placeholder="8.8.8.8"
-                style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;">
+            <label class="section-label block mb-1.5">Destination IP / Hostname</label>
+            <input name="destination" type="text" placeholder="8.8.8.8" required class="input">
         </div>
-        <button type="submit" style="padding:8px 20px;background:#f97316;border:none;border-radius:7px;color:#fff;font-size:.875rem;font-weight:600;cursor:pointer;">
-            Ping
+        <button type="submit" id="ping-run" class="btn-primary px-6">
+            <span>Ping</span>
+            <span id="ping-btn-spinner" class="htmx-indicator"><span class="spinner"></span></span>
         </button>
     </form>
-    <span id="ping-spinner" class="htmx-indicator" style="display:none;font-size:.8rem;color:#6b7280;margin-top:8px;display:block;">Pinging... (may take a few seconds)</span>
+    <span id="ping-spinner" class="htmx-indicator text-xs text-slate-500 mt-2">Pinging… this may take a few seconds</span>
 
     <!-- Quick targets -->
-    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+    <div class="flex gap-2 mt-3 flex-wrap">
         {% for target in ['8.8.8.8', '1.1.1.1', '10.11.154.1', '192.168.1.1'] %}
-        <button type="button" onclick="document.querySelector('[name=destination]').value='{{ target }}'"
-            style="padding:4px 10px;background:#1e2535;border:1px solid #374151;border-radius:5px;color:#94a3b8;font-size:.7rem;cursor:pointer;">
+        <button type="button" class="btn-secondary text-xs py-1 px-2.5 font-mono"
+                onclick="document.querySelector('[name=destination]').value='{{ target }}'">
             {{ target }}
         </button>
         {% endfor %}
     </div>
 
-    <div id="ping-output" style="margin-top:20px;padding-top:20px;border-top:1px solid #1e2535;background:#060a12;border-radius:6px;padding:16px;min-height:60px;font-family:monospace;"></div>
+    <div id="ping-output" class="mt-5 rounded-lg border border-surface-700 font-mono"
+         style="background:#060a12;padding:16px;min-height:60px;">
+        <p class="text-xs text-slate-600 font-sans">Results will appear here.</p>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+        <p>No online devices available.</p>
+        <p class="text-xs text-slate-600">{% if load_error %}Resolve the connection issue above and reload.{% else %}Ping requires at least one online device.{% endif %}</p>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
