@@ -1,10 +1,15 @@
-"""Lightweight DB helpers using psycopg2 + connection pooling."""
+"""Lightweight DB helpers using psycopg2 + connection pooling.
+
+Importing this module never opens a connection — the pool is created
+lazily on first use (get_pool), so the app can start without Postgres.
+"""
+import logging
 import os
-import json
-import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import pool
 from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
 
 _pool: pool.SimpleConnectionPool | None = None
 
@@ -28,8 +33,25 @@ def _parse_dsn(url: str) -> dict:
 def get_pool() -> pool.SimpleConnectionPool:
     global _pool
     if _pool is None:
-        _pool = pool.SimpleConnectionPool(1, 5, **_parse_dsn(DATABASE_URL))
+        try:
+            _pool = pool.SimpleConnectionPool(1, 5, **_parse_dsn(DATABASE_URL))
+        except Exception:
+            logger.exception("Failed to create database connection pool")
+            raise
     return _pool
+
+
+def close_pool() -> None:
+    """Close all pooled connections (call on app shutdown)."""
+    global _pool
+    if _pool is not None:
+        try:
+            _pool.closeall()
+            logger.info("Database connection pool closed")
+        except Exception:
+            logger.exception("Error closing database connection pool")
+        finally:
+            _pool = None
 
 
 @contextmanager
@@ -40,10 +62,29 @@ def get_conn():
         yield conn
         conn.commit()
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            logger.warning("Rollback failed on pooled connection", exc_info=True)
         raise
     finally:
-        p.putconn(conn)
+        try:
+            p.putconn(conn, close=conn.closed != 0)
+        except Exception:
+            logger.warning("Failed to return connection to pool", exc_info=True)
+
+
+def ping() -> bool:
+    """Cheap connectivity check (used by /healthz). Never raises."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        return True
+    except Exception as exc:
+        logger.debug("Database ping failed: %s", exc)
+        return False
 
 
 def execute(sql: str, params=None):
@@ -95,7 +136,13 @@ CREATE TABLE IF NOT EXISTS notifications_sent (
 
 
 def init_db():
-    execute(SCHEMA_SQL)
+    """Create schema and seed defaults. Logs and re-raises on failure so the
+    caller can decide whether startup should continue degraded."""
+    try:
+        execute(SCHEMA_SQL)
+    except Exception:
+        logger.exception("Database schema initialisation failed")
+        raise
     # Seed default settings if empty
     defaults = {
         "thresholds": "90,60,30,15",
@@ -109,11 +156,16 @@ def init_db():
         "check_ssl": "true",
         "ssl_hosts": "",
     }
-    for k, v in defaults.items():
-        execute(
-            "INSERT INTO alert_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING",
-            (k, v),
-        )
+    try:
+        for k, v in defaults.items():
+            execute(
+                "INSERT INTO alert_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING",
+                (k, v),
+            )
+    except Exception:
+        logger.exception("Failed to seed default alert settings")
+        raise
+    logger.info("Database schema initialised")
 
 
 def get_setting(key: str) -> str:
