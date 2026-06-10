@@ -102,11 +102,15 @@ async def topology(request: Request):
         1 for n in nodes if (n["status"] or "").lower() == "online"
     )
 
+    # Escape "</" so the payload can never close its enclosing <script> tag
+    # (device names are user-controlled in Central).
+    graph_json = json.dumps({"nodes": nodes, "edges": edges}).replace("</", "<\\/")
+
     return templates.TemplateResponse(
         request,
         "topology.html",
         {
-            "graph_data": json.dumps({"nodes": nodes, "edges": edges}),
+            "graph_data": graph_json,
             "active": "topology",
             "device_count": len(nodes),
             "online_count": online_count,

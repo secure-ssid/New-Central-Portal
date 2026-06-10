@@ -3,24 +3,24 @@
 {% block content %}
 
 <!-- Page header -->
-<div class="page-header flex items-end justify-between">
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
         <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Overview</p>
         <h1 class="text-2xl font-semibold text-white tracking-tight">Network Dashboard</h1>
         <p class="text-sm text-slate-500 mt-0.5">Real-time view of your Aruba Central infrastructure</p>
     </div>
     <p class="text-xs text-slate-600 flex items-center gap-1.5">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 6v6l4 2"/></svg>
+        <svg aria-hidden="true" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 6v6l4 2"/></svg>
         Updated {{ updated }}
     </p>
 </div>
 
 <!-- Row 1: primary stats -->
-<div class="grid grid-cols-4 gap-4 mb-4">
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
     <div class="stat-card">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Total Devices</p>
-            <svg width="15" height="15" fill="none" stroke="#fb923c" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+            <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#fb923c" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
         </div>
         <p class="text-3xl font-bold text-brand-500">{{ stats.total_devices }}</p>
         <p class="text-xs text-slate-600 mt-1">Managed devices</p>
@@ -28,7 +28,7 @@
     <div class="stat-card">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Online</p>
-            <svg width="15" height="15" fill="none" stroke="#4ade80" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#4ade80" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
         </div>
         <p class="text-3xl font-bold text-green-400">{{ stats.online_devices }}</p>
         <p class="text-xs mt-1 {% if stats.online_pct >= 90 %}text-green-500/70{% else %}text-slate-600{% endif %}">{{ stats.online_pct }}% of fleet</p>
@@ -36,7 +36,7 @@
     <div class="stat-card">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Offline</p>
-            <svg width="15" height="15" fill="none" stroke="{% if stats.offline_devices > 0 %}#f87171{% else %}#475569{% endif %}" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            <svg aria-hidden="true" width="15" height="15" fill="none" stroke="{% if stats.offline_devices > 0 %}#f87171{% else %}#475569{% endif %}" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
         </div>
         <p class="text-3xl font-bold {% if stats.offline_devices > 0 %}text-red-400{% else %}text-slate-500{% endif %}">{{ stats.offline_devices }}</p>
         <p class="text-xs text-slate-600 mt-1">{% if stats.offline_devices > 0 %}Require attention{% else %}All systems healthy{% endif %}</p>
@@ -44,7 +44,7 @@
     <div class="stat-card">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Active Clients</p>
-            <svg width="15" height="15" fill="none" stroke="#60a5fa" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path stroke-linecap="round" d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+            <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#60a5fa" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path stroke-linecap="round" d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         </div>
         <p class="text-3xl font-bold text-blue-400">{{ stats.total_clients }}</p>
         <p class="text-xs text-slate-600 mt-1">Connected sessions</p>
@@ -52,10 +52,10 @@
 </div>
 
 <!-- Row 2: device type breakdown -->
-<div class="grid grid-cols-4 gap-4 mb-6">
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
     <div class="stat-card flex items-center gap-4">
         <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(99,102,241,.12);">
-            <svg width="16" height="16" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="4" rx="1"/><rect x="2" y="14" width="20" height="4" rx="1"/></svg>
+            <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="4" rx="1"/><rect x="2" y="14" width="20" height="4" rx="1"/></svg>
         </div>
         <div>
             <p class="text-xs text-slate-500 mb-0.5">Switches</p>
@@ -64,7 +64,7 @@
     </div>
     <div class="stat-card flex items-center gap-4">
         <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(168,85,247,.12);">
-            <svg width="16" height="16" fill="none" stroke="#c084fc" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+            <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#c084fc" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
         </div>
         <div>
             <p class="text-xs text-slate-500 mb-0.5">Access Points</p>
@@ -73,7 +73,7 @@
     </div>
     <div class="stat-card flex items-center gap-4">
         <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(245,158,11,.12);">
-            <svg width="16" height="16" fill="none" stroke="#fbbf24" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#fbbf24" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
         </div>
         <div>
             <p class="text-xs text-slate-500 mb-0.5">Gateways</p>
@@ -82,7 +82,7 @@
     </div>
     <div class="stat-card flex items-center gap-4">
         <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(20,184,166,.12);">
-            <svg width="16" height="16" fill="none" stroke="#2dd4bf" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+            <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#2dd4bf" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
         </div>
         <div>
             <p class="text-xs text-slate-500 mb-0.5">Sites</p>
@@ -98,14 +98,15 @@
         <a href="/devices/" class="text-xs text-brand-500 hover:text-brand-400 transition-colors">View all &rarr;</a>
     </div>
     {% if devices %}
-    <table class="tbl">
+    <div class="overflow-x-auto">
+    <table class="tbl" style="min-width:640px;">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Model</th>
-                <th>IP Address</th>
-                <th>Site</th>
-                <th>Status</th>
+                <th scope="col">Name</th>
+                <th scope="col">Model</th>
+                <th scope="col">IP Address</th>
+                <th scope="col">Site</th>
+                <th scope="col">Status</th>
             </tr>
         </thead>
         <tbody>
@@ -133,9 +134,10 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <div class="empty-state">
-        <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+        <svg aria-hidden="true" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
         <p>No devices found</p>
         <p class="text-xs text-slate-600">Devices will appear here once Aruba Central is reachable.</p>
     </div>

@@ -2,33 +2,66 @@
 New Central Portal - Network operations and tooling
 Main FastAPI entry point.
 """
+import logging
+import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
 
 from routes import home, devices, clients, sites, lab, topology
 from routes import notifications as notifications_routes
+
+# Logging: configure once, but don't stomp on uvicorn's handlers if present.
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+else:
+    logging.getLogger().setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ──────────────────────────────────────────────────────────
+    from config import validate_settings
+    validate_settings()
+
     import db
-    db.init_db()
+    try:
+        db.init_db()
+    except Exception:
+        # Logged inside init_db; start degraded — /healthz will report db: fail.
+        logger.error("Database init failed — continuing without DB (degraded mode)")
 
     # Daily expiry check scheduler
-    from apscheduler.schedulers.background import BackgroundScheduler
-    from notifications import run_expiry_check
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(run_expiry_check, "cron", hour=7, minute=0, id="expiry_check")
-    scheduler.start()
+    scheduler = None
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from notifications import run_expiry_check
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(run_expiry_check, "cron", hour=7, minute=0, id="expiry_check")
+        scheduler.start()
+        logger.info("Expiry-check scheduler started (daily 07:00)")
+    except Exception:
+        logger.exception("Failed to start expiry-check scheduler")
 
     yield
 
     # ── Shutdown ─────────────────────────────────────────────────────────
-    scheduler.shutdown(wait=False)
+    if scheduler is not None:
+        try:
+            scheduler.shutdown(wait=False)
+        except Exception:
+            logger.exception("Error shutting down scheduler")
+    try:
+        db.close_pool()
+    except Exception:
+        logger.exception("Error closing database pool")
 
 
 app = FastAPI(title="New Central Portal", lifespan=lifespan)
@@ -53,3 +86,11 @@ app.include_router(notifications_routes.router, prefix="/notifications", tags=["
 def health():
     """Quick liveness check."""
     return {"status": "ok"}
+
+
+@app.get("/healthz")
+def healthz():
+    """Liveness + cheap dependency check (non-fatal if the DB is down)."""
+    import db
+    db_ok = db.ping()
+    return {"status": "ok", "db": "ok" if db_ok else "fail"}
