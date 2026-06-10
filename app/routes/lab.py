@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import httpx
 import json
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -84,14 +88,14 @@ async def chat_submit(request: Request, message: str = Form(...)):
 
     # ── 1. RAG: pull relevant docs for context ─────────────────────────
     rag_context = ""
-    print(f"[RAG] starting search for: {message[:50]}", flush=True)
+    logger.info("[RAG] starting search for: %s", message[:50])
     try:
         docs = search_docs(message, top_k=8)
-        print(f"[RAG] returned {len(docs) if docs else 0} docs, first: {docs[0] if docs else 'none'}", flush=True)
+        logger.info("[RAG] returned %s docs, first: %s", len(docs) if docs else 0, docs[0] if docs else 'none')
         if docs and "error" not in docs[0]:
             # Filter to only reasonably relevant results (score > 0.60)
             good_docs = [d for d in docs if d.get("score", 0) > 0.60]
-            print(f"[RAG] good_docs count: {len(good_docs)}", flush=True)
+            logger.info("[RAG] good_docs count: %s", len(good_docs))
             if good_docs:
                 snippets = []
                 for d in good_docs:
@@ -100,7 +104,7 @@ async def chat_submit(request: Request, message: str = Form(...)):
                 rag_context = "\n\n".join(snippets)
                 tools_used.append({"name": "search_docs", "summary": f"{len(good_docs)} doc snippets retrieved"})
     except Exception as exc:
-        print(f"[RAG] ERROR: {exc}", flush=True)
+        logger.error("[RAG] ERROR: %s", exc)
 
     # ── 2. Build system prompt with RAG context ────────────────────────
     system_parts = [

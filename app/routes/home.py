@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
@@ -8,6 +9,7 @@ from vendors.aruba_central import aruba
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
@@ -23,8 +25,8 @@ async def home(request: Request):
         from vendors.central_bridge import get_sites
         sites = await get_sites()
         sites_count = len(sites)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Sites count unavailable for dashboard: %s", exc)
 
     online = [d for d in devices if d.get("status") == "online"]
     offline = [d for d in devices if d.get("status") != "online"]
