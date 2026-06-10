@@ -283,7 +283,7 @@
         <div>
             <p class="section-label text-[10px] mb-1">SNR</p>
             {% if client.snr is not none %}
-            <p class="text-sm" style="color:{% if snr_value >= SNR_GOOD_DB %}#4ade80{% elif snr_value >= SNR_FAIR_DB %}#fbbf24{% else %}#f87171{% endif %};">{{ snr_value }} dB</p>
+            <p class="text-sm" style="color:{% if snr_value >= SNR_GOOD_DB %}#4ade80{% elif snr_value >= SNR_FAIR_DB %}#fbbf24{% else %}#f87171{% endif %};">{{ snr_value }} dB<span class="sr-only"> ({{ snr_label | lower }})</span></p>
             {% else %}
             <p class="text-sm text-slate-500">—</p>
             {% endif %}

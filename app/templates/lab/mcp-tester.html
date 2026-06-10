@@ -1,55 +1,55 @@
 {% extends "base.html" %}
 {% block title %}MCP Tool Tester - Lab - New Central Portal{% endblock %}
 {% block content %}
-<div class="mb-6">
-    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
-        <a href="/" class="hover:text-brand-500">Home</a>
-        <span>/</span>
-        <a href="/lab/" class="hover:text-brand-500">Lab</a>
-        <span>/</span>
-        <span class="text-gray-300">MCP Tool Tester</span>
+<div class="page-header">
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <a href="/lab/" class="hover:text-brand-400 transition-colors">Lab</a>
+        <span class="text-slate-700">/</span>
+        <span class="text-slate-400">MCP Tool Tester</span>
     </div>
-    <h1 class="text-3xl font-bold text-white mb-2">MCP Tool Tester</h1>
-    <p class="text-gray-400">Test Model Context Protocol tools and see their responses</p>
+    <h1 class="text-2xl font-bold text-white">MCP Tool Tester</h1>
+    <p class="text-sm text-slate-500 mt-0.5">Test Model Context Protocol tools and see their responses</p>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Tool selector -->
     <div class="card">
-        <h2 class="text-lg font-semibold text-white mb-4">Available Tools</h2>
-        <form hx-post="/lab/mcp-tester" hx-target="#tool-result" class="space-y-4">
+        <p class="section-label mb-4">Available Tools</p>
+        {# x-data lives on the form so both the <select> handler and the textarea can see `params` #}
+        <form hx-post="/lab/mcp-tester" hx-target="#tool-result" hx-indicator="#mcp-spinner" hx-disabled-elt="#mcp-run"
+              class="space-y-4" x-data="{ params: '' }"
+              x-init="$nextTick(() => { const sel = $el.querySelector('select[name=tool]'); if (sel && sel.selectedOptions.length) params = sel.selectedOptions[0].dataset.params || '' })">
             <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Select Tool</label>
-                <select name="tool" required
-                        class="w-full px-4 py-2 bg-surface-900 border border-surface-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                <label class="section-label block mb-2">Select Tool</label>
+                <select name="tool" required class="select"
                         x-on:change="params = $event.target.selectedOptions[0].dataset.params || ''">
                     {% for server, tools in tool_registry.items() %}
                     <optgroup label="{{ server | upper }}">
                         {% for tool in tools %}
-                        <option value="{{ tool.name }}" data-params="{{ tool.params }}">{{ tool.name }} — {{ tool.desc }}</option>
+                        <option value="{{ tool.name }}" data-params="{{ tool.params | default('') }}">{{ tool.name }} — {{ tool.desc | default('') }}</option>
                         {% endfor %}
                     </optgroup>
                     {% endfor %}
                 </select>
             </div>
 
-            <div x-data="{params: ''}" x-init="$el.closest('form').querySelector('select').dispatchEvent(new Event('change'))">
-                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Parameters (JSON)</label>
-                <textarea name="params" rows="4" x-model="params"
-                          class="w-full px-4 py-2 bg-surface-900 border border-surface-700 rounded-lg text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-brand-500"></textarea>
+            <div>
+                <label class="section-label block mb-2">Parameters (JSON)</label>
+                <textarea name="params" rows="4" x-model="params" spellcheck="false"
+                          class="input font-mono text-sm" placeholder="{}"></textarea>
             </div>
 
-            <button type="submit"
-                    class="w-full px-4 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-medium">
-                Execute Tool
+            <button type="submit" id="mcp-run" class="btn-primary w-full py-2.5">
+                <span>Execute Tool</span>
+                <span id="mcp-spinner" class="htmx-indicator spinner"></span>
             </button>
         </form>
 
         <!-- Tool info -->
         <div class="mt-6 pt-6 border-t border-surface-700">
-            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">About MCP</h3>
-            <p class="text-xs text-gray-400">
-                Model Context Protocol lets Claude call tools to get real-time data. 
+            <p class="section-label mb-3">About MCP</p>
+            <p class="text-xs text-slate-400">
+                Model Context Protocol lets the chatbot call tools to get real-time data.
                 Use this tester to see what each tool returns before wiring them into the chatbot.
             </p>
         </div>
@@ -57,14 +57,14 @@
 
     <!-- Results display -->
     <div id="tool-result">
-        <div class="card h-full flex items-center justify-center text-center">
-            <div>
-                <svg class="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        <div class="card h-full flex items-center justify-center">
+            <div class="empty-state">
+                <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                 </svg>
-                <p class="text-gray-500">Select a tool and click Execute</p>
-                <p class="text-xs text-gray-600 mt-2">Results will appear here</p>
+                <p>Select a tool and click Execute</p>
+                <p class="text-xs text-slate-600">Results will appear here</p>
             </div>
         </div>
     </div>

@@ -186,49 +186,129 @@ async def device_detail(request: Request, serial: str):
     )
 
 
+# ── Ops: input validation helpers ─────────────────────────────────────────────
+
+MAX_SHOW_COMMANDS = 5
+MAX_SHOW_COMMAND_LEN = 120
+
+# Conservative character allowlist for show commands: letters, digits, spaces
+# and a few interface/VRF punctuation chars. No quotes, pipes, backticks,
+# semicolons, redirects, newlines, etc.
+_SHOW_CMD_SAFE_RE = re.compile(r"^[A-Za-z0-9 _/.,:*+-]+$")
+
+# RFC-1123-ish hostname: dot-separated labels of alnum + inner hyphens.
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)"
+    r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"
+)
+
+
+def _ops_error(message: str) -> HTMLResponse:
+    """Friendly error for the #ops-output HTMX target.
+
+    Served with 200 because htmx does not swap 4xx response bodies into the
+    target by default — the red styling is the user-facing error signal.
+    """
+    return HTMLResponse(f"<p style='color:#f87171;'>{html.escape(message)}</p>")
+
+
+def _parse_show_commands(raw: str) -> tuple[list[str] | None, str | None]:
+    """Validate a ';'-separated command string. Returns (commands, error)."""
+    cmds = [" ".join(c.split()) for c in (raw or "").split(";")]
+    cmds = [c for c in cmds if c]
+    if not cmds:
+        return None, "No command provided."
+    if len(cmds) > MAX_SHOW_COMMANDS:
+        return None, f"Too many commands — max {MAX_SHOW_COMMANDS} per request."
+    for c in cmds:
+        if len(c) > MAX_SHOW_COMMAND_LEN:
+            return None, f"Command too long — max {MAX_SHOW_COMMAND_LEN} characters."
+        if not _SHOW_CMD_SAFE_RE.fullmatch(c):
+            return None, "Command contains unsupported characters."
+        if not c.lower().startswith("show "):
+            return None, 'Only "show ..." commands are allowed.'
+    return cmds, None
+
+
+def _validate_ping_destination(destination: str) -> str | None:
+    """Return a cleaned destination if it is a valid IP or hostname, else None."""
+    dest = (destination or "").strip()
+    if not dest or len(dest) > 253:
+        return None
+    try:
+        ipaddress.ip_address(dest)
+        return dest
+    except ValueError:
+        pass
+    if _HOSTNAME_RE.fullmatch(dest):
+        return dest
+    return None
+
+
 # ── Ops: show command ──────────────────────────────────────────────────────────
 
 @router.post("/{serial}/show")
 async def device_show(request: Request, serial: str, command: str = Form("show version")):
     from vendors.central_bridge import run_show
+    cmds, err = _parse_show_commands(command)
+    if err:
+        return _ops_error(err)
     device = await aruba.get_device(serial)
     if not device:
-        return HTMLResponse("<p style='color:#f87171;'>Device not found.</p>")
-    cmds = [c.strip() for c in command.split(";") if c.strip()]
+        return _ops_error("Device not found.")
     try:
         result = await run_show(serial, device.get("type", "switch"), cmds)
-        outputs = result.get("output", {}).get("results", [])
+        outputs = result.get("output", {}).get("results", []) if isinstance(result, dict) else []
         html_parts = []
         for item in outputs:
+            if not isinstance(item, dict):
+                continue
+            cmd_label = html.escape(str(item.get("command", "")))
+            out_text = html.escape(str(item.get("output", "")))
             html_parts.append(
-                f'<p style="font-size:.65rem;color:#f97316;font-weight:700;margin-bottom:4px;">{item["command"]}</p>'
-                f'<pre style="font-size:.72rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-bottom:14px;">{item.get("output","")}</pre>'
+                f'<p style="font-size:.65rem;color:#f97316;font-weight:700;margin-bottom:4px;">{cmd_label}</p>'
+                f'<pre style="font-size:.72rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-bottom:14px;">{out_text}</pre>'
             )
         return HTMLResponse("".join(html_parts) or "<p style='color:#6b7280;'>No output.</p>")
     except Exception as e:
-        return HTMLResponse(f"<p style='color:#f87171;'>Error: {e}</p>")
+        logger.exception("show command failed for %s", serial)
+        return _ops_error(f"Error: {e}")
 
 
 # ── Ops: ping ─────────────────────────────────────────────────────────────────
 
 @router.post("/{serial}/ping")
-async def device_ping(request: Request, serial: str, destination: str = Form(...)):
+async def device_ping(
+    request: Request,
+    serial: str,
+    destination: str = Form(...),
+    count: int = Form(5),
+):
     from vendors.central_bridge import run_ping
+    dest = _validate_ping_destination(destination)
+    if dest is None:
+        return _ops_error("Invalid destination — enter an IPv4/IPv6 address or a hostname.")
+    count = max(1, min(10, count))
     device = await aruba.get_device(serial)
     if not device:
-        return HTMLResponse("<p style='color:#f87171;'>Device not found.</p>")
+        return _ops_error("Device not found.")
     try:
-        result = await run_ping(serial, device.get("type", "switch"), destination, count=5)
-        status = result.get("status", "")
+        result = await run_ping(serial, device.get("type", "switch"), dest, count=count)
+        if not isinstance(result, dict):
+            result = {}
+        status = html.escape(str(result.get("status", "")))
         outputs = result.get("output", {}).get("results", [])
-        text = outputs[0].get("output", "") if outputs else str(result)
-        color = "#4ade80" if "success" in text.lower() else "#f87171"
+        raw_text = outputs[0].get("output", "") if outputs and isinstance(outputs[0], dict) else str(result)
+        color = "#4ade80" if "success" in str(raw_text).lower() else "#f87171"
+        text = html.escape(str(raw_text))
         return HTMLResponse(
             f'<p style="font-size:.72rem;color:{color};font-weight:700;margin-bottom:6px;">Status: {status}</p>'
             f'<pre style="font-size:.72rem;color:#94a3b8;white-space:pre-wrap;">{text}</pre>'
         )
     except Exception as e:
-        return HTMLResponse(f"<p style='color:#f87171;'>Error: {e}</p>")
+        logger.exception("ping failed for %s", serial)
+        return _ops_error(f"Error: {e}")
 
 
 # ── Device Management: group & site assignment ──────────────────────────────
@@ -268,10 +348,11 @@ async def device_reboot(request: Request, serial: str):
     from vendors.central_bridge import run_reboot
     device = await aruba.get_device(serial)
     if not device:
-        return HTMLResponse("<p style='color:#f87171;'>Device not found.</p>")
+        return _ops_error("Device not found.")
     try:
         result = await run_reboot(serial, device.get("type", "switch"))
-        status = result.get("status", "submitted")
+        status = html.escape(str(result.get("status", "submitted") if isinstance(result, dict) else "submitted"))
         return HTMLResponse(f"<p style='color:#4ade80;'>Reboot {status}. Device will be offline for ~60s.</p>")
     except Exception as e:
-        return HTMLResponse(f"<p style='color:#f87171;'>Error: {e}</p>")
+        logger.exception("reboot failed for %s", serial)
+        return _ops_error(f"Error: {e}")
