@@ -3,9 +3,93 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from vendors.aruba_central import aruba
 import asyncio
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+
+
+def _normalize_ports(raw_ports) -> list[dict]:
+    """Normalize raw Central switch-port dicts into a stable contract.
+
+    Guaranteed fields per port:
+      name (str), index (int), alignment ('top'|'bottom'),
+      connected (bool), uplink (bool), poe (bool),
+      neighbour (str|None), speed_mbps (int|None).
+    """
+    normalized: list[dict] = []
+    if not isinstance(raw_ports, list):
+        return normalized
+
+    cleaned = []
+    any_alignment = False
+    for i, p in enumerate(raw_ports):
+        if not isinstance(p, dict):
+            continue
+
+        # index — fall back to list position
+        try:
+            idx = int(p.get("index"))
+        except (TypeError, ValueError):
+            idx = i + 1
+
+        # alignment — tolerate missing/None/odd casing
+        raw_align = p.get("portAlignment") or p.get("port_alignment") or ""
+        align = str(raw_align).strip().lower()
+        if align not in ("top", "bottom"):
+            align = None
+        else:
+            any_alignment = True
+
+        # connected — from status string
+        status = str(p.get("status") or "").strip().lower()
+        connected = status in ("connected", "up")
+
+        # poe — anything other than absent / "Not Used"
+        poe_status = str(p.get("poeStatus") or p.get("poe_status") or "").strip()
+        poe = bool(poe_status) and poe_status.lower() != "not used"
+
+        # neighbour
+        neighbour = p.get("neighbour") or p.get("neighbor") or None
+        if neighbour is not None:
+            neighbour = str(neighbour).strip() or None
+
+        # speed — raw value is bps; guard against None/0/strings
+        speed_mbps = None
+        try:
+            bps = float(p.get("speed"))
+            if bps > 0:
+                speed_mbps = int(bps / 1_000_000)
+        except (TypeError, ValueError):
+            pass
+
+        name = str(p.get("name") or p.get("id") or f"Port {idx}").strip()
+
+        cleaned.append({
+            "name": name,
+            "index": idx,
+            "alignment": align,
+            "connected": connected,
+            "uplink": bool(p.get("uplink")),
+            "poe": poe,
+            "neighbour": neighbour,
+            "speed_mbps": speed_mbps,
+        })
+
+    for port in cleaned:
+        if port["alignment"] is None:
+            if any_alignment:
+                # Some ports carry alignment: slot the rest in by parity.
+                port["alignment"] = "top" if port["index"] % 2 == 1 else "bottom"
+            else:
+                # No alignment data at all: render a single row.
+                port["alignment"] = "top"
+
+    cleaned.sort(key=lambda x: x["index"])
+    return cleaned
 
 
 @router.get("/")
@@ -41,17 +125,34 @@ async def device_detail(request: Request, serial: str):
     all_clients_task = aruba.get_clients()
     events_task = get_device_events(serial, hours=48, limit=20)
 
+    ports_error = False
     if device.get("type") == "switch":
         ports_task = get_switch_ports(serial)
-        all_clients, events, ports = await asyncio.gather(
+        all_clients, events, raw_ports = await asyncio.gather(
             all_clients_task, events_task, ports_task, return_exceptions=True
         )
-        ports = ports if isinstance(ports, list) else []
+        if isinstance(raw_ports, Exception):
+            logger.error("Failed to fetch switch ports for %s: %s", serial, raw_ports)
+            ports_error = True
+            raw_ports = []
+        elif not isinstance(raw_ports, list):
+            logger.warning(
+                "Unexpected switch-port payload for %s: %r", serial, type(raw_ports)
+            )
+            ports_error = True
+            raw_ports = []
     else:
         all_clients, events = await asyncio.gather(
             all_clients_task, events_task, return_exceptions=True
         )
+        raw_ports = []
+
+    try:
+        ports = _normalize_ports(raw_ports)
+    except Exception:
+        logger.exception("Failed to normalize switch ports for %s", serial)
         ports = []
+        ports_error = True
 
     if isinstance(all_clients, Exception):
         all_clients = []
@@ -63,6 +164,10 @@ async def device_detail(request: Request, serial: str):
         c for c in all_clients if c.get("connected_to") == device_name
     ]
 
+    # Serialized for the template's JS (3D faceplate). Escape "</" so the
+    # payload can never close its enclosing <script> tag.
+    ports_json = json.dumps(ports).replace("</", "<\\/")
+
     return templates.TemplateResponse(
         request,
         "devices/detail.html",
@@ -70,6 +175,8 @@ async def device_detail(request: Request, serial: str):
             "device": device,
             "clients": connected_clients,
             "ports": ports,
+            "ports_error": ports_error,
+            "ports_json": ports_json,
             "events": events,
             "active": "devices",
         },
