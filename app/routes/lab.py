@@ -179,7 +179,11 @@ async def chat_submit(request: Request, message: str = Form(...)):
                 for tc in tool_calls:
                     fn_name = tc["function"]["name"]
                     fn_args = tc["function"]["arguments"]
-                    tool_result = await run_tool(fn_name, fn_args)
+                    try:
+                        tool_result = await run_tool(fn_name, fn_args)
+                    except Exception as exc:
+                        logger.exception("[chat] tool %s failed: %s", fn_name, exc)
+                        tool_result = {"status": "error", "error": str(exc), "output": ""}
 
                     # Truncate large outputs to stay within token limits
                     output_str = json.dumps(tool_result.get("output", ""), default=str)
@@ -188,7 +192,7 @@ async def chat_submit(request: Request, message: str = Form(...)):
 
                     tools_used.append({
                         "name": fn_name,
-                        "summary": f"{'✅' if tool_result['status'] == 'success' else '❌'} {tool_result.get('error') or 'OK'}",
+                        "summary": f"{'✅' if tool_result.get('status') == 'success' else '❌'} {tool_result.get('error') or 'OK'}",
                     })
 
                     messages.append({
@@ -217,6 +221,7 @@ async def chat_submit(request: Request, message: str = Form(...)):
                 response = choice["message"]["content"]
 
     except Exception as e:
+        logger.exception("[chat] LLM call failed: %s", e)
         response = f"❌ Error: {str(e)}"
 
     return templates.TemplateResponse(
@@ -240,11 +245,20 @@ async def rag_page(request: Request):
 async def rag_search(request: Request, query: str = Form(...)):
     """Search Aruba docs via Qdrant + Ollama (centralmcp RAG pipeline)."""
     from vendors.central_bridge import search_docs
-    raw = search_docs(query, top_k=8)
 
     import re
+    error = None
+    try:
+        raw = search_docs(query, top_k=8)
+    except Exception as exc:
+        logger.exception("[RAG] search failed for %r: %s", query, exc)
+        raw = []
+        error = "Doc search is unavailable right now (Qdrant / Ollama may be down). Please try again later."
+
     if raw and "error" in raw[0]:
-        results = [{"title": "Error", "excerpt": raw[0]["error"], "detail": raw[0]["error"], "score": 0}]
+        logger.error("[RAG] search returned error: %s", raw[0]["error"])
+        results = []
+        error = raw[0]["error"]
     else:
         results = []
         for r in raw:
@@ -272,7 +286,7 @@ async def rag_search(request: Request, query: str = Form(...)):
     return templates.TemplateResponse(
         request,
         "lab/partials/rag_results.html",
-        {"query": query, "results": results},
+        {"query": query, "results": results, "error": error},
     )
 
 
@@ -291,7 +305,17 @@ async def mcp_tester_page(request: Request):
 async def mcp_tool_run(request: Request, tool: str = Form(...), params: str = Form("")):
     """Execute a real centralmcp tool and return the result."""
     from vendors.central_bridge import run_tool
-    result = await run_tool(tool, params)
+    try:
+        result = await run_tool(tool, params)
+    except Exception as exc:
+        logger.exception("[mcp-tester] tool %s failed: %s", tool, exc)
+        result = {
+            "tool": tool,
+            "params": {},
+            "output": None,
+            "status": "error",
+            "error": f"Tool execution failed: {exc}",
+        }
     return templates.TemplateResponse(
         request,
         "lab/partials/mcp_result.html",
@@ -377,9 +401,18 @@ async def health_report_generate(request: Request):
     from vendors.central_bridge import get_devices, get_clients, get_alerts, get_device_events
     from vendors.aruba_central import _norm_device, _norm_client
 
-    raw_devices, raw_clients, alerts = await asyncio.gather(
-        get_devices(limit=100), get_clients(limit=200), get_alerts(limit=50)
-    )
+    try:
+        raw_devices, raw_clients, alerts = await asyncio.gather(
+            get_devices(limit=100), get_clients(limit=200), get_alerts(limit=50)
+        )
+    except Exception as exc:
+        logger.exception("[health-report] failed to gather live data: %s", exc)
+        return HTMLResponse(
+            '<div class="empty-state">'
+            '<p style="color:#f87171;font-weight:600;">Live network data is unavailable right now.</p>'
+            '<p style="font-size:.78rem;">Aruba Central could not be reached. Check connectivity and try again.</p>'
+            '</div>'
+        )
     devices = [_norm_device(d) for d in raw_devices]
     clients = [_norm_client(c) for c in raw_clients]
 
@@ -389,7 +422,11 @@ async def health_report_generate(request: Request):
     # Gather recent events for offline devices (up to 3)
     event_summaries = []
     for d in offline[:3]:
-        evs = await get_device_events(d["serial"], hours=48, limit=5)
+        try:
+            evs = await get_device_events(d["serial"], hours=48, limit=5)
+        except Exception as exc:
+            logger.warning("[health-report] events lookup failed for %s: %s", d["serial"], exc)
+            continue
         for e in evs[:2]:
             event_summaries.append(f"{d['name']}: {e.get('eventName','')} — {e.get('description','')[:80]}")
 
@@ -437,7 +474,8 @@ Write a structured health report with sections: Overall Status, Issues Requiring
                 md = md.replace('\n', '<br>')
                 report_html = md
         except Exception as e:
-            report_html = f"<p class='text-red-400'>Error: {e}</p>"
+            logger.exception("[health-report] Anthropic call failed: %s", e)
+            report_html = f"<p class='text-red-400'>Report generation failed: {e}</p>"
 
     return HTMLResponse(f'<div style="font-size:.85rem;line-height:1.7;color:#cbd5e1;">{report_html}</div>')
 
@@ -448,10 +486,16 @@ Write a structured health report with sections: Overall Status, Issues Requiring
 async def config_page(request: Request):
     from vendors.central_bridge import get_devices
     from vendors.aruba_central import _norm_device
-    raw = await get_devices(limit=100)
+    load_error = None
+    try:
+        raw = await get_devices(limit=100)
+    except Exception as exc:
+        logger.exception("[config] device list failed: %s", exc)
+        raw = []
+        load_error = "Could not load the device list — Aruba Central appears to be unavailable."
     devices = [_norm_device(d) for d in raw]
     switches = [d for d in devices if d["type"] == "switch"]
-    return templates.TemplateResponse(request, "lab/config.html", {"devices": devices, "switches": switches, "active": "lab"})
+    return templates.TemplateResponse(request, "lab/config.html", {"devices": devices, "switches": switches, "load_error": load_error, "active": "lab"})
 
 
 @router.post("/config")
