@@ -109,7 +109,7 @@ document.addEventListener('alpine:init', () => {
 <script id="groups-json" type="application/json">{{ groups | tojson }}</script>
 <script id="sites-json" type="application/json">{{ sites | tojson }}</script>
 
-<div class="page-header flex items-end justify-between">
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
         <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Central</p>
         <h1 class="text-2xl font-semibold text-white tracking-tight">Network Devices</h1>
@@ -120,10 +120,12 @@ document.addEventListener('alpine:init', () => {
 <div x-data="devicesTable" class="mb-4">
     <!-- Manage Device Modal (group + site) -->
     <div x-show="manageModal" x-cloak @click.self="manageModal=false"
-         class="fixed inset-0 z-[100] flex items-center justify-center"
+         @keydown.escape.window="manageModal=false"
+         class="fixed inset-0 z-[100] flex items-center justify-center p-4"
          style="background:rgba(3,6,12,.7);backdrop-filter:blur(2px);">
-        <div @click.stop class="card" style="padding:24px;width:460px;max-width:90vw;">
-            <h3 class="text-sm font-bold text-slate-100 mb-1">Manage Device</h3>
+        <div @click.stop class="card" role="dialog" aria-modal="true" aria-labelledby="manage-device-title"
+             style="padding:24px;width:460px;max-width:calc(100vw - 2rem);max-height:calc(100dvh - 2rem);overflow-y:auto;">
+            <h3 id="manage-device-title" class="text-sm font-bold text-slate-100 mb-1">Manage Device</h3>
             <p class="text-xs text-slate-500 mb-4">
                 <span x-text="mName" class="text-brand-500"></span>
                 <span class="text-slate-600 font-mono ml-1.5" x-text="mSerial"></span>
@@ -133,7 +135,7 @@ document.addEventListener('alpine:init', () => {
             <label class="section-label block mb-1">Assign to Group</label>
             <p x-show="mCurrentGroup" class="text-xs text-slate-400 mb-2">Current: <span class="text-brand-500" x-text="mCurrentGroup"></span></p>
             <div class="flex gap-2 mb-4">
-                <select x-model="mGroup" class="select flex-1 text-xs">
+                <select x-model="mGroup" class="select flex-1 text-xs" aria-label="Assign to group">
                     <option value="">&mdash; select group &mdash;</option>
                     <template x-for="g in groups" :key="g.groupName">
                         <option :value="g.groupName" x-text="g.groupName"></option>
@@ -146,7 +148,7 @@ document.addEventListener('alpine:init', () => {
             <label class="section-label block mb-1">Assign to Site</label>
             <p x-show="mCurrentSite" class="text-xs text-slate-400 mb-2">Current: <span class="text-brand-500" x-text="mCurrentSite"></span></p>
             <div class="flex gap-2 mb-4">
-                <select x-model="mSite" class="select flex-1 text-xs">
+                <select x-model="mSite" class="select flex-1 text-xs" aria-label="Assign to site">
                     <option value="">&mdash; select site &mdash;</option>
                     <template x-for="s in sites" :key="s.site_id">
                         <option :value="String(s.site_id)" x-text="s.site_name + (s.city ? ' · ' + s.city : '')"></option>
@@ -163,16 +165,17 @@ document.addEventListener('alpine:init', () => {
         </div>
     </div>
 
-    <div class="flex items-center gap-3 mb-4">
-        <div class="relative flex-1" style="max-width:380px;">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+        <div class="relative flex-1 w-full sm:max-w-[380px]">
+            <svg aria-hidden="true" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
             <input x-model="search" type="text" placeholder="Search by name, serial, model, MAC, type, site, persona…"
+                   aria-label="Search devices"
                    class="input" style="padding-left:34px;">
         </div>
     </div>
 
     <!-- Tabs -->
-    <div class="tabs">
+    <div class="tabs overflow-x-auto">
         <button @click="tab='all'" class="tab-btn" style="padding-right:24px;"
             :style="tab==='all' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             All Devices
@@ -203,13 +206,13 @@ document.addEventListener('alpine:init', () => {
         <table class="tbl" style="min-width:800px;">
             <thead>
                 <tr>
-                    <th class="sortable" @click="sortBy('name')">Name <span x-text="sortIcon('name')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th class="sortable" @click="sortBy('serial')">Serial <span x-text="sortIcon('serial')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th class="sortable" @click="sortBy('model')">Model <span x-text="sortIcon('model')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th class="sortable" @click="sortBy('mac')">MAC <span x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th class="sortable" @click="sortBy('status')">Status <span x-text="sortIcon('status')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th class="sortable" @click="sortBy('ip')">IP <span x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th style="width:40px;"></th>
+                    <th scope="col" class="sortable" @click="sortBy('name')">Name <span aria-hidden="true" x-text="sortIcon('name')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('serial')">Serial <span aria-hidden="true" x-text="sortIcon('serial')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('model')">Model <span aria-hidden="true" x-text="sortIcon('model')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('mac')">MAC <span aria-hidden="true" x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('status')">Status <span aria-hidden="true" x-text="sortIcon('status')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('ip')">IP <span aria-hidden="true" x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" style="width:40px;"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -232,8 +235,8 @@ document.addEventListener('alpine:init', () => {
                         </td>
                         <td class="font-mono text-xs" x-text="d.ip"></td>
                         <td style="padding:11px 8px;text-align:center;">
-                            <button @click.stop="openManageModal(d)" class="btn-secondary" style="padding:5px 6px;line-height:0;" title="Manage group &amp; site">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
+                            <button @click.stop="openManageModal(d)" class="btn-secondary" style="padding:5px 6px;line-height:0;" title="Manage group &amp; site" aria-label="Manage group and site">
+                                <svg aria-hidden="true" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
                             </button>
                         </td>
                     </tr>
@@ -242,7 +245,7 @@ document.addEventListener('alpine:init', () => {
                     <tr>
                         <td colspan="7">
                             <div class="empty-state">
-                                <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+                                <svg aria-hidden="true" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
                                 <p>No devices found</p>
                                 <p class="text-xs text-slate-600">Try a different search term or filter.</p>
                             </div>

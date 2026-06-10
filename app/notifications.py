@@ -11,12 +11,31 @@ import db
 
 logger = logging.getLogger(__name__)
 
+
+def _parse_thresholds() -> list[int]:
+    """Parse the thresholds setting defensively (ignore junk values)."""
+    out = []
+    for t in (db.get_setting("thresholds") or "").split(","):
+        t = t.strip()
+        if not t:
+            continue
+        try:
+            out.append(int(t))
+        except ValueError:
+            logger.warning("Ignoring invalid threshold value: %r", t)
+    return out
+
+
 # ── Email sender ─────────────────────────────────────────────────────────────
 
 def _send_email(to: str, subject: str, html_body: str):
     """Send an email via configured SMTP."""
     host = db.get_setting("smtp_host")
-    port = int(db.get_setting("smtp_port") or "587")
+    try:
+        port = int(db.get_setting("smtp_port") or "587")
+    except ValueError:
+        logger.warning("Invalid smtp_port setting — falling back to 587")
+        port = 587
     user = db.get_setting("smtp_user")
     password = db.get_setting("smtp_password")
     from_addr = db.get_setting("smtp_from") or user
@@ -59,7 +78,7 @@ def check_subscriptions(subs: list[dict] | None = None):
     if db.get_setting("check_subscriptions") != "true":
         return []
 
-    thresholds = [int(t) for t in db.get_setting("thresholds").split(",") if t.strip()]
+    thresholds = _parse_thresholds()
     recipients = db.get_recipients()
     if not recipients or not thresholds:
         return []
@@ -83,12 +102,18 @@ def check_subscriptions(subs: list[dict] | None = None):
     expiring_by_threshold: dict[int, list[dict]] = {}
 
     for sub in subs:
+        if not isinstance(sub, dict):
+            continue
         end_str = sub.get("endTime") or ""
         if not end_str:
             continue
 
-        qty = int(sub.get("quantity") or 0)
-        avail = int(sub.get("availableQuantity") or 0)
+        try:
+            qty = int(sub.get("quantity") or 0)
+            avail = int(sub.get("availableQuantity") or 0)
+        except (TypeError, ValueError):
+            logger.warning("Skipping subscription with non-numeric quantities: %s", sub.get("key"))
+            continue
         in_use = qty - avail
         if in_use <= 0:
             continue  # skip unused subscriptions
@@ -191,7 +216,7 @@ def check_ssl_certs():
         return []
 
     hosts = [h.strip() for h in hosts_str.split(",") if h.strip()]
-    thresholds = [int(t) for t in db.get_setting("thresholds").split(",") if t.strip()]
+    thresholds = _parse_thresholds()
     recipients = db.get_recipients()
     if not recipients or not thresholds:
         return []
@@ -201,7 +226,11 @@ def check_ssl_certs():
 
     for host in hosts:
         hostname = host.split(":")[0]
-        port = int(host.split(":")[1]) if ":" in host else 443
+        try:
+            port = int(host.split(":")[1]) if ":" in host else 443
+        except ValueError:
+            logger.warning("Invalid port in ssl_hosts entry %r — using 443", host)
+            port = 443
 
         try:
             ctx = ssl.create_default_context()
@@ -271,8 +300,16 @@ def run_expiry_check(subs: list[dict] | None = None):
     async route (passes pre-fetched subs to avoid event loop conflict).
     """
     logger.info("Running expiry notification check…")
-    sub_alerts = check_subscriptions(subs=subs)
-    ssl_alerts = check_ssl_certs()
+    try:
+        sub_alerts = check_subscriptions(subs=subs)
+    except Exception:
+        logger.exception("Subscription expiry check failed")
+        sub_alerts = []
+    try:
+        ssl_alerts = check_ssl_certs()
+    except Exception:
+        logger.exception("SSL expiry check failed")
+        ssl_alerts = []
     total = len(sub_alerts) + len(ssl_alerts)
     sent = sum(1 for a in sub_alerts + ssl_alerts if a.get("sent"))
     logger.info("Expiry check complete: %d alerts, %d emails sent", total, sent)
