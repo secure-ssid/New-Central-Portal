@@ -4,12 +4,13 @@
 
 <div class="page-header flex items-end justify-between">
     <div>
-        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">GreenLake</p>
-        <h1 class="text-2xl font-bold text-white">Expiry Notifications</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Subscription & SSL certificate expiry alerts — 90, 60, 30, 15 day warnings</p>
+        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">GreenLake</p>
+        <h1 class="text-2xl font-semibold text-white tracking-tight">Expiry Notifications</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Subscription &amp; SSL certificate expiry alerts &mdash; 90, 60, 30, 15 day warnings</p>
     </div>
-    <div style="display:flex;gap:8px;">
-        <button onclick="runCheckNow()" id="btn-check" style="padding:7px 16px;background:#1e2535;border:1px solid #374151;border-radius:6px;color:#94a3b8;font-size:.75rem;font-weight:600;cursor:pointer;">
+    <div class="flex gap-2">
+        <button onclick="runCheckNow()" id="btn-check" class="btn-secondary">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             Run Check Now
         </button>
     </div>
@@ -90,9 +91,9 @@
             <div style="padding:16px 20px;">
                 <div style="display:flex;gap:8px;margin-bottom:16px;">
                     <input x-model="newEmail" type="email" placeholder="admin@example.com"
-                        style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.78rem;outline:none;"
+                        class="input flex-1 text-xs"
                         @keydown.enter="addRecipient()">
-                    <button @click="addRecipient()" style="padding:8px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Add</button>
+                    <button @click="addRecipient()" class="btn-primary">Add</button>
                 </div>
                 <template x-for="r in recipients" :key="r.email">
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0d1117;">
@@ -148,8 +149,8 @@
                     </label>
                 </div>
                 <div style="display:flex;gap:8px;margin-top:4px;">
-                    <button @click="saveSettings()" style="padding:7px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Save Settings</button>
-                    <button @click="testEmail()" style="padding:7px 16px;background:#1e2535;border:1px solid #374151;border-radius:6px;color:#94a3b8;font-size:.75rem;cursor:pointer;">Send Test Email</button>
+                    <button @click="saveSettings()" class="btn-primary">Save Settings</button>
+                    <button @click="testEmail()" class="btn-secondary">Send Test Email</button>
                 </div>
                 <p x-show="smtpMsg" x-text="smtpMsg" :style="'font-size:.75rem;margin:0;color:' + (smtpOk ? '#4ade80' : '#f87171')"></p>
             </div>
@@ -185,7 +186,7 @@
                 </label>
             </div>
             <div style="display:flex;align-items:end;">
-                <button @click="saveSettings()" style="padding:7px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Save Settings</button>
+                <button @click="saveSettings()" class="btn-primary">Save Settings</button>
             </div>
         </div>
     </div>
@@ -305,8 +306,9 @@ async function runCheckNow() {
     try {
         const r = await fetch('/notifications/check-now', {method: 'POST'});
         const j = await r.json();
-        btn.textContent = j.ok ? `Done — ${j.alerts.length} alerts` : 'Error';
-        setTimeout(() => { if (j.alerts.length > 0) location.reload(); }, 1500);
+        const alerts = j.alerts || [];
+        btn.textContent = j.ok ? `Done — ${alerts.length} alerts` : 'Error';
+        setTimeout(() => { if (j.ok && alerts.length > 0) location.reload(); }, 1500);
     } catch (e) { btn.textContent = 'Error'; }
     setTimeout(() => { btn.textContent = 'Run Check Now'; btn.disabled = false; }, 3000);
 }
