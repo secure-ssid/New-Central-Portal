@@ -2,15 +2,15 @@
 {% block title %}Notifications - New Central Portal{% endblock %}
 {% block content %}
 
-<div class="page-header flex items-end justify-between">
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
         <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">GreenLake</p>
         <h1 class="text-2xl font-semibold text-white tracking-tight">Expiry Notifications</h1>
         <p class="text-sm text-slate-500 mt-0.5">Subscription &amp; SSL certificate expiry alerts &mdash; 90, 60, 30, 15 day warnings</p>
     </div>
-    <div class="flex gap-2">
+    <div class="flex flex-wrap gap-2">
         <button onclick="runCheckNow()" id="btn-check" class="btn-secondary">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <svg aria-hidden="true" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             Run Check Now
         </button>
     </div>
@@ -28,7 +28,8 @@
         <template x-if="upcomingSubs.length > 0">
             <div>
                 <div style="padding:10px 20px;background:#0a0f1a;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;">GreenLake Subscriptions</div>
-                <table style="width:100%;border-collapse:collapse;">
+                <div class="overflow-x-auto">
+                <table style="width:100%;border-collapse:collapse;min-width:640px;">
                     <thead><tr style="border-bottom:1px solid #1e2535;">
                         <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Key</th>
                         <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Tier</th>
@@ -48,6 +49,7 @@
                         </template>
                     </tbody>
                 </table>
+                </div>
             </div>
         </template>
 
@@ -55,7 +57,8 @@
         <template x-if="upcomingCerts.length > 0">
             <div>
                 <div style="padding:10px 20px;background:#0a0f1a;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;border-top:1px solid #1e2535;">SSL Certificates</div>
-                <table style="width:100%;border-collapse:collapse;">
+                <div class="overflow-x-auto">
+                <table style="width:100%;border-collapse:collapse;min-width:480px;">
                     <thead><tr style="border-bottom:1px solid #1e2535;">
                         <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Hostname</th>
                         <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Expires</th>
@@ -71,6 +74,7 @@
                         </template>
                     </tbody>
                 </table>
+                </div>
             </div>
         </template>
 
@@ -80,7 +84,7 @@
     </div>
 
     <!-- ── Two-column: Settings + Recipients ──────────────────────────────── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         <!-- Recipients -->
         <div class="card" style="padding:0;overflow:hidden;">
@@ -89,16 +93,17 @@
                 <p style="font-size:.7rem;color:#4b5563;margin:4px 0 0;">Admin emails that receive expiry alerts</p>
             </div>
             <div style="padding:16px 20px;">
-                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                     <input x-model="newEmail" type="email" placeholder="admin@example.com"
-                        class="input flex-1 text-xs"
+                        aria-label="Recipient email address"
+                        class="input flex-1 text-xs" style="min-width:180px;"
                         @keydown.enter="addRecipient()">
                     <button @click="addRecipient()" class="btn-primary">Add</button>
                 </div>
                 <template x-for="r in recipients" :key="r.email">
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0d1117;">
                         <span style="font-size:.78rem;color:#e2e8f0;font-family:monospace;" x-text="r.email"></span>
-                        <button @click="removeRecipient(r.email)" style="padding:4px 10px;background:#7f1d1d30;border:1px solid #7f1d1d;border-radius:4px;color:#f87171;font-size:.68rem;cursor:pointer;">Remove</button>
+                        <button @click="removeRecipient(r.email)" :aria-label="'Remove recipient ' + r.email" style="padding:4px 10px;background:#7f1d1d30;border:1px solid #7f1d1d;border-radius:4px;color:#f87171;font-size:.68rem;cursor:pointer;">Remove</button>
                     </div>
                 </template>
                 <template x-if="recipients.length === 0">
@@ -117,23 +122,23 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div>
                         <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">SMTP Host</label>
-                        <input x-model="cfg.smtp_host" placeholder="smtp.gmail.com"
+                        <input x-model="cfg.smtp_host" placeholder="smtp.gmail.com" aria-label="SMTP host"
                             style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                     </div>
                     <div>
                         <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Port</label>
-                        <input x-model="cfg.smtp_port" placeholder="587"
+                        <input x-model="cfg.smtp_port" placeholder="587" aria-label="SMTP port" inputmode="numeric"
                             style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                     </div>
                 </div>
                 <div>
                     <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Username</label>
-                    <input x-model="cfg.smtp_user" placeholder="your@email.com"
+                    <input x-model="cfg.smtp_user" placeholder="your@email.com" aria-label="SMTP username"
                         style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                 </div>
                 <div>
                     <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Password</label>
-                    <input x-model="cfg.smtp_password" type="password" placeholder="••••••••"
+                    <input x-model="cfg.smtp_password" type="password" placeholder="••••••••" aria-label="SMTP password"
                         style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                 </div>
                 <div>
