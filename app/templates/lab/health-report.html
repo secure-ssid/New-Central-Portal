@@ -2,26 +2,35 @@
 {% block title %}Health Report - New Central Portal{% endblock %}
 {% block content %}
 <div class="page-header">
-    <div class="flex items-center gap-2 text-xs text-gray-600 mb-2"><a href="/lab/" style="color:#f97316;">← Lab</a></div>
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <a href="/lab/" class="hover:text-brand-400 transition-colors">Lab</a>
+        <span class="text-slate-700">/</span>
+        <span class="text-slate-400">Health Report</span>
+    </div>
     <h1 class="text-2xl font-bold text-white">Network Health Report</h1>
-    <p class="text-sm text-gray-500 mt-0.5">AI-generated summary using live network data</p>
+    <p class="text-sm text-slate-500 mt-0.5">AI-generated summary using live network data</p>
 </div>
 
-<div class="card" x-data="{loading:false}">
-    <div class="flex items-center justify-between mb-6">
-        <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;">Generate Report</p>
+<div class="card">
+    <p class="section-label mb-4">Generate Report</p>
+    <p class="text-sm text-slate-500 mb-5">Pulls live data from all devices, alerts, and clients, then asks Claude to summarize network health and flag issues.</p>
+    <div class="flex items-center gap-3">
+        <button id="report-btn" class="btn-primary px-6 py-2.5"
+                hx-post="/lab/health-report"
+                hx-target="#report-output"
+                hx-indicator="#report-spinner, #report-btn-spinner"
+                hx-disabled-elt="#report-btn">
+            <span>Generate Report</span>
+            <span id="report-btn-spinner" class="htmx-indicator"><span class="spinner"></span></span>
+        </button>
+        <span id="report-spinner" class="htmx-indicator text-xs text-slate-500">Generating… this may take 10–20 seconds</span>
     </div>
-    <p style="font-size:.85rem;color:#6b7280;margin-bottom:20px;">Pulls live data from all devices, alerts, and clients then asks Claude to summarize network health and flag issues.</p>
-    <button
-        hx-post="/lab/health-report"
-        hx-target="#report-output"
-        hx-indicator="#spinner"
-        @click="loading=true" @htmx:after-request.window="loading=false"
-        style="padding:10px 24px;background:#f97316;border:none;border-radius:7px;color:#fff;font-size:.875rem;font-weight:600;cursor:pointer;">
-        Generate Report
-    </button>
-    <span id="spinner" style="display:none;margin-left:12px;font-size:.8rem;color:#6b7280;" class="htmx-indicator">Generating... (may take 10–20s)</span>
 
-    <div id="report-output" style="margin-top:24px;padding-top:24px;border-top:1px solid #1e2535;min-height:40px;"></div>
+    <div id="report-output" class="mt-6 pt-6 border-t border-surface-700 min-h-[40px]">
+        <div class="empty-state" style="padding:24px 20px;">
+            <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6m4 6V7m4 10v-3M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            <p>No report yet — click Generate Report to create one.</p>
+        </div>
+    </div>
 </div>
 {% endblock %}

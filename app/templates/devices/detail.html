@@ -227,6 +227,17 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     } catch (e) { ports = []; }
     if (!ports.length) { window.__showPortsFallback(); return; }
 
+    try {
+        boot();
+    } catch (e) {
+        // Fail fast to the HTML grid instead of waiting for the 7s watchdog.
+        console.error('3D faceplate failed to initialise:', e);
+        window.__showPortsFallback();
+        return;
+    }
+
+    function boot() {
+
     const topPorts = ports.filter(p => p.alignment === 'top');
     const bottomPorts = ports.filter(p => p.alignment !== 'top');
     const singleRow = !topPorts.length || !bottomPorts.length;
@@ -448,21 +459,29 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     // ── Render loop ──────────────────────────────────────────────────────
     const clock = new THREE.Clock();
     function animate() {
+        try {
+            const t = clock.getElapsedTime();
+            rig.rotation.y = Math.sin(t * 0.35) * 0.035;   // subtle idle sway
+            rig.rotation.x = Math.sin(t * 0.22) * 0.012;
+            controls.update();
+
+            raycaster.setFromCamera(pointer, camera);
+            const hits = raycaster.intersectObjects(portMeshes, false);
+            if (hits.length) setHover(hits[0].object);
+            else clearHover();
+
+            renderer.render(scene, camera);
+        } catch (e) {
+            // Stop the loop on a broken frame; fall back if we never got going.
+            console.error('3D faceplate render error:', e);
+            if (!window.__switch3dReady) window.__showPortsFallback();
+            return;
+        }
         requestAnimationFrame(animate);
-        const t = clock.getElapsedTime();
-        rig.rotation.y = Math.sin(t * 0.35) * 0.035;   // subtle idle sway
-        rig.rotation.x = Math.sin(t * 0.22) * 0.012;
-        controls.update();
-
-        raycaster.setFromCamera(pointer, camera);
-        const hits = raycaster.intersectObjects(portMeshes, false);
-        if (hits.length) setHover(hits[0].object);
-        else clearHover();
-
-        renderer.render(scene, camera);
     }
     animate();
     window.__switch3dReady = true;
+    }  // end boot()
 })();
 </script>
 

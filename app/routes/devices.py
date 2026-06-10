@@ -236,6 +236,8 @@ def _validate_ping_destination(destination: str) -> str | None:
     dest = (destination or "").strip()
     if not dest or len(dest) > 253:
         return None
+    if "%" in dest:  # reject scoped IPv6 zone-ids (fe80::1%eth0) — keep it simple
+        return None
     try:
         ipaddress.ip_address(dest)
         return dest

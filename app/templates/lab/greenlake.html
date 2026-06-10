@@ -3,6 +3,17 @@
 {% block content %}
 
 <script>
+function glpJson(id) {
+    try {
+        const el = document.getElementById(id);
+        const data = el ? JSON.parse(el.textContent) : [];
+        return Array.isArray(data) ? data : [];
+    } catch (e) {
+        console.error('Failed to parse ' + id, e);
+        return [];
+    }
+}
+
 document.addEventListener('alpine:init', () => {
 
     Alpine.data('devicesTab', () => ({
@@ -14,8 +25,8 @@ document.addEventListener('alpine:init', () => {
         devices: [],
         allSubs: [],
         init() {
-            this.devices = JSON.parse(document.getElementById('glp-devices-json').textContent);
-            this.allSubs = JSON.parse(document.getElementById('glp-subs-json').textContent);
+            this.devices = glpJson('glp-devices-json');
+            this.allSubs = glpJson('glp-subs-json');
             this.devices.forEach(d => {
                 const s = Array.isArray(d.subscription) && d.subscription[0] ? d.subscription[0] : {};
                 d._sub_key = s.key || '';
@@ -162,7 +173,7 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('subscriptionsTab', () => ({
         search: '', sortCol: '', sortDir: 1,
         subscriptions: [],
-        init() { this.subscriptions = JSON.parse(document.getElementById('glp-subs-json').textContent); },
+        init() { this.subscriptions = glpJson('glp-subs-json'); },
         sortBy(col) { if (this.sortCol === col) this.sortDir *= -1; else { this.sortCol = col; this.sortDir = 1; } },
         sortIcon(col) { if (this.sortCol !== col) return '\u21C5'; return this.sortDir === 1 ? '\u2191' : '\u2193'; },
         get rows() {
@@ -187,7 +198,7 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('usersTab', () => ({
         search: '', sortCol: '', sortDir: 1,
         users: [],
-        init() { this.users = JSON.parse(document.getElementById('glp-users-json').textContent); },
+        init() { this.users = glpJson('glp-users-json'); },
         sortBy(col) { if (this.sortCol === col) this.sortDir *= -1; else { this.sortCol = col; this.sortDir = 1; } },
         sortIcon(col) { if (this.sortCol !== col) return '\u21C5'; return this.sortDir === 1 ? '\u2191' : '\u2193'; },
         fullName(u) { return ((u.firstName || '') + ' ' + (u.lastName || '')).trim() || u.username || '—'; },
@@ -213,7 +224,7 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('auditTab', () => ({
         search: '', sortCol: '', sortDir: 1,
         logs: [],
-        init() { this.logs = JSON.parse(document.getElementById('glp-audit-json').textContent); },
+        init() { this.logs = glpJson('glp-audit-json'); },
         sortBy(col) { if (this.sortCol === col) this.sortDir *= -1; else { this.sortCol = col; this.sortDir = 1; } },
         sortIcon(col) { if (this.sortCol !== col) return '\u21C5'; return this.sortDir === 1 ? '\u2191' : '\u2193'; },
         userName(e) {
@@ -274,37 +285,29 @@ document.addEventListener('alpine:init', () => {
 <div x-data="{tab:'devices'}" style="margin-top:0;">
 
     <!-- Tab bar -->
-    <div style="display:flex;align-items:stretch;border-bottom:1px solid #1e2535;">
-        <button @click="tab='devices'"
-            :style="tab==='devices' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
-            style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px 10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+    <div class="tabs">
+        <button @click="tab='devices'" class="tab-btn" style="padding-right:24px;"
+            :style="tab==='devices' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             Devices
-            <span :style="tab==='devices' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
-                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;">{{ devices|length }}</span>
+            <span class="tab-count" :style="tab==='devices' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'">{{ devices|length }}</span>
         </button>
-        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
-        <button @click="tab='subscriptions'"
-            :style="tab==='subscriptions' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
-            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+        <div class="tab-sep"></div>
+        <button @click="tab='subscriptions'" class="tab-btn"
+            :style="tab==='subscriptions' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             Subscriptions
-            <span :style="tab==='subscriptions' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
-                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;">{{ subscriptions|length }}</span>
+            <span class="tab-count" :style="tab==='subscriptions' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'">{{ subscriptions|length }}</span>
         </button>
-        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
-        <button @click="tab='users'"
-            :style="tab==='users' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
-            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+        <div class="tab-sep"></div>
+        <button @click="tab='users'" class="tab-btn"
+            :style="tab==='users' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             Users
-            <span :style="tab==='users' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
-                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;">{{ users|length }}</span>
+            <span class="tab-count" :style="tab==='users' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'">{{ users|length }}</span>
         </button>
-        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
-        <button @click="tab='audit'"
-            :style="tab==='audit' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
-            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+        <div class="tab-sep"></div>
+        <button @click="tab='audit'" class="tab-btn"
+            :style="tab==='audit' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             Audit Log
-            <span :style="tab==='audit' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
-                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;">{{ audit_logs|length }}</span>
+            <span class="tab-count" :style="tab==='audit' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'">{{ audit_logs|length }}</span>
         </button>
     </div>
 
@@ -402,7 +405,7 @@ document.addEventListener('alpine:init', () => {
 
         <div style="padding:14px 20px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:12px;">
             <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;flex:1;"><span x-text="rows.length"></span> devices</p>
-            <button @click="openAddModal()" style="padding:6px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.72rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+            <button @click="openAddModal()" class="btn-primary text-xs py-1.5">
                 <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
                 Add Device
             </button>
