@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-label="Wireless access point">
+  <!-- radiating signal arcs -->
+  <path d="M44 88a119 119 0 0 1 168 0" stroke="#a78bfa" stroke-width="15" stroke-linecap="round"/>
+  <path d="M72 122a80 80 0 0 1 112 0" stroke="#a78bfa" stroke-width="15" stroke-linecap="round" opacity=".75"/>
+  <path d="M99 155a41 41 0 0 1 58 0" stroke="#a78bfa" stroke-width="15" stroke-linecap="round" opacity=".55"/>
+  <!-- ceiling-mount puck -->
+  <rect x="66" y="170" width="124" height="62" rx="26" fill="#161b27" stroke="#e2e8f0" stroke-width="12"/>
+  <!-- central LED -->
+  <circle cx="128" cy="201" r="13" fill="#a78bfa"/>
+</svg>

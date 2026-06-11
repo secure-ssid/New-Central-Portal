@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-label="Internet">
+  <!-- globe -->
+  <circle cx="128" cy="128" r="102" fill="#161b27" stroke="#e2e8f0" stroke-width="12"/>
+  <!-- meridian + latitude grid -->
+  <ellipse cx="128" cy="128" rx="44" ry="102" stroke="#22d3ee" stroke-width="9"/>
+  <ellipse cx="128" cy="128" rx="102" ry="44" stroke="#22d3ee" stroke-width="9" opacity=".75"/>
+  <path d="M32 128h192" stroke="#22d3ee" stroke-width="9" stroke-linecap="round" opacity=".9"/>
+</svg>

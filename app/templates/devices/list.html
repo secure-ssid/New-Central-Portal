@@ -55,6 +55,16 @@ document.addEventListener('alpine:init', () => {
             if (d.deployment && d.deployment !== '-') lbl += ' · ' + d.deployment;
             return lbl;
         },
+        // Presentational only: device-type icon path derived client-side
+        // from the existing `type` field (JSON payload untouched).
+        typeIcon(d) {
+            const t = String(d.type || '').toLowerCase();
+            const f = t === 'switch' ? 'switch'
+                : (t === 'access_point' || t === 'ap') ? 'ap'
+                : t === 'gateway' ? 'gateway'
+                : 'device';
+            return '/static/icons/' + f + '.svg';
+        },
         // Manage modal (group + site)
         openManageModal(d) {
             this.mSerial = d.serial; this.mName = d.name; this.mType = d.type;
@@ -223,8 +233,13 @@ document.addEventListener('alpine:init', () => {
                 <template x-for="d in rows" :key="d.serial">
                     <tr class="tbl-row" @click="window.location='/devices/' + d.serial">
                         <td>
-                            <p class="font-medium text-slate-100 text-sm" x-text="d.name"></p>
-                            <p class="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5" x-text="typeLabel(d)"></p>
+                            <div class="flex items-center gap-2.5">
+                                <img :src="typeIcon(d)" alt="" aria-hidden="true" width="18" height="18" class="flex-shrink-0" loading="lazy">
+                                <div class="min-w-0">
+                                    <p class="font-medium text-slate-100 text-sm" x-text="d.name"></p>
+                                    <p class="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5" x-text="typeLabel(d)"></p>
+                                </div>
+                            </div>
                         </td>
                         <td class="font-mono text-xs" x-text="d.serial"></td>
                         <td x-text="d.model"></td>

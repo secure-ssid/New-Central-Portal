@@ -36,6 +36,8 @@
     .topo-legend-row { display:flex; align-items:center; gap:8px; font-size:.68rem; color:#94a3b8; margin-top:5px; }
     .topo-legend-row:first-child { margin-top:0; }
     .topo-dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
+    .topo-legend-icon { width:16px; height:16px; flex-shrink:0; display:inline-block; }
+    .topo-tier-icon { width:14px; height:14px; flex-shrink:0; display:inline-block; }
     .topo-line { width:20px; height:0; border-top:2px solid #22d3ee; display:inline-block; flex-shrink:0; }
     .topo-line.dashed { border-top:1px solid #475569; }
     /* Filters panel */
@@ -117,10 +119,10 @@
 
     <!-- Tier axis (hierarchy layout only; toggled from JS) -->
     <div id="topo-tieraxis" class="topo-overlay" aria-hidden="true">
-        <div class="topo-tier-label"><span class="topo-dot" style="background:#22d3ee;"></span>Internet</div>
-        <div class="topo-tier-label"><span class="topo-dot" style="background:#fbbf24;"></span>Gateway</div>
-        <div class="topo-tier-label"><span class="topo-dot" style="background:#818cf8;"></span>Switching</div>
-        <div class="topo-tier-label"><span class="topo-dot" style="background:#a78bfa;"></span>Access</div>
+        <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/internet.svg" alt="" aria-hidden="true">Internet</div>
+        <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/gateway.svg" alt="" aria-hidden="true">Gateway</div>
+        <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/switch.svg" alt="" aria-hidden="true">Switching</div>
+        <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/ap.svg" alt="" aria-hidden="true">Access</div>
     </div>
 
     <!-- Stats strip (bottom-right, above the hint, clear of the toolbar) -->
@@ -134,10 +136,10 @@
 
     <!-- Legend -->
     <div class="topo-overlay topo-legend" style="left:14px;bottom:14px;background:rgba(16,20,31,.85);border:1px solid #1e2535;border-radius:10px;padding:11px 14px;backdrop-filter:blur(4px);">
-        <div class="topo-legend-row"><span class="topo-dot" style="background:#22d3ee;"></span>Internet</div>
-        <div class="topo-legend-row"><span class="topo-dot" style="background:#fbbf24;"></span>Gateway</div>
-        <div class="topo-legend-row"><span class="topo-dot" style="background:#818cf8;"></span>Switch</div>
-        <div class="topo-legend-row"><span class="topo-dot" style="background:#a78bfa;"></span>Access Point</div>
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/internet.svg" alt="" aria-hidden="true">Internet</div>
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/gateway.svg" alt="" aria-hidden="true">Gateway</div>
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/switch.svg" alt="" aria-hidden="true">Switch</div>
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/ap.svg" alt="" aria-hidden="true">Access Point</div>
         <div class="topo-legend-row"><span class="topo-dot" style="background:#f87171;"></span>Offline</div>
         <div class="topo-legend-speeds" style="border-top:1px solid #1e2535;margin-top:8px;padding-top:8px;">
             <div class="topo-legend-row" style="font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Wired link speed</div>
@@ -618,15 +620,167 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     }
     try { Graph.d3Force('tierSpacing', tierSpacingForce()); } catch (e) { /* spacing is cosmetic */ }
 
-    // Glowing-sphere effect: 3d-force-graph builds MeshLambertMaterial
-    // spheres for nodes — drive their emissive channel from the node color
-    // so every node softly glows (offline nodes stay dim). Focus mode also
-    // drops the material opacity of out-of-focus nodes to ~10%.
+    // ── Device-type icon sprites ───────────────────────────────────────────
+    // Nodes render as flat icon sprites (rack switch, AP puck, gateway box,
+    // globe) rasterised from /static/icons/*.svg onto 256px canvas textures.
+    // Textures are cached per (type, status-variant) and shared by every
+    // node of that kind; only the SpriteMaterial is per-node so opacity
+    // dimming / texture swaps stay independent. Until the textures are
+    // ready — or if the icon fetch / three.js module load fails — the
+    // original coloured spheres keep rendering, so the graph is never empty.
+    var ICON_FILE = { internet: 'internet', gateway: 'gateway', switch: 'switch', ap: 'ap', unknown: 'device' };
+    // World-unit sprite widths, matching the old sphere size ratios
+    // (sphere radius ~ cbrt(val) * 4): internet/gateway largest, APs smallest.
+    var SPRITE_SCALE = { internet: 34, gateway: 29, switch: 25, ap: 16, unknown: 20 };
+    var iconTex = null;        // { group: { online, offline, hiOnline, hiOffline } }
+    var spriteTHREE = null;    // three.js namespace once the module loads
+
+    function spriteForNode(n) {
+        if (!iconTex || !spriteTHREE) return undefined;   // falsy -> default sphere
+        var g = ICON_FILE[n.group] ? n.group : 'unknown';
+        var st = (!n.virtual && !isOnline(n)) ? 'offline' : 'online';
+        var mat = new spriteTHREE.SpriteMaterial({
+            map: iconTex[g][st],
+            transparent: true,
+            alphaTest: 0.1,     // opaque icon body occludes link ends like the spheres did
+            depthWrite: true
+        });
+        var spr = new spriteTHREE.Sprite(mat);
+        var s = SPRITE_SCALE[g];
+        spr.scale.set(s, s, 1);
+        spr.userData.__icon = { group: g, status: st, base: s, dimmed: false, tex: iconTex[g][st] };
+        return spr;
+    }
+
+    // Per-frame sprite state: hover/search/focus swap to the brighter
+    // orange-ring texture variant + a small scale bump; dimming is done via
+    // per-node material opacity (texture stays shared).
+    function applySpriteState(n, o) {
+        var d = o.userData.__icon;
+        var hi = false, dim = 0, k = 1;
+        if (focusIds) {
+            if (n === focusNode) { hi = true; }
+            else if (!focusIds.has(n.id)) { dim = 0.08; k = 0.6; }
+        } else if (searchTerm) {
+            if (n.__match) hi = true; else dim = 0.18;
+        } else if (hoverNode) {
+            if (n === hoverNode) hi = true;
+            else if (!n.__nbr) dim = 0.3;
+        }
+        if (hi) k = 1.22;
+        var tex = iconTex[d.group][hi ? (d.status === 'offline' ? 'hiOffline' : 'hiOnline') : d.status];
+        if (d.tex !== tex) {
+            d.tex = tex;
+            o.material.map = tex;
+            o.material.needsUpdate = true;
+        }
+        var dimmed = dim > 0;
+        if (dimmed !== d.dimmed) {
+            d.dimmed = dimmed;
+            // alphaTest would discard the whole sprite once opacity drops
+            // below the threshold, so it is lifted while dimmed.
+            o.material.alphaTest = dimmed ? 0 : 0.1;
+            o.material.depthWrite = !dimmed;
+            o.material.needsUpdate = true;
+        }
+        o.material.opacity = dimmed ? dim : 1;
+        var s = d.base * k;
+        if (o.scale.x !== s) o.scale.set(s, s, 1);
+    }
+
+    // Rasterise one icon image onto a 256px canvas with a status ring /
+    // status dot / highlight glow composited around it.
+    function buildIconTexture(THREE, img, opts, maxAniso) {
+        var c = document.createElement('canvas');
+        c.width = c.height = 256;
+        var ctx = c.getContext('2d');
+        if (opts.glow) {
+            var gr = ctx.createRadialGradient(128, 128, 30, 128, 128, 124);
+            gr.addColorStop(0, 'rgba(249,115,22,.28)');
+            gr.addColorStop(1, 'rgba(249,115,22,0)');
+            ctx.fillStyle = gr;
+            ctx.beginPath(); ctx.arc(128, 128, 124, 0, Math.PI * 2); ctx.fill();
+        }
+        if (opts.ring) {
+            ctx.beginPath(); ctx.arc(128, 128, 119, 0, Math.PI * 2);
+            ctx.strokeStyle = opts.ring;
+            ctx.lineWidth = opts.ringW || 7;
+            ctx.globalAlpha = (opts.ringA == null) ? 1 : opts.ringA;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+        if (opts.dim) {
+            if (typeof ctx.filter === 'string') ctx.filter = 'grayscale(80%) brightness(55%)';
+            else ctx.globalAlpha = 0.45;   // very old canvas: plain fade
+        }
+        ctx.drawImage(img, 30, 30, 196, 196);
+        if (typeof ctx.filter === 'string') ctx.filter = 'none';
+        ctx.globalAlpha = 1;
+        if (opts.dot) {
+            ctx.beginPath(); ctx.arc(206, 50, 15, 0, Math.PI * 2);
+            ctx.fillStyle = '#060a14'; ctx.fill();     // dark rim for separation
+            ctx.beginPath(); ctx.arc(206, 50, 10, 0, Math.PI * 2);
+            ctx.fillStyle = opts.dot; ctx.fill();
+        }
+        var tex = new THREE.CanvasTexture(c);
+        tex.anisotropy = maxAniso;
+        if ('colorSpace' in tex) tex.colorSpace = 'srgb';
+        return tex;
+    }
+
+    // Called by the module loader below once three.js is imported. Fetches
+    // each SVG once, builds the texture cache, then swaps the node objects
+    // from spheres to sprites. Any failure leaves the spheres in place.
+    window.__topoIconInit = function (THREE) {
+        Promise.all(Object.keys(ICON_FILE).map(function (g) {
+            return fetch('/static/icons/' + ICON_FILE[g] + '.svg')
+                .then(function (r) {
+                    if (!r.ok) throw new Error('icon HTTP ' + r.status);
+                    return r.text();
+                })
+                .then(function (svg) {
+                    return new Promise(function (resolve, reject) {
+                        var img = new Image();
+                        img.onload = function () { resolve({ group: g, img: img }); };
+                        img.onerror = function () { reject(new Error('icon decode failed: ' + g)); };
+                        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+                    });
+                });
+        })).then(function (loaded) {
+            var maxAniso = 1;
+            try { maxAniso = Graph.renderer().capabilities.getMaxAnisotropy(); } catch (e) { /* keep 1 */ }
+            var built = {};
+            loaded.forEach(function (it) {
+                built[it.group] = {
+                    online:    buildIconTexture(THREE, it.img, { ring: '#4ade80', ringW: 5, ringA: 0.3, dot: '#4ade80' }, maxAniso),
+                    offline:   buildIconTexture(THREE, it.img, { ring: '#f87171', ringW: 7, ringA: 0.85, dot: '#f87171', dim: true }, maxAniso),
+                    hiOnline:  buildIconTexture(THREE, it.img, { ring: '#f97316', ringW: 8, ringA: 0.95, glow: true, dot: '#4ade80' }, maxAniso),
+                    hiOffline: buildIconTexture(THREE, it.img, { ring: '#f97316', ringW: 8, ringA: 0.95, glow: true, dot: '#f87171' }, maxAniso)
+                };
+            });
+            iconTex = built;
+            spriteTHREE = THREE;
+            Graph.nodeThreeObject(spriteForNode);   // async swap: spheres -> icon sprites
+            applyGlow();
+        }).catch(function (err) {
+            if (window.console && console.warn) console.warn('Topology icons unavailable — keeping sphere nodes:', err);
+        });
+    };
+
+    // Node visual state, applied on every tick. Sprite nodes get the
+    // texture/opacity/scale treatment above; while the graph is still on
+    // sphere nodes (icon textures not ready, or load failed) the original
+    // glowing-sphere effect runs instead: drive the MeshLambertMaterial
+    // emissive channel from the node color so every node softly glows
+    // (offline nodes stay dim). Focus mode drops material opacity of
+    // out-of-focus nodes to ~10% in both modes.
     function applyGlow() {
         try {
             Graph.graphData().nodes.forEach(function (n) {
                 var o = n.__threeObj;
-                if (!o || !o.material || !o.material.emissive || !o.material.color) return;
+                if (!o) return;
+                if (o.isSprite && o.userData.__icon && iconTex) { applySpriteState(n, o); return; }
+                if (!o.material || !o.material.emissive || !o.material.color) return;
                 // Default node materials are shared per-color by the library;
                 // clone once per node so emissive tweaks don't bleed across nodes.
                 if (!o.material.userData.__perNode) {
@@ -643,7 +797,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
                 else k = 0.55;
                 o.material.emissive.copy(o.material.color).multiplyScalar(k);
             });
-        } catch (e) { /* glow is decorative; never break the graph */ }
+        } catch (e) { /* node styling is decorative; never break the graph */ }
     }
     setInterval(applyGlow, 400);
 
@@ -1062,6 +1216,18 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         window.addEventListener('resize', syncSize);
     }
 })();
+</script>
+<script type="module">
+// Icon-sprite bootstrap: module scripts always execute after the classic
+// scripts above, so the graph (and window.__topoIconInit) already exist by
+// the time this runs. Only Sprite/SpriteMaterial/CanvasTexture are used
+// from this vendored three build — the graph keeps its own bundled
+// renderer. If the import fails the hook is never called and the topology
+// permanently keeps its sphere nodes (graceful degradation, no error).
+// Must match the three revision bundled inside the 3d-force-graph UMD
+// (r183) — sprites built from a mismatched three instance render blank.
+import * as THREE from '/static/vendor/three-0.183.2/three.module.min.js';
+if (typeof window.__topoIconInit === 'function') window.__topoIconInit(THREE);
 </script>
 
 {% endblock %}

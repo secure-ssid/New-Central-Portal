@@ -130,9 +130,13 @@
         </div>
         <ul class="space-y-2.5 text-sm">
             {% for seg in device_mix %}
+            {% set _sicon = 'switch' if seg.label == 'Switches'
+                else ('ap' if seg.label == 'Access Points'
+                else ('gateway' if seg.label == 'Gateways'
+                else 'device')) %}
             <li class="flex items-center justify-between gap-3">
                 <span class="flex items-center gap-2 text-slate-400 min-w-0">
-                    <span class="w-2 h-2 rounded-full inline-block flex-shrink-0" style="background:{{ seg.color }};"></span>
+                    <img src="/static/icons/{{ _sicon }}.svg" alt="" aria-hidden="true" width="16" height="16" class="flex-shrink-0">
                     <span class="truncate">{{ seg.label }}</span>
                 </span>
                 <span class="flex items-baseline gap-2 flex-shrink-0">
@@ -251,10 +255,20 @@
             </thead>
             <tbody>
                 {% for device in devices %}
+                {% set _dtype = (device.type | default('', true) | lower) %}
+                {% set _dicon = 'switch' if 'switch' in _dtype
+                    else ('gateway' if 'gateway' in _dtype
+                    else ('ap' if (_dtype == 'ap' or 'access' in _dtype)
+                    else 'device')) %}
                 <tr class="tbl-row" onclick="window.location='/devices/{{ device.serial }}'">
                     <td>
-                        <p class="font-medium text-slate-100 text-sm">{{ device.name | default('—', true) }}</p>
-                        <p class="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5">{{ device.type | default('', true) | replace('_', ' ') }}</p>
+                        <div class="flex items-center gap-2.5">
+                            <img src="/static/icons/{{ _dicon }}.svg" alt="" aria-hidden="true" width="18" height="18" class="flex-shrink-0" loading="lazy">
+                            <div class="min-w-0">
+                                <p class="font-medium text-slate-100 text-sm">{{ device.name | default('—', true) }}</p>
+                                <p class="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5">{{ device.type | default('', true) | replace('_', ' ') }}</p>
+                            </div>
+                        </div>
                     </td>
                     <td>{{ device.model | default('—', true) }}</td>
                     <td class="font-mono text-xs text-slate-400">{{ device.ip | default('—', true) }}</td>
