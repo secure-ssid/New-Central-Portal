@@ -10,6 +10,7 @@ Requires these env vars (set in docker-compose.yml):
 import asyncio
 import importlib
 import json
+import logging
 import os
 import time
 import threading
@@ -18,6 +19,8 @@ from typing import Any
 
 import requests
 
+logger = logging.getLogger(__name__)
+
 
 # ── Classic Central Client ────────────────────────────────────────────────────
 
@@ -25,6 +28,19 @@ class ClassicCentralClient:
     """Lightweight OAuth2 client for the Classic Central gateway."""
 
     def __init__(self):
+        missing = [
+            v for v in (
+                "CLASSIC_CENTRAL_BASE_URL",
+                "CLASSIC_CENTRAL_CLIENT_ID",
+                "CLASSIC_CENTRAL_CLIENT_SECRET",
+            )
+            if not os.environ.get(v)
+        ]
+        if missing:
+            raise RuntimeError(
+                "Classic Central is not configured — missing env vars: "
+                + ", ".join(missing)
+            )
         self.base_url = os.environ["CLASSIC_CENTRAL_BASE_URL"].rstrip("/")
         self.client_id = os.environ["CLASSIC_CENTRAL_CLIENT_ID"]
         self.client_secret = os.environ["CLASSIC_CENTRAL_CLIENT_SECRET"]
@@ -35,6 +51,11 @@ class ClassicCentralClient:
 
     def _refresh(self) -> None:
         """Refresh the OAuth2 access token."""
+        if not self._refresh_token:
+            raise RuntimeError(
+                "Classic Central access token expired and no "
+                "CLASSIC_CENTRAL_REFRESH_TOKEN is configured."
+            )
         r = requests.post(
             f"{self.base_url}/oauth2/token",
             json={
@@ -86,11 +107,16 @@ async def _run(fn, *args, **kwargs) -> Any:
     return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
 
 
-def _unwrap(result: list | dict) -> list[dict]:
+def _unwrap(result: list | dict | None) -> list[dict]:
     """Flatten paginated centralmcp responses to a plain list."""
     if isinstance(result, list):
         return result
-    return result.get("items", [])
+    if isinstance(result, dict):
+        items = result.get("items", [])
+        return items if isinstance(items, list) else []
+    if result is not None:
+        logger.warning("Unexpected centralmcp response shape: %s", type(result).__name__)
+    return []
 
 
 # ── Sites ─────────────────────────────────────────────────────────────────────
@@ -132,29 +158,55 @@ async def get_switch_ports(serial: str) -> list[dict]:
     return result.get("interfaces", []) if isinstance(result, dict) else []
 
 
+# In-module TTL cache for switch-port lookups used by uplink resolution.
+# find_device_uplink scans every switch's ports per call; caching the port
+# tables for a short window makes repeated uplink lookups cheap.
+_PORTS_CACHE_TTL_SECONDS = 60.0
+_ports_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+async def _get_switch_ports_cached(serial: str) -> list[dict]:
+    """get_switch_ports with a short TTL cache (uplink resolution only)."""
+    now = time.monotonic()
+    entry = _ports_cache.get(serial)
+    if entry is not None and (now - entry[0]) < _PORTS_CACHE_TTL_SECONDS:
+        return entry[1]
+    ports = await get_switch_ports(serial)
+    _ports_cache[serial] = (time.monotonic(), ports)
+    # Opportunistic pruning so the cache can't grow unbounded.
+    if len(_ports_cache) > 256:
+        cutoff = time.monotonic() - _PORTS_CACHE_TTL_SECONDS
+        for key in [k for k, (ts, _) in _ports_cache.items() if ts < cutoff]:
+            _ports_cache.pop(key, None)
+    return ports
+
+
 async def find_device_uplink(device_serial: str) -> dict | None:
     """Return the switch + port that an AP/device uplinks through."""
-    from mcp_servers.monitoring import list_devices, list_switch_ports
+    from mcp_servers.monitoring import list_devices
     all_devices = _unwrap(await _run(list_devices, limit=50))
     switches = [
         d for d in all_devices
-        if (d.get("deviceType") or "").upper() in ("SWITCH", "AOS_S", "AOS-S", "CX", "AOS_CX")
+        if isinstance(d, dict)
+        and (d.get("deviceType") or "").upper() in ("SWITCH", "AOS_S", "AOS-S", "CX", "AOS_CX")
     ]
     for sw in switches:
         sw_serial = sw.get("serialNumber") or sw.get("serial") or ""
         if not sw_serial:
             continue
         try:
-            result = await _run(list_switch_ports, sw_serial)
-            ports = result.get("interfaces", []) if isinstance(result, dict) else []
+            ports = await _get_switch_ports_cached(sw_serial)
             for port in ports:
-                if port.get("neighbourSerial") == device_serial:
+                if isinstance(port, dict) and port.get("neighbourSerial") == device_serial:
                     return {
                         "switch_serial": sw_serial,
                         "switch_name": sw.get("deviceName") or sw.get("name") or sw_serial,
                         "port": port.get("name") or port.get("id") or "",
                     }
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Uplink scan: failed to list ports for switch %s: %s", sw_serial, exc
+            )
             continue
     return None
 
@@ -203,7 +255,12 @@ async def get_device_groups() -> list[dict]:
         r.raise_for_status()
         data = r.json()
         # Classic returns {"data": [["group1"],["group2"]], "total": N}
-        names = [row[0] for row in data.get("data", []) if row]
+        names = []
+        for row in data.get("data", []) if isinstance(data, dict) else []:
+            if isinstance(row, (list, tuple)) and row:
+                names.append(row[0])
+            elif isinstance(row, str) and row:
+                names.append(row)
         return [{"groupName": n} for n in names]
     return await _run(_fetch)
 
@@ -214,7 +271,9 @@ async def get_classic_sites() -> list[dict]:
         c = get_classic_client()
         r = c.get("/central/v2/sites", params={"limit": 100, "offset": 0})
         r.raise_for_status()
-        return r.json().get("sites", [])
+        data = r.json()
+        sites = data.get("sites", []) if isinstance(data, dict) else []
+        return sites if isinstance(sites, list) else []
     return await _run(_fetch)
 
 
@@ -410,10 +469,15 @@ async def add_glp_devices_bulk(devices: list[dict]) -> dict:
     Returns immediately with the task ID.
     """
     from mcp_servers.shared import get_glp_client
-    normalized = [
-        {"serialNumber": d["serialNumber"], "macAddress": _normalize_mac(d["macAddress"])}
-        for d in devices
-    ]
+    normalized = []
+    for d in devices:
+        serial = (d.get("serialNumber") or "").strip()
+        mac = (d.get("macAddress") or "").strip()
+        if not serial or not mac:
+            raise ValueError(
+                f"Each device needs serialNumber and macAddress; got: {d!r}"
+            )
+        normalized.append({"serialNumber": serial, "macAddress": _normalize_mac(mac)})
 
     def _do_bulk():
         glp = get_glp_client()
@@ -500,6 +564,7 @@ def search_docs(query: str, top_k: int = 5) -> list[dict]:
             for h in hits.points
         ]
     except Exception as exc:
+        logger.warning("Doc search failed (qdrant=%s, ollama=%s): %s", qdrant_url, ollama_url, exc)
         return [{"error": str(exc)}]
 
 
@@ -578,4 +643,5 @@ async def run_tool(tool_name: str, params_json: str) -> dict:
         output = await _run(fn, **params)
         return {"tool": tool_name, "params": params, "output": output, "status": "success", "error": None}
     except Exception as exc:
+        logger.warning("Tool %s failed with params %s: %s", tool_name, params, exc)
         return {"tool": tool_name, "params": params, "output": None, "status": "error", "error": str(exc)}

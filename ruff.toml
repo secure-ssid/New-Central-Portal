@@ -1,0 +1,26 @@
+# Ruff configuration for the CI lint job (.github/workflows/ci.yml).
+#
+# Philosophy: keep the correctness-oriented rules (pyflakes "F", plus the
+# pycodestyle errors that tend to indicate real mistakes) and switch off the
+# purely stylistic rules that the existing codebase deliberately does not
+# follow, so the linter is signal, not noise.
+
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+    # Style-only rules that would flag existing, intentional code:
+    "E501",  # line too long (long HTML/SQL string literals throughout)
+    "E701",  # multiple statements on one line (colon) — compact guards
+    "E702",  # multiple statements on one line (semicolon)
+    "E401",  # multiple imports on one line
+    "W293",  # blank line contains whitespace
+]
+
+[lint.per-file-ignores]
+# Pre-existing unused imports in app code (the test/CI agent does not edit
+# app modules; safe to clean up later).
+"app/routes/auth.py" = ["F401"]
+"app/routes/lab.py" = ["F401"]

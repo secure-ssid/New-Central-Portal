@@ -2,80 +2,94 @@
 {% block title %}{{ client.mac }} - New Central Portal{% endblock %}
 {% block content %}
 
+{# ── SNR quality thresholds (dB) ─────────────────────────────────────────
+   Single source of truth for wireless signal quality, used by both the
+   connectivity diagram and the Wireless panel below.
+   snr >= SNR_GOOD_DB  → good (green)
+   snr >= SNR_FAIR_DB  → fair (amber)
+   otherwise           → poor (red)                                       #}
+{% set SNR_GOOD_DB = 25 %}
+{% set SNR_FAIR_DB = 15 %}
+{% set snr_value = client.snr | default(0, true) %}
+
 <!-- Header -->
 <div class="page-header">
-    <div class="flex items-start justify-between">
+    <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-            <div class="flex items-center gap-2 text-xs text-gray-600 mb-2">
-                <a href="/clients/" style="color:#f97316;">← Clients</a>
+            <div class="flex items-center gap-2 text-xs mb-2">
+                <a href="/clients/" class="text-brand-500 hover:text-brand-400 transition-colors">&larr; Clients</a>
             </div>
-            <div class="flex items-center gap-3 mb-1">
-                <h1 style="font-size:1.5rem;font-weight:700;color:#f1f5f9;font-family:monospace;">{{ client.mac }}</h1>
+            <div class="flex flex-wrap items-center gap-3 mb-1">
+                <h1 class="text-2xl font-semibold text-slate-100 font-mono tracking-tight">{{ client.mac }}</h1>
                 {% if client.type == 'wireless' %}
-                <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:4px;font-size:.7rem;font-weight:600;background:rgba(59,130,246,.12);color:#60a5fa;border:1px solid rgba(59,130,246,.2);">
-                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0"/></svg>
+                <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:9999px;font-size:.7rem;font-weight:600;background:rgba(59,130,246,.1);color:#60a5fa;box-shadow:inset 0 0 0 1px rgba(59,130,246,.3);">
+                    <svg aria-hidden="true" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0"/></svg>
                     Wireless
                 </span>
                 {% else %}
-                <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:4px;font-size:.7rem;font-weight:600;background:rgba(168,85,247,.12);color:#c084fc;border:1px solid rgba(168,85,247,.2);">
-                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="4" rx="1"/><rect x="2" y="14" width="20" height="4" rx="1"/></svg>
+                <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:9999px;font-size:.7rem;font-weight:600;background:rgba(168,85,247,.1);color:#c084fc;box-shadow:inset 0 0 0 1px rgba(168,85,247,.3);">
+                    <svg aria-hidden="true" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="4" rx="1"/><rect x="2" y="14" width="20" height="4" rx="1"/></svg>
                     Wired
                 </span>
                 {% endif %}
-                <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:4px;font-size:.7rem;font-weight:600;background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.2);">
-                    {{ client.status }}
+                <span class="status-badge-online">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span>{{ client.status | default('connected', true) }}
                 </span>
             </div>
-            {% if client.hostname %}<p style="font-size:.875rem;color:#94a3b8;">{{ client.hostname }}</p>{% endif %}
-            {% if client.vendor %}<p style="font-size:.8rem;color:#64748b;margin-top:2px;">{{ client.vendor }}{% if client.os %} · {{ client.os }}{% endif %}</p>{% endif %}
+            {% if client.hostname %}<p class="text-sm text-slate-400">{{ client.hostname }}</p>{% endif %}
+            {% if client.vendor %}<p class="text-xs text-slate-500 mt-0.5">{{ client.vendor }}{% if client.os %} &middot; {{ client.os }}{% endif %}</p>{% endif %}
         </div>
         {% if client.connected_at %}
-        <div style="text-align:right;">
-            <p style="font-size:.65rem;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;">Connected Since</p>
-            <p style="font-size:.8rem;color:#94a3b8;margin-top:4px;">{{ client.connected_at[:19].replace('T',' ') }}</p>
+        <div class="text-right">
+            <p class="section-label">Connected Since</p>
+            <p class="text-xs text-slate-400 mt-1">{{ client.connected_at[:19].replace('T',' ') }}</p>
         </div>
         {% endif %}
     </div>
 </div>
 
 <!-- Connectivity diagram -->
-<div class="card" style="margin-bottom:16px;">
-    <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;margin-bottom:24px;">Connectivity</p>
-
-    {% if client.type == 'wireless' %}
-        {% set snr_label = "Good Performance" if client.snr >= 25 else ("Fair Performance" if client.snr >= 15 else "Poor Performance") %}
-        {% set snr_color = "#4ade80" if client.snr >= 25 else ("#fbbf24" if client.snr >= 15 else "#f87171") %}
-        {% set line_color = snr_color %}
+{% if client.type == 'wireless' %}
+    {% if snr_value >= SNR_GOOD_DB %}
+        {% set snr_label = "Good Performance" %}{% set snr_color = "#4ade80" %}{% set snr_bg = "rgba(74,222,128,.12)" %}
+    {% elif snr_value >= SNR_FAIR_DB %}
+        {% set snr_label = "Fair Performance" %}{% set snr_color = "#fbbf24" %}{% set snr_bg = "rgba(251,191,36,.12)" %}
     {% else %}
-        {% set snr_label = "" %}
-        {% set snr_color = "#4ade80" %}
-        {% set line_color = "#4ade80" %}
+        {% set snr_label = "Poor Performance" %}{% set snr_color = "#f87171" %}{% set snr_bg = "rgba(248,113,113,.12)" %}
     {% endif %}
+    {% set line_color = snr_color %}
+{% else %}
+    {% set snr_label = "" %}
+    {% set snr_color = "#4ade80" %}
+    {% set snr_bg = "rgba(74,222,128,.12)" %}
+    {% set line_color = "#4ade80" %}
+{% endif %}
 
-    <div style="display:flex;align-items:center;padding:4px 8px;">
+<div class="card" style="margin-bottom:16px;">
+    <p class="section-label" style="margin-bottom:24px;">Connectivity</p>
+
+    <div style="display:flex;align-items:center;padding:4px 8px;overflow-x:auto;">
 
         <!-- Node: Client -->
         <div style="display:flex;flex-direction:column;align-items:center;gap:10px;min-width:76px;">
-            <div style="width:48px;height:48px;border-radius:10px;background:#0f1623;border:1px solid #1e2d45;display:flex;align-items:center;justify-content:center;">
-                <svg width="22" height="22" fill="none" stroke="#94a3b8" stroke-width="1.5" viewBox="0 0 24 24">
+            <div style="width:52px;height:52px;border-radius:12px;background:linear-gradient(180deg,#141b2b 0%,#0f1623 100%);box-shadow:inset 0 0 0 1px #243352, 0 4px 12px -6px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
+                <svg aria-hidden="true" width="22" height="22" fill="none" stroke="#a5b4cf" stroke-width="1.5" viewBox="0 0 24 24">
                     <rect x="5" y="2" width="14" height="20" rx="2"/>
-                    <circle cx="12" cy="17" r="1" fill="#94a3b8" stroke="none"/>
+                    <circle cx="12" cy="17" r="1" fill="#a5b4cf" stroke="none"/>
                 </svg>
             </div>
             <p style="font-size:.6rem;color:#94a3b8;font-family:monospace;text-align:center;max-width:88px;word-break:break-all;line-height:1.4;">{{ client.mac }}</p>
         </div>
 
         <!-- Line: client → SSID/device -->
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:64px;gap:4px;">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:64px;gap:5px;">
             {% if client.type == 'wireless' and client.snr %}
-            <p style="font-size:.6rem;white-space:nowrap;" style="color:{{ snr_color }}">
-                <span style="color:{{ snr_color }};">{{ snr_label }}</span>
-            </p>
+            <p style="font-size:.6rem;font-weight:600;white-space:nowrap;padding:2px 8px;border-radius:9999px;color:{{ snr_color }};background:{{ snr_bg }};">{{ snr_label }}</p>
             {% endif %}
             <div style="display:flex;align-items:center;width:100%;">
-                <div style="width:8px;height:8px;border-radius:50%;background:{{ line_color }};flex-shrink:0;"></div>
-                <div style="flex:1;height:2px;background:{{ line_color }};"></div>
-                <div style="width:8px;height:8px;border-radius:50%;background:{{ line_color }};flex-shrink:0;"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:{{ line_color }};box-shadow:0 0 6px {{ line_color }};flex-shrink:0;"></div>
+                <div style="flex:1;height:2px;background:{{ line_color }};opacity:.75;"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:{{ line_color }};box-shadow:0 0 6px {{ line_color }};flex-shrink:0;"></div>
             </div>
             {% if client.type == 'wireless' and client.band %}
             <p style="font-size:.6rem;color:#6b7280;white-space:nowrap;">{{ client.band }}</p>
@@ -87,8 +101,8 @@
         <!-- Node: SSID (wireless only) -->
         {% if client.type == 'wireless' and client.ssid %}
         <div style="display:flex;flex-direction:column;align-items:center;gap:10px;min-width:76px;">
-            <div style="width:48px;height:48px;border-radius:10px;background:#0f1623;border:1px solid #1e2d45;display:flex;align-items:center;justify-content:center;">
-                <svg width="22" height="22" fill="none" stroke="#94a3b8" stroke-width="1.5" viewBox="0 0 24 24">
+            <div style="width:52px;height:52px;border-radius:12px;background:linear-gradient(180deg,#141b2b 0%,#0f1623 100%);box-shadow:inset 0 0 0 1px #243352, 0 4px 12px -6px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
+                <svg aria-hidden="true" width="22" height="22" fill="none" stroke="#a5b4cf" stroke-width="1.5" viewBox="0 0 24 24">
                     <path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
                 </svg>
             </div>
@@ -96,11 +110,11 @@
         </div>
 
         <!-- Line: SSID → AP -->
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:64px;gap:4px;">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:64px;gap:5px;">
             <div style="display:flex;align-items:center;width:100%;">
-                <div style="width:8px;height:8px;border-radius:50%;background:#4ade80;flex-shrink:0;"></div>
-                <div style="flex:1;height:2px;background:#4ade80;"></div>
-                <div style="width:8px;height:8px;border-radius:50%;background:#4ade80;flex-shrink:0;"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;flex-shrink:0;"></div>
+                <div style="flex:1;height:2px;background:#4ade80;opacity:.75;"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;flex-shrink:0;"></div>
             </div>
         </div>
         {% endif %}
@@ -108,32 +122,32 @@
         <!-- Node: Connected Device (AP or Switch) -->
         {% if client.connected_to %}
         <div style="display:flex;flex-direction:column;align-items:center;gap:10px;min-width:76px;">
-            <div style="width:48px;height:48px;border-radius:10px;background:#0f1623;border:1px solid #1e2d45;display:flex;align-items:center;justify-content:center;">
+            <div style="width:52px;height:52px;border-radius:12px;background:linear-gradient(180deg,#141b2b 0%,#0f1623 100%);box-shadow:inset 0 0 0 1px #243352, 0 4px 12px -6px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
                 {% if client.type == 'wireless' %}
-                <svg width="22" height="22" fill="none" stroke="#94a3b8" stroke-width="1.5" viewBox="0 0 24 24">
+                <svg aria-hidden="true" width="22" height="22" fill="none" stroke="#a5b4cf" stroke-width="1.5" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="10"/>
                     <path stroke-linecap="round" d="M9.172 14.828a4 4 0 015.656 0M12 18h.01M6.343 9.343a8 8 0 0111.314 0"/>
                 </svg>
                 {% else %}
-                <svg width="22" height="22" fill="none" stroke="#94a3b8" stroke-width="1.5" viewBox="0 0 24 24">
+                <svg aria-hidden="true" width="22" height="22" fill="none" stroke="#a5b4cf" stroke-width="1.5" viewBox="0 0 24 24">
                     <rect x="2" y="8" width="20" height="8" rx="1.5"/>
                     <path stroke-linecap="round" d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01"/>
                 </svg>
                 {% endif %}
             </div>
             {% if client.connected_device_serial %}
-            <a href="/devices/{{ client.connected_device_serial }}" style="font-size:.65rem;color:#f97316;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;">{{ client.connected_to }}</a>
+            <a href="/devices/{{ client.connected_device_serial }}" style="font-size:.65rem;color:#fb923c;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;">{{ client.connected_to }}</a>
             {% else %}
             <p style="font-size:.65rem;color:#94a3b8;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ client.connected_to }}</p>
             {% endif %}
         </div>
 
-        <!-- Line: device → Switch or Internet (dashed) -->
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:64px;gap:4px;">
+        <!-- Line: device → Switch or Internet (dashed when unknown) -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:64px;gap:5px;">
             <div style="display:flex;align-items:center;width:100%;">
-                <div style="width:8px;height:8px;border-radius:50%;background:{% if uplink %}#4ade80{% else %}#374151{% endif %};flex-shrink:0;"></div>
-                <div style="flex:1;height:2px;{% if uplink %}background:#4ade80{% else %}border-top:2px dashed #374151{% endif %};"></div>
-                <div style="width:8px;height:8px;border-radius:50%;background:{% if uplink %}#4ade80{% else %}#374151{% endif %};flex-shrink:0;"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:{% if uplink %}#4ade80;box-shadow:0 0 6px #4ade80{% else %}#374151{% endif %};flex-shrink:0;"></div>
+                <div style="flex:1;height:2px;{% if uplink %}background:linear-gradient(90deg,#4ade80,rgba(74,222,128,.45),#4ade80){% else %}border-top:2px dashed #374151{% endif %};"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:{% if uplink %}#4ade80;box-shadow:0 0 6px #4ade80{% else %}#374151{% endif %};flex-shrink:0;"></div>
             </div>
             {% if uplink and uplink.port %}
             <p style="font-size:.6rem;color:#6b7280;white-space:nowrap;">{{ uplink.port }}</p>
@@ -144,29 +158,29 @@
         <!-- Node: Uplink Switch (wireless only, when found) -->
         {% if uplink %}
         <div style="display:flex;flex-direction:column;align-items:center;gap:10px;min-width:76px;">
-            <div style="width:48px;height:48px;border-radius:10px;background:#0f1623;border:1px solid #1e2d45;display:flex;align-items:center;justify-content:center;">
-                <svg width="22" height="22" fill="none" stroke="#94a3b8" stroke-width="1.5" viewBox="0 0 24 24">
+            <div style="width:52px;height:52px;border-radius:12px;background:linear-gradient(180deg,#141b2b 0%,#0f1623 100%);box-shadow:inset 0 0 0 1px #243352, 0 4px 12px -6px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
+                <svg aria-hidden="true" width="22" height="22" fill="none" stroke="#a5b4cf" stroke-width="1.5" viewBox="0 0 24 24">
                     <rect x="2" y="8" width="20" height="8" rx="1.5"/>
                     <path stroke-linecap="round" d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01"/>
                 </svg>
             </div>
-            <a href="/devices/{{ uplink.switch_serial }}" style="font-size:.65rem;color:#f97316;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;">{{ uplink.switch_name }}</a>
+            <a href="/devices/{{ uplink.switch_serial }}" style="font-size:.65rem;color:#fb923c;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;">{{ uplink.switch_name }}</a>
         </div>
 
         <!-- Line: switch → Internet (dashed) -->
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:64px;gap:4px;">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:64px;gap:5px;">
             <div style="display:flex;align-items:center;width:100%;">
-                <div style="width:8px;height:8px;border-radius:50%;background:#374151;flex-shrink:0;"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;"></div>
                 <div style="flex:1;height:2px;border-top:2px dashed #374151;"></div>
-                <div style="width:8px;height:8px;border-radius:50%;background:#374151;flex-shrink:0;"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;"></div>
             </div>
         </div>
         {% endif %}
 
         <!-- Node: Internet -->
         <div style="display:flex;flex-direction:column;align-items:center;gap:10px;min-width:76px;">
-            <div style="width:48px;height:48px;border-radius:10px;background:#0f1623;border:1px solid #1e2d45;display:flex;align-items:center;justify-content:center;">
-                <svg width="22" height="22" fill="none" stroke="#4b5563" stroke-width="1.5" viewBox="0 0 24 24">
+            <div style="width:52px;height:52px;border-radius:12px;background:linear-gradient(180deg,#10151f 0%,#0c1018 100%);box-shadow:inset 0 0 0 1px #1c2536;display:flex;align-items:center;justify-content:center;">
+                <svg aria-hidden="true" width="22" height="22" fill="none" stroke="#4b5563" stroke-width="1.5" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="10"/>
                     <path stroke-linecap="round" d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
                 </svg>
@@ -178,40 +192,40 @@
 </div>
 
 <!-- Two column layout -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
 
     <!-- Connection -->
     <div class="card">
-        <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;margin-bottom:14px;">Connection</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <p class="section-label" style="margin-bottom:14px;">Connection</p>
+        <div class="grid grid-cols-2 gap-3">
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">IP Address</p>
-                <p style="font-family:monospace;font-size:.875rem;color:#f1f5f9;">{{ client.ip or '—' }}</p>
+                <p class="section-label text-[10px] mb-1">IP Address</p>
+                <p class="font-mono text-sm text-slate-100">{{ client.ip or '—' }}</p>
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">VLAN</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.vlan or '—' }}{% if client.vlan_name %} <span style="color:#6b7280;">({{ client.vlan_name }})</span>{% endif %}</p>
+                <p class="section-label text-[10px] mb-1">VLAN</p>
+                <p class="text-sm text-slate-100">{{ client.vlan or '—' }}{% if client.vlan_name %} <span class="text-slate-500">({{ client.vlan_name }})</span>{% endif %}</p>
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Connected To</p>
+                <p class="section-label text-[10px] mb-1">Connected To</p>
                 {% if client.connected_device_serial %}
-                <a href="/devices/{{ client.connected_device_serial }}" style="font-size:.875rem;color:#f97316;">{{ client.connected_to }}</a>
+                <a href="/devices/{{ client.connected_device_serial }}" class="text-sm text-brand-500 hover:text-brand-400 transition-colors">{{ client.connected_to }}</a>
                 {% else %}
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.connected_to or '—' }}</p>
+                <p class="text-sm text-slate-100">{{ client.connected_to or '—' }}</p>
                 {% endif %}
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Role</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.role or '—' }}</p>
+                <p class="section-label text-[10px] mb-1">Role</p>
+                <p class="text-sm text-slate-100">{{ client.role or '—' }}</p>
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Site</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.site or '—' }}</p>
+                <p class="section-label text-[10px] mb-1">Site</p>
+                <p class="text-sm text-slate-100">{{ client.site or '—' }}</p>
             </div>
             {% if client.username %}
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Username</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.username }}</p>
+                <p class="section-label text-[10px] mb-1">Username</p>
+                <p class="text-sm text-slate-100">{{ client.username }}</p>
             </div>
             {% endif %}
         </div>
@@ -219,31 +233,31 @@
 
     <!-- Device info -->
     <div class="card">
-        <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;margin-bottom:14px;">Device</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <p class="section-label" style="margin-bottom:14px;">Device</p>
+        <div class="grid grid-cols-2 gap-3">
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Vendor</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.vendor or '—' }}</p>
+                <p class="section-label text-[10px] mb-1">Vendor</p>
+                <p class="text-sm text-slate-100">{{ client.vendor or '—' }}</p>
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Manufacturer</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.manufacturer or '—' }}</p>
+                <p class="section-label text-[10px] mb-1">Manufacturer</p>
+                <p class="text-sm text-slate-100">{{ client.manufacturer or '—' }}</p>
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">OS</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.os or '—' }}</p>
+                <p class="section-label text-[10px] mb-1">OS</p>
+                <p class="text-sm text-slate-100">{{ client.os or '—' }}</p>
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Category</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.category or '—' }}</p>
+                <p class="section-label text-[10px] mb-1">Category</p>
+                <p class="text-sm text-slate-100">{{ client.category or '—' }}</p>
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Function</p>
-                <p style="font-size:.875rem;color:#f1f5f9;">{{ client.function or '—' }}</p>
+                <p class="section-label text-[10px] mb-1">Function</p>
+                <p class="text-sm text-slate-100">{{ client.function or '—' }}</p>
             </div>
             <div>
-                <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">MAC</p>
-                <p style="font-family:monospace;font-size:.78rem;color:#94a3b8;">{{ client.mac }}</p>
+                <p class="section-label text-[10px] mb-1">MAC</p>
+                <p class="font-mono text-xs text-slate-400">{{ client.mac }}</p>
             </div>
         </div>
     </div>
@@ -252,51 +266,55 @@
 <!-- Wireless detail (only if wireless) -->
 {% if client.type == 'wireless' %}
 <div class="card" style="margin-bottom:16px;">
-    <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;margin-bottom:14px;">Wireless</p>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+    <p class="section-label" style="margin-bottom:14px;">Wireless</p>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
-            <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">SSID</p>
-            <p style="font-size:.875rem;color:#f1f5f9;">{{ client.ssid or '—' }}</p>
+            <p class="section-label text-[10px] mb-1">SSID</p>
+            <p class="text-sm text-slate-100">{{ client.ssid or '—' }}</p>
         </div>
         <div>
-            <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Band</p>
-            <p style="font-size:.875rem;color:#f1f5f9;">{{ client.band or '—' }}</p>
+            <p class="section-label text-[10px] mb-1">Band</p>
+            <p class="text-sm text-slate-100">{{ client.band or '—' }}</p>
         </div>
         <div>
-            <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Channel</p>
-            <p style="font-size:.875rem;color:#f1f5f9;">{{ client.channel or '—' }}</p>
+            <p class="section-label text-[10px] mb-1">Channel</p>
+            <p class="text-sm text-slate-100">{{ client.channel or '—' }}</p>
         </div>
         <div>
-            <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">SNR</p>
-            <p style="font-size:.875rem;color:{% if client.snr >= 25 %}#4ade80{% elif client.snr >= 15 %}#fbbf24{% else %}#f87171{% endif %};">{{ client.snr }} dB</p>
+            <p class="section-label text-[10px] mb-1">SNR</p>
+            {% if client.snr is not none %}
+            <p class="text-sm" style="color:{% if snr_value >= SNR_GOOD_DB %}#4ade80{% elif snr_value >= SNR_FAIR_DB %}#fbbf24{% else %}#f87171{% endif %};">{{ snr_value }} dB<span class="sr-only"> ({{ snr_label | lower }})</span></p>
+            {% else %}
+            <p class="text-sm text-slate-500">—</p>
+            {% endif %}
         </div>
         <div>
-            <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Security</p>
-            <p style="font-size:.875rem;color:#f1f5f9;">{{ client.security or '—' }}</p>
+            <p class="section-label text-[10px] mb-1">Security</p>
+            <p class="text-sm text-slate-100">{{ client.security or '—' }}</p>
         </div>
         <div>
-            <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Key Mgmt</p>
-            <p style="font-size:.875rem;color:#f1f5f9;">{{ client.key_mgmt or '—' }}</p>
+            <p class="section-label text-[10px] mb-1">Key Mgmt</p>
+            <p class="text-sm text-slate-100">{{ client.key_mgmt or '—' }}</p>
         </div>
         <div>
-            <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">PHY Type</p>
-            <p style="font-size:.875rem;color:#f1f5f9;">{{ client.phy_type or '—' }}</p>
+            <p class="section-label text-[10px] mb-1">PHY Type</p>
+            <p class="text-sm text-slate-100">{{ client.phy_type or '—' }}</p>
         </div>
         <div>
-            <p style="font-size:.65rem;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em;">Auth Type</p>
-            <p style="font-size:.875rem;color:#f1f5f9;">{{ client.auth_type or '—' }}</p>
+            <p class="section-label text-[10px] mb-1">Auth Type</p>
+            <p class="text-sm text-slate-100">{{ client.auth_type or '—' }}</p>
         </div>
     </div>
     {% if client.capabilities %}
-    <div style="margin-top:14px;padding-top:14px;border-top:1px solid #1e2535;">
-        <p style="font-size:.65rem;color:#6b7280;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;">Capabilities</p>
-        <p style="font-size:.8rem;color:#94a3b8;">{{ client.capabilities }}</p>
+    <div class="mt-3.5 pt-3.5 border-t border-surface-700">
+        <p class="section-label text-[10px] mb-1">Capabilities</p>
+        <p class="text-[13px] text-slate-400">{{ client.capabilities }}</p>
     </div>
     {% endif %}
     {% if client.bssid %}
-    <div style="margin-top:10px;">
-        <p style="font-size:.65rem;color:#6b7280;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;">BSSID</p>
-        <p style="font-family:monospace;font-size:.78rem;color:#64748b;">{{ client.bssid }}</p>
+    <div class="mt-2.5">
+        <p class="section-label text-[10px] mb-1">BSSID</p>
+        <p class="font-mono text-xs text-slate-500">{{ client.bssid }}</p>
     </div>
     {% endif %}
 </div>

@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import httpx
 import json
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -84,14 +88,14 @@ async def chat_submit(request: Request, message: str = Form(...)):
 
     # ── 1. RAG: pull relevant docs for context ─────────────────────────
     rag_context = ""
-    print(f"[RAG] starting search for: {message[:50]}", flush=True)
+    logger.info("[RAG] starting search for: %s", message[:50])
     try:
         docs = search_docs(message, top_k=8)
-        print(f"[RAG] returned {len(docs) if docs else 0} docs, first: {docs[0] if docs else 'none'}", flush=True)
+        logger.info("[RAG] returned %s docs, first: %s", len(docs) if docs else 0, docs[0] if docs else 'none')
         if docs and "error" not in docs[0]:
             # Filter to only reasonably relevant results (score > 0.60)
             good_docs = [d for d in docs if d.get("score", 0) > 0.60]
-            print(f"[RAG] good_docs count: {len(good_docs)}", flush=True)
+            logger.info("[RAG] good_docs count: %s", len(good_docs))
             if good_docs:
                 snippets = []
                 for d in good_docs:
@@ -100,7 +104,7 @@ async def chat_submit(request: Request, message: str = Form(...)):
                 rag_context = "\n\n".join(snippets)
                 tools_used.append({"name": "search_docs", "summary": f"{len(good_docs)} doc snippets retrieved"})
     except Exception as exc:
-        print(f"[RAG] ERROR: {exc}", flush=True)
+        logger.error("[RAG] ERROR: %s", exc)
 
     # ── 2. Build system prompt with RAG context ────────────────────────
     system_parts = [
@@ -175,7 +179,11 @@ async def chat_submit(request: Request, message: str = Form(...)):
                 for tc in tool_calls:
                     fn_name = tc["function"]["name"]
                     fn_args = tc["function"]["arguments"]
-                    tool_result = await run_tool(fn_name, fn_args)
+                    try:
+                        tool_result = await run_tool(fn_name, fn_args)
+                    except Exception as exc:
+                        logger.exception("[chat] tool %s failed: %s", fn_name, exc)
+                        tool_result = {"status": "error", "error": str(exc), "output": ""}
 
                     # Truncate large outputs to stay within token limits
                     output_str = json.dumps(tool_result.get("output", ""), default=str)
@@ -184,7 +192,7 @@ async def chat_submit(request: Request, message: str = Form(...)):
 
                     tools_used.append({
                         "name": fn_name,
-                        "summary": f"{'✅' if tool_result['status'] == 'success' else '❌'} {tool_result.get('error') or 'OK'}",
+                        "summary": f"{'✅' if tool_result.get('status') == 'success' else '❌'} {tool_result.get('error') or 'OK'}",
                     })
 
                     messages.append({
@@ -213,6 +221,7 @@ async def chat_submit(request: Request, message: str = Form(...)):
                 response = choice["message"]["content"]
 
     except Exception as e:
+        logger.exception("[chat] LLM call failed: %s", e)
         response = f"❌ Error: {str(e)}"
 
     return templates.TemplateResponse(
@@ -236,11 +245,20 @@ async def rag_page(request: Request):
 async def rag_search(request: Request, query: str = Form(...)):
     """Search Aruba docs via Qdrant + Ollama (centralmcp RAG pipeline)."""
     from vendors.central_bridge import search_docs
-    raw = search_docs(query, top_k=8)
 
     import re
+    error = None
+    try:
+        raw = search_docs(query, top_k=8)
+    except Exception as exc:
+        logger.exception("[RAG] search failed for %r: %s", query, exc)
+        raw = []
+        error = "Doc search is unavailable right now (Qdrant / Ollama may be down). Please try again later."
+
     if raw and "error" in raw[0]:
-        results = [{"title": "Error", "excerpt": raw[0]["error"], "detail": raw[0]["error"], "score": 0}]
+        logger.error("[RAG] search returned error: %s", raw[0]["error"])
+        results = []
+        error = raw[0]["error"]
     else:
         results = []
         for r in raw:
@@ -268,7 +286,7 @@ async def rag_search(request: Request, query: str = Form(...)):
     return templates.TemplateResponse(
         request,
         "lab/partials/rag_results.html",
-        {"query": query, "results": results},
+        {"query": query, "results": results, "error": error},
     )
 
 
@@ -287,7 +305,17 @@ async def mcp_tester_page(request: Request):
 async def mcp_tool_run(request: Request, tool: str = Form(...), params: str = Form("")):
     """Execute a real centralmcp tool and return the result."""
     from vendors.central_bridge import run_tool
-    result = await run_tool(tool, params)
+    try:
+        result = await run_tool(tool, params)
+    except Exception as exc:
+        logger.exception("[mcp-tester] tool %s failed: %s", tool, exc)
+        result = {
+            "tool": tool,
+            "params": {},
+            "output": None,
+            "status": "error",
+            "error": f"Tool execution failed: {exc}",
+        }
     return templates.TemplateResponse(
         request,
         "lab/partials/mcp_result.html",
@@ -373,9 +401,18 @@ async def health_report_generate(request: Request):
     from vendors.central_bridge import get_devices, get_clients, get_alerts, get_device_events
     from vendors.aruba_central import _norm_device, _norm_client
 
-    raw_devices, raw_clients, alerts = await asyncio.gather(
-        get_devices(limit=100), get_clients(limit=200), get_alerts(limit=50)
-    )
+    try:
+        raw_devices, raw_clients, alerts = await asyncio.gather(
+            get_devices(limit=100), get_clients(limit=200), get_alerts(limit=50)
+        )
+    except Exception as exc:
+        logger.exception("[health-report] failed to gather live data: %s", exc)
+        return HTMLResponse(
+            '<div class="empty-state">'
+            '<p style="color:#f87171;font-weight:600;">Live network data is unavailable right now.</p>'
+            '<p style="font-size:.78rem;">Aruba Central could not be reached. Check connectivity and try again.</p>'
+            '</div>'
+        )
     devices = [_norm_device(d) for d in raw_devices]
     clients = [_norm_client(c) for c in raw_clients]
 
@@ -385,7 +422,11 @@ async def health_report_generate(request: Request):
     # Gather recent events for offline devices (up to 3)
     event_summaries = []
     for d in offline[:3]:
-        evs = await get_device_events(d["serial"], hours=48, limit=5)
+        try:
+            evs = await get_device_events(d["serial"], hours=48, limit=5)
+        except Exception as exc:
+            logger.warning("[health-report] events lookup failed for %s: %s", d["serial"], exc)
+            continue
         for e in evs[:2]:
             event_summaries.append(f"{d['name']}: {e.get('eventName','')} — {e.get('description','')[:80]}")
 
@@ -433,7 +474,8 @@ Write a structured health report with sections: Overall Status, Issues Requiring
                 md = md.replace('\n', '<br>')
                 report_html = md
         except Exception as e:
-            report_html = f"<p class='text-red-400'>Error: {e}</p>"
+            logger.exception("[health-report] Anthropic call failed: %s", e)
+            report_html = f"<p class='text-red-400'>Report generation failed: {e}</p>"
 
     return HTMLResponse(f'<div style="font-size:.85rem;line-height:1.7;color:#cbd5e1;">{report_html}</div>')
 
@@ -444,17 +486,28 @@ Write a structured health report with sections: Overall Status, Issues Requiring
 async def config_page(request: Request):
     from vendors.central_bridge import get_devices
     from vendors.aruba_central import _norm_device
-    raw = await get_devices(limit=100)
+    load_error = None
+    try:
+        raw = await get_devices(limit=100)
+    except Exception as exc:
+        logger.exception("[config] device list failed: %s", exc)
+        raw = []
+        load_error = "Could not load the device list — Aruba Central appears to be unavailable."
     devices = [_norm_device(d) for d in raw]
     switches = [d for d in devices if d["type"] == "switch"]
-    return templates.TemplateResponse(request, "lab/config.html", {"devices": devices, "switches": switches, "active": "lab"})
+    return templates.TemplateResponse(request, "lab/config.html", {"devices": devices, "switches": switches, "load_error": load_error, "active": "lab"})
 
 
 @router.post("/config")
 async def config_fetch(request: Request, serial: str = Form(...), command: str = Form("show running-config")):
+    import html as html_mod
     from vendors.central_bridge import get_devices, run_show
     from vendors.aruba_central import _norm_device
-    raw = await get_devices(limit=100)
+    try:
+        raw = await get_devices(limit=100)
+    except Exception as exc:
+        logger.exception("[config] device lookup failed: %s", exc)
+        return HTMLResponse("<p class='text-red-400'>Aruba Central is unavailable — could not verify the device. Please try again later.</p>")
     devices = {_norm_device(d)["serial"]: _norm_device(d) for d in raw}
     device = devices.get(serial)
     if not device:
@@ -466,12 +519,13 @@ async def config_fetch(request: Request, serial: str = Form(...), command: str =
         html_parts = []
         for item in outputs:
             html_parts.append(
-                f'<p style="font-size:.65rem;color:#f97316;margin-bottom:4px;font-weight:700;">{item["command"]}</p>'
-                f'<pre style="font-size:.75rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-bottom:16px;">{item.get("output","")}</pre>'
+                f'<p style="font-size:.65rem;color:#f97316;margin-bottom:4px;font-weight:700;">{html_mod.escape(item.get("command", ""))}</p>'
+                f'<pre style="font-size:.75rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-bottom:16px;">{html_mod.escape(item.get("output", ""))}</pre>'
             )
         return HTMLResponse("".join(html_parts) or "<p class='text-gray-500'>No output.</p>")
     except Exception as e:
-        return HTMLResponse(f"<p class='text-red-400'>Error: {e}</p>")
+        logger.exception("[config] run_show failed on %s: %s", serial, e)
+        return HTMLResponse(f"<p class='text-red-400'>Command failed: {html_mod.escape(str(e))}</p>")
 
 
 # ── Ping Tester ───────────────────────────────────────────────────────────────
@@ -480,16 +534,27 @@ async def config_fetch(request: Request, serial: str = Form(...), command: str =
 async def ping_page(request: Request):
     from vendors.central_bridge import get_devices
     from vendors.aruba_central import _norm_device
-    raw = await get_devices(limit=100)
+    load_error = None
+    try:
+        raw = await get_devices(limit=100)
+    except Exception as exc:
+        logger.exception("[ping] device list failed: %s", exc)
+        raw = []
+        load_error = "Could not load the device list — Aruba Central appears to be unavailable."
     devices = [_norm_device(d) for d in raw if _norm_device(d)["status"] == "online"]
-    return templates.TemplateResponse(request, "lab/ping.html", {"devices": devices, "active": "lab"})
+    return templates.TemplateResponse(request, "lab/ping.html", {"devices": devices, "load_error": load_error, "active": "lab"})
 
 
 @router.post("/ping")
 async def ping_run(request: Request, serial: str = Form(...), destination: str = Form(...)):
+    import html as html_mod
     from vendors.central_bridge import get_devices, run_ping
     from vendors.aruba_central import _norm_device
-    raw = await get_devices(limit=100)
+    try:
+        raw = await get_devices(limit=100)
+    except Exception as exc:
+        logger.exception("[ping] device lookup failed: %s", exc)
+        return HTMLResponse("<p class='text-red-400'>Aruba Central is unavailable — could not verify the device. Please try again later.</p>")
     devices = {_norm_device(d)["serial"]: _norm_device(d) for d in raw}
     device = devices.get(serial)
     if not device:
@@ -502,12 +567,13 @@ async def ping_run(request: Request, serial: str = Form(...), destination: str =
         color = "#4ade80" if status == "COMPLETED" and "success" in text.lower() else "#f87171"
         return HTMLResponse(
             f'<div style="font-size:.75rem;">'
-            f'<p style="color:{color};font-weight:700;margin-bottom:8px;">Status: {status}</p>'
-            f'<pre style="color:#94a3b8;white-space:pre-wrap;">{text}</pre>'
+            f'<p style="color:{color};font-weight:700;margin-bottom:8px;">Status: {html_mod.escape(str(status))}</p>'
+            f'<pre style="color:#94a3b8;white-space:pre-wrap;">{html_mod.escape(text)}</pre>'
             f'</div>'
         )
     except Exception as e:
-        return HTMLResponse(f"<p class='text-red-400'>Error: {e}</p>")
+        logger.exception("[ping] run_ping failed on %s -> %s: %s", serial, destination, e)
+        return HTMLResponse(f"<p class='text-red-400'>Ping failed: {html_mod.escape(str(e))}</p>")
 
 
 # ── Alert Dashboard ───────────────────────────────────────────────────────────
@@ -516,13 +582,20 @@ async def ping_run(request: Request, serial: str = Form(...), destination: str =
 async def alerts_page(request: Request):
     from vendors.central_bridge import get_alerts
     from collections import Counter
-    alerts = await get_alerts(limit=100)
-    severity_counts = Counter(a.get("severity", "Unknown") for a in alerts)
-    device_counts = Counter(a.get("deviceType", "Unknown") for a in alerts)
+    load_error = None
+    try:
+        alerts = await get_alerts(limit=100)
+    except Exception as exc:
+        logger.exception("[alerts] alert fetch failed: %s", exc)
+        alerts = []
+        load_error = "Could not load alerts — Aruba Central appears to be unavailable."
+    severity_counts = Counter((a.get("severity") or "Unknown") for a in alerts)
+    device_counts = Counter((a.get("deviceType") or "Unknown") for a in alerts)
     return templates.TemplateResponse(request, "lab/alerts.html", {
         "alerts": alerts,
         "severity_counts": dict(severity_counts),
         "device_counts": dict(device_counts),
+        "load_error": load_error,
         "active": "lab",
     })
 
@@ -533,7 +606,13 @@ async def alerts_page(request: Request):
 async def fingerprints_page(request: Request):
     from vendors.central_bridge import get_clients
     from collections import defaultdict, Counter
-    raw = await get_clients(limit=500)
+    load_error = None
+    try:
+        raw = await get_clients(limit=500)
+    except Exception as exc:
+        logger.exception("[fingerprints] client fetch failed: %s", exc)
+        raw = []
+        load_error = "Could not load clients — Aruba Central appears to be unavailable."
     # Group by category → vendor → OS
     by_category: dict = defaultdict(lambda: defaultdict(list))
     for c in raw:
@@ -556,6 +635,7 @@ async def fingerprints_page(request: Request):
     return templates.TemplateResponse(request, "lab/fingerprints.html", {
         "rows": rows,
         "total": len(raw),
+        "load_error": load_error,
         "active": "lab",
     })
 
@@ -574,10 +654,18 @@ async def greenlake_page(request: Request):
         get_glp_audit_logs(limit=50),
         return_exceptions=True,
     )
-    if isinstance(devices, Exception): devices = []
-    if isinstance(subscriptions, Exception): subscriptions = []
-    if isinstance(users, Exception): users = []
-    if isinstance(audit_logs, Exception): audit_logs = []
+    if isinstance(devices, Exception):
+        logger.error("[greenlake] device fetch failed: %s", devices)
+        devices = []
+    if isinstance(subscriptions, Exception):
+        logger.error("[greenlake] subscription fetch failed: %s", subscriptions)
+        subscriptions = []
+    if isinstance(users, Exception):
+        logger.error("[greenlake] user fetch failed: %s", users)
+        users = []
+    if isinstance(audit_logs, Exception):
+        logger.error("[greenlake] audit log fetch failed: %s", audit_logs)
+        audit_logs = []
 
     # Flatten nested subscription list into device-level fields for the template.
     # GLP device.subscription is a list of {id, key, startTime, endTime, tier, ...}
@@ -611,6 +699,7 @@ async def assign_subscription(request: Request):
         result = await assign_glp_subscription(serial, sub_id)
         return JSONResponse({"ok": True, "result": result})
     except Exception as e:
+        logger.exception("[greenlake] assign subscription failed for %s: %s", serial, e)
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
@@ -625,6 +714,7 @@ async def unassign_subscription(request: Request):
         result = await unassign_glp_subscription(serial)
         return JSONResponse({"ok": True, "result": result})
     except Exception as e:
+        logger.exception("[greenlake] unassign subscription failed for %s: %s", serial, e)
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
@@ -640,6 +730,7 @@ async def add_device(request: Request):
         result = await add_glp_device(serial, mac)
         return JSONResponse({"ok": True, "result": result})
     except Exception as e:
+        logger.exception("[greenlake] add device failed for %s: %s", serial, e)
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
@@ -670,6 +761,7 @@ async def add_devices_csv(request: Request, file: UploadFile = File(...)):
         result = await add_glp_devices_bulk(devices)
         return JSONResponse({"ok": True, "result": result, "parsed": len(devices), "errors": errors[:10]})
     except Exception as e:
+        logger.exception("[greenlake] bulk add failed (%s devices): %s", len(devices), e)
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
@@ -690,6 +782,7 @@ async def assign_to_central(request: Request):
             r = await assign_glp_device_to_app(s.strip())
             results.append({"serial": s, "ok": True, "result": r})
         except Exception as e:
+            logger.exception("[greenlake] assign-to-central failed for %s: %s", s, e)
             results.append({"serial": s, "ok": False, "error": str(e)})
     all_ok = all(r["ok"] for r in results)
     return JSONResponse({"ok": all_ok, "results": results})

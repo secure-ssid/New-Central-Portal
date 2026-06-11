@@ -25,8 +25,8 @@ document.addEventListener('alpine:init', () => {
             else { this.sortCol = col; this.sortDir = 1; }
         },
         sortIcon(col) {
-            if (this.sortCol !== col) return '\u21C5';
-            return this.sortDir === 1 ? '\u2191' : '\u2193';
+            if (this.sortCol !== col) return '⇅';
+            return this.sortDir === 1 ? '↑' : '↓';
         },
         get switchCount()  { return this.devices.filter(d => d.type === 'switch').length; },
         get apCount()      { return this.devices.filter(d => d.type === 'access_point').length; },
@@ -51,9 +51,19 @@ document.addEventListener('alpine:init', () => {
         },
         typeLabel(d) {
             let lbl = (d.type || '').replace(/_/g, ' ');
-            if (d.persona && d.persona !== '-') lbl += ' \u00b7 ' + d.persona;
-            if (d.deployment && d.deployment !== '-') lbl += ' \u00b7 ' + d.deployment;
+            if (d.persona && d.persona !== '-') lbl += ' · ' + d.persona;
+            if (d.deployment && d.deployment !== '-') lbl += ' · ' + d.deployment;
             return lbl;
+        },
+        // Presentational only: device-type icon path derived client-side
+        // from the existing `type` field (JSON payload untouched).
+        typeIcon(d) {
+            const t = String(d.type || '').toLowerCase();
+            const f = t === 'switch' ? 'switch'
+                : (t === 'access_point' || t === 'ap') ? 'ap'
+                : t === 'gateway' ? 'gateway'
+                : 'device';
+            return '/static/icons/' + f + '.svg';
         },
         // Manage modal (group + site)
         openManageModal(d) {
@@ -109,149 +119,181 @@ document.addEventListener('alpine:init', () => {
 <script id="groups-json" type="application/json">{{ groups | tojson }}</script>
 <script id="sites-json" type="application/json">{{ sites | tojson }}</script>
 
-<div class="page-header flex items-end justify-between">
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
-        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Central</p>
-        <h1 class="text-2xl font-bold text-white">Network Devices</h1>
-        <p class="text-sm text-gray-500 mt-0.5">View and manage all devices in your network</p>
+        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Central</p>
+        <h1 class="text-2xl font-semibold text-white tracking-tight">Network Devices</h1>
+        <p class="text-sm text-slate-500 mt-0.5">View and manage all devices in your network</p>
     </div>
 </div>
 
 <div x-data="devicesTable" class="mb-4">
     <!-- Manage Device Modal (group + site) -->
     <div x-show="manageModal" x-cloak @click.self="manageModal=false"
-         style="position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
-        <div @click.stop style="background:#141922;border:1px solid #1e2535;border-radius:12px;padding:24px;width:460px;max-width:90vw;">
-            <h3 style="font-size:.9rem;font-weight:700;color:#f1f5f9;margin:0 0 4px;">Manage Device</h3>
-            <p style="font-size:.72rem;color:#6b7280;margin:0 0 16px;">
-                <span x-text="mName" style="color:#f97316;"></span>
-                <span style="color:#4b5563;font-family:monospace;margin-left:6px;" x-text="mSerial"></span>
+         @keydown.escape.window="manageModal=false"
+         class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+         style="background:rgba(3,6,12,.7);backdrop-filter:blur(2px);">
+        <div @click.stop class="card" role="dialog" aria-modal="true" aria-labelledby="manage-device-title"
+             style="padding:24px;width:460px;max-width:calc(100vw - 2rem);max-height:calc(100dvh - 2rem);overflow-y:auto;">
+            <h3 id="manage-device-title" class="text-sm font-bold text-slate-100 mb-1">Manage Device</h3>
+            <p class="text-xs text-slate-500 mb-4">
+                <span x-text="mName" class="text-brand-500"></span>
+                <span class="text-slate-600 font-mono ml-1.5" x-text="mSerial"></span>
             </p>
 
             <!-- Group assignment -->
-            <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;display:block;margin:0 0 4px;">Assign to Group</label>
-            <p x-show="mCurrentGroup" style="font-size:.72rem;color:#94a3b8;margin:0 0 8px;">Current: <span style="color:#f97316;" x-text="mCurrentGroup"></span></p>
-            <div style="display:flex;gap:8px;margin-bottom:16px;">
-                <select x-model="mGroup" style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.78rem;outline:none;">
+            <label class="section-label block mb-1">Assign to Group</label>
+            <p x-show="mCurrentGroup" class="text-xs text-slate-400 mb-2">Current: <span class="text-brand-500" x-text="mCurrentGroup"></span></p>
+            <div class="flex gap-2 mb-4">
+                <select x-model="mGroup" class="select flex-1 text-xs" aria-label="Assign to group">
                     <option value="">&mdash; select group &mdash;</option>
                     <template x-for="g in groups" :key="g.groupName">
                         <option :value="g.groupName" x-text="g.groupName"></option>
                     </template>
                 </select>
-                <button @click="doAssignGroup()" :disabled="mBusy||!mGroup" style="padding:7px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.72rem;font-weight:700;cursor:pointer;white-space:nowrap;" :style="mBusy&&{opacity:.5,cursor:'wait'}">Assign</button>
+                <button @click="doAssignGroup()" :disabled="mBusy||!mGroup" class="btn-primary text-xs">Assign</button>
             </div>
 
             <!-- Site assignment -->
-            <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;display:block;margin:0 0 4px;">Assign to Site</label>
-            <p x-show="mCurrentSite" style="font-size:.72rem;color:#94a3b8;margin:0 0 8px;">Current: <span style="color:#f97316;" x-text="mCurrentSite"></span></p>
-            <div style="display:flex;gap:8px;margin-bottom:16px;">
-                <select x-model="mSite" style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.78rem;outline:none;">
+            <label class="section-label block mb-1">Assign to Site</label>
+            <p x-show="mCurrentSite" class="text-xs text-slate-400 mb-2">Current: <span class="text-brand-500" x-text="mCurrentSite"></span></p>
+            <div class="flex gap-2 mb-4">
+                <select x-model="mSite" class="select flex-1 text-xs" aria-label="Assign to site">
                     <option value="">&mdash; select site &mdash;</option>
                     <template x-for="s in sites" :key="s.site_id">
                         <option :value="String(s.site_id)" x-text="s.site_name + (s.city ? ' · ' + s.city : '')"></option>
                     </template>
                 </select>
-                <button @click="doAssignSite()" :disabled="mBusy||!mSite" style="padding:7px 14px;border:none;border-radius:6px;background:#f97316;color:#fff;font-size:.72rem;font-weight:700;cursor:pointer;white-space:nowrap;" :style="mBusy&&{opacity:.5,cursor:'wait'}">Assign</button>
+                <button @click="doAssignSite()" :disabled="mBusy||!mSite" class="btn-primary text-xs">Assign</button>
             </div>
 
-            <p x-show="mError" style="font-size:.75rem;color:#f87171;margin:0 0 10px;" x-text="mError"></p>
-            <p x-show="mSuccess" style="font-size:.75rem;color:#4ade80;margin:0 0 10px;" x-text="mSuccess"></p>
-            <div style="display:flex;gap:8px;justify-content:flex-end;">
-                <button @click="manageModal=false; if(mSuccess) location.reload();" style="padding:7px 14px;border:1px solid #1e2535;border-radius:6px;background:none;color:#94a3b8;font-size:.75rem;cursor:pointer;" x-text="mSuccess ? 'Done' : 'Close'"></button>
+            <p x-show="mError" class="text-xs text-red-400 mb-2.5" x-text="mError"></p>
+            <p x-show="mSuccess" class="text-xs text-green-400 mb-2.5" x-text="mSuccess"></p>
+            <div class="flex gap-2 justify-end">
+                <button @click="manageModal=false; if(mSuccess) location.reload();" class="btn-secondary text-xs" x-text="mSuccess ? 'Done' : 'Close'"></button>
             </div>
         </div>
     </div>
 
-    <div class="flex items-center gap-3 mb-4">
-        <div style="position:relative;flex:1;max-width:380px;">
-            <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+        <div class="relative flex-1 w-full sm:max-w-[380px]">
+            <svg aria-hidden="true" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
             <input x-model="search" type="text" placeholder="Search by name, serial, model, MAC, type, site, persona…"
-                   style="width:100%;padding:8px 12px 8px 34px;background:#161b27;border:1px solid #1e2535;border-radius:7px;color:#e2e8f0;font-size:.875rem;outline:none;"
-                   onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#1e2535'">
+                   aria-label="Search devices"
+                   class="input" style="padding-left:34px;">
         </div>
     </div>
+
+    {% if total_pages and total_pages > 1 %}
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Search and tabs filter this page only ({{ devices|length }} of {{ total }} devices shown) &mdash; use the pagination below the table to see the rest.</p>
+    {% endif %}
 
     <!-- Tabs -->
-    <div style="display:flex;align-items:stretch;border-bottom:1px solid #1e2535;margin-bottom:0;">
-        <button @click="tab='all'"
-            :style="tab==='all' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
-            style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px 10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+    <div class="tabs overflow-x-auto">
+        <button @click="tab='all'" class="tab-btn" style="padding-right:24px;"
+            :style="tab==='all' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             All Devices
-            <span :style="tab==='all' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
-                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;" x-text="devices.length"></span>
+            <span class="tab-count" :style="tab==='all' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="devices.length"></span>
         </button>
-        <div style="width:1px;background:#1e2535;margin:8px 20px 8px 20px;"></div>
-        <button @click="tab='switch'"
-            :style="tab==='switch' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
-            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+        <div class="tab-sep"></div>
+        <button @click="tab='switch'" class="tab-btn"
+            :style="tab==='switch' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             Switches
-            <span :style="tab==='switch' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
-                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;" x-text="switchCount"></span>
+            <span class="tab-count" :style="tab==='switch' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="switchCount"></span>
         </button>
-        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
-        <button @click="tab='access_point'"
-            :style="tab==='access_point' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
-            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+        <div class="tab-sep"></div>
+        <button @click="tab='access_point'" class="tab-btn"
+            :style="tab==='access_point' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             Access Points
-            <span :style="tab==='access_point' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
-                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;" x-text="apCount"></span>
+            <span class="tab-count" :style="tab==='access_point' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="apCount"></span>
         </button>
-        <div style="width:1px;background:#1e2535;margin:8px 20px;"></div>
-        <button @click="tab='gateway'"
-            :style="tab==='gateway' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'color:#6b7280;box-shadow:none;'"
-            style="display:inline-flex;align-items:center;gap:8px;padding:10px 0;font-size:.82rem;font-weight:600;background:none;border:none;cursor:pointer;transition:color .15s;white-space:nowrap;">
+        <div class="tab-sep"></div>
+        <button @click="tab='gateway'" class="tab-btn"
+            :style="tab==='gateway' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
             Gateways
-            <span :style="tab==='gateway' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'"
-                  style="padding:2px 8px;border-radius:20px;font-size:.68rem;font-weight:700;line-height:1.4;" x-text="gwCount"></span>
+            <span class="tab-count" :style="tab==='gateway' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="gwCount"></span>
         </button>
     </div>
 
     <!-- Table -->
-    <div style="background:#161b27;border:1px solid #1e2535;border-top:none;border-radius:0 0 10px 10px;overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;min-width:800px;">
+    <div style="background:linear-gradient(180deg,#161b27 0%,#10141f 100%);border:1px solid #1e2535;border-top:none;border-radius:0 0 12px 12px;overflow-x:auto;">
+        <table class="tbl" style="min-width:800px;">
             <thead>
-                <tr style="background:#0d1117;">
-                    <th @click="sortBy('name')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Name <span x-text="sortIcon('name')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th @click="sortBy('serial')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Serial <span x-text="sortIcon('serial')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th @click="sortBy('model')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Model <span x-text="sortIcon('model')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th @click="sortBy('mac')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">MAC <span x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th @click="sortBy('status')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">Status <span x-text="sortIcon('status')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th @click="sortBy('ip')" style="padding:10px 14px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;cursor:pointer;user-select:none;white-space:nowrap;">IP <span x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th style="padding:10px 10px;text-align:center;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;white-space:nowrap;width:40px;"></th>
+                <tr>
+                    <th scope="col" class="sortable" @click="sortBy('name')">Name <span aria-hidden="true" x-text="sortIcon('name')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('serial')">Serial <span aria-hidden="true" x-text="sortIcon('serial')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('model')">Model <span aria-hidden="true" x-text="sortIcon('model')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('mac')">MAC <span aria-hidden="true" x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('status')">Status <span aria-hidden="true" x-text="sortIcon('status')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('ip')">IP <span aria-hidden="true" x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" style="width:40px;"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody>
                 <template x-for="d in rows" :key="d.serial">
-                    <tr class="tbl-row" style="cursor:pointer;" @click="window.location='/devices/' + d.serial">
-                        <td style="padding:11px 14px;">
-                            <p style="font-weight:500;color:#f1f5f9;font-size:.84rem;" x-text="d.name"></p>
-                            <p style="font-size:.65rem;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;" x-text="typeLabel(d)"></p>
+                    <tr class="tbl-row" @click="window.location='/devices/' + d.serial">
+                        <td>
+                            <div class="flex items-center gap-2.5">
+                                <img :src="typeIcon(d)" alt="" aria-hidden="true" width="18" height="18" class="flex-shrink-0" loading="lazy">
+                                <div class="min-w-0">
+                                    <p class="font-medium text-slate-100 text-sm" x-text="d.name"></p>
+                                    <p class="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5" x-text="typeLabel(d)"></p>
+                                </div>
+                            </div>
                         </td>
-                        <td style="padding:11px 14px;font-family:monospace;font-size:.78rem;color:#94a3b8;" x-text="d.serial"></td>
-                        <td style="padding:11px 14px;font-size:.82rem;color:#94a3b8;" x-text="d.model"></td>
-                        <td style="padding:11px 14px;font-family:monospace;font-size:.75rem;color:#64748b;" x-text="d.mac"></td>
-                        <td style="padding:11px 14px;">
+                        <td class="font-mono text-xs" x-text="d.serial"></td>
+                        <td x-text="d.model"></td>
+                        <td class="font-mono text-xs text-slate-500" x-text="d.mac"></td>
+                        <td>
                             <template x-if="d.status === 'online'">
-                                <span class="status-badge-online"><span style="width:5px;height:5px;border-radius:50%;background:#4ade80;display:inline-block;"></span>Online</span>
+                                <span class="status-badge-online"><span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span>Online</span>
                             </template>
                             <template x-if="d.status !== 'online'">
-                                <span class="status-badge-offline"><span style="width:5px;height:5px;border-radius:50%;background:#f87171;display:inline-block;"></span>Offline</span>
+                                <span class="status-badge-offline"><span class="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span>Offline</span>
                             </template>
                         </td>
-                        <td style="padding:11px 14px;font-family:monospace;font-size:.78rem;color:#94a3b8;" x-text="d.ip"></td>
+                        <td class="font-mono text-xs" x-text="d.ip"></td>
                         <td style="padding:11px 8px;text-align:center;">
-                            <button @click.stop="openManageModal(d)" style="padding:5px 6px;border:1px solid #1e2535;border-radius:5px;background:#0d1117;color:#6b7280;cursor:pointer;line-height:0;transition:color .15s,border-color .15s;" title="Manage group & site" onmouseover="this.style.color='#f97316';this.style.borderColor='#f97316'" onmouseout="this.style.color='#6b7280';this.style.borderColor='#1e2535'">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
+                            <button @click.stop="openManageModal(d)" class="btn-secondary" style="padding:5px 6px;line-height:0;" title="Manage group &amp; site" aria-label="Manage group and site">
+                                <svg aria-hidden="true" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
                             </button>
                         </td>
                     </tr>
                 </template>
                 <template x-if="rows.length === 0">
-                    <tr><td colspan="7" style="padding:32px 20px;color:#4b5563;font-size:.85rem;text-align:center;">No devices match your search.</td></tr>
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <svg aria-hidden="true" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+                                <p>No devices found</p>
+                                <p class="text-xs text-slate-600">Try a different search term or filter.</p>
+                            </div>
+                        </td>
+                    </tr>
                 </template>
             </tbody>
         </table>
     </div>
+
+    <!-- Server-side pagination -->
+    {% if total_pages and total_pages > 1 %}
+    {% set qs = base_qs ~ ('&' if base_qs else '') %}
+    <nav class="flex flex-wrap items-center justify-between gap-2 mt-1 px-0.5 py-3" aria-label="Pagination">
+        <span class="text-xs text-slate-500">Page {{ page }} of {{ total_pages }} &middot; {{ total }} total</span>
+        <div class="flex gap-1 items-center">
+            {% if has_prev %}
+            <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Previous page">&lsaquo; Prev</a>
+            {% else %}
+            <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Previous page">&lsaquo; Prev</button>
+            {% endif %}
+            {% if has_next %}
+            <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Next page">Next &rsaquo;</a>
+            {% else %}
+            <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Next page">Next &rsaquo;</button>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
 </div>
 
 {% endblock %}

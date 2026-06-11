@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-label="Gateway router">
+  <!-- chassis -->
+  <rect x="28" y="88" width="200" height="110" rx="16" fill="#161b27" stroke="#e2e8f0" stroke-width="12"/>
+  <!-- WAN out / in routing arrows -->
+  <path d="M112 172v-52M92 142l20-24 20 24" stroke="#fbbf24" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M168 114v52M148 144l20 24 20-24" stroke="#fbbf24" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- status LEDs -->
+  <circle cx="58" cy="126" r="8" fill="#fbbf24"/>
+  <circle cx="58" cy="158" r="8" fill="#e2e8f0" opacity=".45"/>
+</svg>

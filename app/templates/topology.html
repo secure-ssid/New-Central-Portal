@@ -6,279 +6,1228 @@
     <div>
         <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Monitoring</p>
         <h1 class="text-2xl font-bold text-white">Network Topology</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Live infrastructure map — click any device to open its detail page</p>
+        <p class="text-sm text-gray-500 mt-0.5">Interactive 3D infrastructure map &mdash; drag to rotate, scroll to zoom, click a device to open it</p>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;">
-        <!-- Layout toggle -->
-        <div style="display:flex;gap:3px;background:#0d1117;border:1px solid #1e2535;border-radius:7px;padding:3px;">
-            <button onclick="setLayout('hierarchical')" id="btn-h"
-                style="padding:5px 13px;border:none;border-radius:5px;font-size:.72rem;font-weight:600;cursor:pointer;background:#f97316;color:#fff;transition:all .15s;">Hierarchy</button>
-            <button onclick="setLayout('physics')" id="btn-p"
-                style="padding:5px 13px;border:none;border-radius:5px;font-size:.72rem;font-weight:600;cursor:pointer;background:transparent;color:#6b7280;transition:all .15s;">Physics</button>
-        </div>
-        <!-- Legend -->
-        <div style="display:flex;gap:10px;align-items:center;border-left:1px solid #1e2535;padding-left:10px;">
-            {% for label, color in [('Switch','#6366f1'),('AP','#a855f7'),('Gateway','#f59e0b')] %}
-            <span style="display:flex;align-items:center;gap:5px;font-size:.7rem;color:#94a3b8;">
-                <span style="width:9px;height:9px;border-radius:50%;border:2px solid {{ color }};display:inline-block;"></span>{{ label }}
-            </span>
-            {% endfor %}
-        </div>
-        <button onclick="network.fit({animation:{duration:400,easingFunction:'easeInOutQuad'}})"
-            style="padding:6px 14px;background:#1e2535;border:1px solid #374151;border-radius:6px;color:#94a3b8;font-size:.75rem;cursor:pointer;">
-            Reset View
-        </button>
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+        {% if port_fail_count %}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            Port data unavailable for {{ port_fail_count }} switch{{ 'es' if port_fail_count != 1 else '' }}
+        </span>
+        {% endif %}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:#10141f;color:#94a3b8;border:1px solid #1e2535;">
+            {{ device_count }} device{{ 's' if device_count != 1 else '' }}
+        </span>
     </div>
 </div>
 
-<!-- Tooltip -->
-<div id="topo-tooltip" style="display:none;position:fixed;z-index:1000;background:#0d1117;border:1px solid #1e2535;border-radius:8px;padding:12px 16px;min-width:190px;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.6);">
-    <p id="tt-name" style="font-weight:700;color:#f1f5f9;font-size:.875rem;margin-bottom:6px;"></p>
-    <p id="tt-model" style="font-size:.72rem;color:#6b7280;margin-bottom:2px;"></p>
-    <p id="tt-ip" style="font-size:.72rem;color:#6b7280;margin-bottom:2px;font-family:monospace;"></p>
-    <p id="tt-site" style="font-size:.72rem;color:#6b7280;margin-bottom:2px;"></p>
-    <p id="tt-status" style="font-size:.75rem;font-weight:700;margin-top:6px;"></p>
+<style>
+    #topo-wrap { position:relative; width:100%; height:calc(100vh - 215px); min-height:480px; background:#060a14; border:1px solid #1e2535; border-radius:12px; overflow:hidden; }
+    #graph-3d { position:absolute; inset:0; }
+    .topo-overlay { position:absolute; z-index:20; }
+    .topo-btn { background:#10141f; border:1px solid #1e2535; color:#94a3b8; border-radius:8px; padding:6px 13px; font-size:.72rem; font-weight:600; cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .topo-btn:hover { border-color:#f97316; color:#f97316; }
+    .topo-btn.active { background:rgba(249,115,22,.12); border-color:rgba(249,115,22,.55); color:#f97316; }
+    .topo-input { background:#10141f; border:1px solid #1e2535; color:#e2e8f0; border-radius:8px; padding:6px 12px; font-size:.74rem; width:185px; outline:none; transition:border-color .15s; }
+    .topo-input::placeholder { color:#4b5563; }
+    .topo-input:focus { border-color:#22d3ee; }
+    .topo-chip { display:inline-flex; align-items:center; gap:5px; background:rgba(16,20,31,.85); border:1px solid #1e2535; border-radius:7px; padding:4px 10px; font-size:.68rem; color:#94a3b8; backdrop-filter:blur(4px); }
+    .topo-chip b { color:#e2e8f0; font-weight:700; }
+    .topo-legend-row { display:flex; align-items:center; gap:8px; font-size:.68rem; color:#94a3b8; margin-top:5px; }
+    .topo-legend-row:first-child { margin-top:0; }
+    .topo-dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
+    .topo-legend-icon { width:16px; height:16px; flex-shrink:0; display:inline-block; }
+    .topo-tier-icon { width:14px; height:14px; flex-shrink:0; display:inline-block; }
+    .topo-line { width:20px; height:0; border-top:2px solid #22d3ee; display:inline-block; flex-shrink:0; }
+    .topo-line.dashed { border-top:1px solid #475569; }
+    /* Filters panel */
+    .topo-panel { background:rgba(16,20,31,.93); border:1px solid #1e2535; border-radius:12px; padding:14px 16px; width:232px; backdrop-filter:blur(6px); box-shadow:0 8px 32px rgba(0,0,0,.55); }
+    .topo-panel-label { font-size:.62rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#64748b; margin-bottom:6px; }
+    .topo-check { display:flex; align-items:center; gap:8px; font-size:.72rem; color:#94a3b8; padding:3px 0; cursor:pointer; transition:color .15s; }
+    .topo-check:hover { color:#e2e8f0; }
+    .topo-check input { accent-color:#f97316; width:13px; height:13px; cursor:pointer; flex-shrink:0; }
+    .topo-check span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    /* Restyle the 3d-force-graph tooltip container */
+    .scene-tooltip { font-family:inherit !important; color:inherit !important; }
+    .topo-tip { background:#10141f; border:1px solid #1e2535; border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 8px 32px rgba(0,0,0,.65); }
+    .topo-tip-name { font-weight:700; color:#f1f5f9; font-size:.85rem; margin-bottom:3px; }
+    .topo-tip-row { font-size:.72rem; color:#8b95a8; margin-top:2px; }
+    .topo-tip-mono { font-family:ui-monospace, monospace; }
+    .topo-tip-status { font-size:.7rem; font-weight:700; margin-top:8px; display:flex; align-items:center; gap:6px; letter-spacing:.05em; }
+    .topo-tip-dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+    @keyframes topo-spin { to { transform:rotate(360deg); } }
+    .topo-spinner { width:34px; height:34px; border-radius:50%; border:3px solid #1e2535; border-top-color:#f97316; animation:topo-spin .8s linear infinite; }
+    /* Tier axis strip (hierarchy layout): legend-like vertical rail on the
+       left edge listing the network tiers top-to-bottom. */
+    #topo-tieraxis { right:14px; top:50%; transform:translateY(-50%); display:none; flex-direction:column; align-items:flex-end; gap:38px; border-right:2px solid #1e2535; padding-right:10px; pointer-events:none; z-index:15; }
+    .topo-tier-label { display:flex; align-items:center; gap:7px; font-size:.6rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#64748b; white-space:nowrap; }
+    .topo-tier-label .topo-dot { width:7px; height:7px; }
+    /* Small screens: the absolute overlays collide on a narrow canvas —
+       give the toolbar the full width, drop the duplicate stats strip and
+       the mouse-centric hint, and slim the legend down. Visual only. */
+    @media (max-width: 767px) {
+        .topo-toolbar { max-width:calc(100% - 28px) !important; }
+        .topo-stats { display:none !important; }
+        .topo-hint { display:none !important; }
+        .topo-legend { padding:8px 11px !important; }
+        .topo-legend .topo-legend-row { font-size:.62rem; gap:6px; margin-top:3px; }
+        .topo-legend-speeds { display:none !important; }
+        #topo-tieraxis { gap:26px; padding-right:8px; }
+        .topo-tier-label { font-size:.54rem; letter-spacing:.1em; }
+    }
+</style>
+
+<div id="topo-wrap">
+    <div id="graph-3d"></div>
+
+    <!-- Toolbar -->
+    <div class="topo-overlay topo-toolbar" style="top:14px;left:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:70%;">
+        <div style="position:relative;display:flex;align-items:center;">
+            <input id="topo-search" class="topo-input" type="text" placeholder="Search name or IP&hellip;" autocomplete="off" aria-label="Search devices by name or IP">
+            <span id="topo-search-count" style="position:absolute;right:10px;font-size:.62rem;color:#22d3ee;pointer-events:none;"></span>
+        </div>
+        <button id="btn-filters" class="topo-btn" type="button" aria-expanded="false" aria-controls="topo-filters" aria-label="Toggle filters panel">Filters</button>
+        <button id="btn-fit" class="topo-btn" type="button">Fit view</button>
+        <button id="btn-layout" class="topo-btn active" type="button" aria-label="Toggle between hierarchy and free 3D layout">Layout: Hierarchy</button>
+        <button id="btn-dim" class="topo-btn" type="button">View: 3D</button>
+        <button id="btn-orbit" class="topo-btn active" type="button">Orbit: on</button>
+        <button id="btn-export" class="topo-btn" type="button" aria-label="Export topology view as PNG image">Export PNG</button>
+    </div>
+
+    <!-- Filters panel (collapsible) -->
+    <div id="topo-filters" class="topo-overlay topo-panel" role="region" aria-label="Topology filters"
+         style="top:58px;left:14px;display:none;max-height:calc(100% - 120px);overflow-y:auto;z-index:25;">
+        <div class="topo-panel-label">Sites</div>
+        <div id="flt-sites" style="max-height:150px;overflow-y:auto;margin-bottom:12px;"></div>
+        <div class="topo-panel-label">Status</div>
+        <div role="group" aria-label="Status filter" style="display:flex;gap:6px;margin-bottom:12px;">
+            <button type="button" class="topo-btn flt-status active" data-status="all" aria-pressed="true" style="flex:1;padding:5px 0;text-align:center;">All</button>
+            <button type="button" class="topo-btn flt-status" data-status="online" aria-pressed="false" style="flex:1;padding:5px 0;text-align:center;">Online</button>
+            <button type="button" class="topo-btn flt-status" data-status="offline" aria-pressed="false" style="flex:1;padding:5px 0;text-align:center;">Offline</button>
+        </div>
+        <div class="topo-panel-label">Device type</div>
+        <div role="group" aria-label="Device type filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+            <button type="button" class="topo-btn flt-type active" data-type="switch" aria-pressed="true">Switches</button>
+            <button type="button" class="topo-btn flt-type active" data-type="ap" aria-pressed="true">APs</button>
+            <button type="button" class="topo-btn flt-type active" data-type="gateway" aria-pressed="true">Gateways</button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #1e2535;padding-top:10px;">
+            <span id="flt-count" style="font-size:.68rem;color:#94a3b8;" aria-live="polite"></span>
+            <button id="flt-reset" type="button" class="topo-btn" aria-label="Reset all filters">Reset</button>
+        </div>
+    </div>
+
+    <!-- Tier axis (hierarchy layout only; toggled from JS) -->
+    <div id="topo-tieraxis" class="topo-overlay" aria-hidden="true">
+        <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/internet.svg" alt="" aria-hidden="true">Internet</div>
+        <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/gateway.svg" alt="" aria-hidden="true">Gateway</div>
+        <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/switch.svg" alt="" aria-hidden="true">Switching</div>
+        <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/ap.svg" alt="" aria-hidden="true">Access</div>
+    </div>
+
+    <!-- Stats strip (bottom-right, above the hint, clear of the toolbar) -->
+    <div class="topo-overlay topo-stats" style="bottom:58px;right:14px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:46%;">
+        <span class="topo-chip"><span class="topo-dot" style="background:#818cf8;"></span><b id="stat-switch">0</b> switches</span>
+        <span class="topo-chip"><span class="topo-dot" style="background:#a78bfa;"></span><b id="stat-ap">0</b> APs</span>
+        <span class="topo-chip"><span class="topo-dot" style="background:#fbbf24;"></span><b id="stat-gateway">0</b> gateways</span>
+        <span class="topo-chip" style="color:#4ade80;"><b id="stat-online" style="color:#4ade80;">0</b> online</span>
+        <span class="topo-chip" style="color:#f87171;"><b id="stat-offline" style="color:#f87171;">0</b> offline</span>
+    </div>
+
+    <!-- Legend -->
+    <div class="topo-overlay topo-legend" style="left:14px;bottom:14px;background:rgba(16,20,31,.85);border:1px solid #1e2535;border-radius:10px;padding:11px 14px;backdrop-filter:blur(4px);">
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/internet.svg" alt="" aria-hidden="true">Internet</div>
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/gateway.svg" alt="" aria-hidden="true">Gateway</div>
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/switch.svg" alt="" aria-hidden="true">Switch</div>
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/ap.svg" alt="" aria-hidden="true">Access Point</div>
+        <div class="topo-legend-row"><span class="topo-dot" style="background:#f87171;"></span>Offline</div>
+        <div class="topo-legend-speeds" style="border-top:1px solid #1e2535;margin-top:8px;padding-top:8px;">
+            <div class="topo-legend-row" style="font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Wired link speed</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#64748b;"></span>&lt; 1 Gbps</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#22d3ee;"></span>1 Gbps</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#a78bfa;"></span>2.5 / 5 Gbps</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#f97316;"></span>10 Gbps +</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#0e7490;"></span>Speed unknown</div>
+            <div class="topo-legend-row"><span class="topo-line dashed"></span>Inferred uplink</div>
+        </div>
+    </div>
+
+    <!-- Hint -->
+    <div class="topo-overlay topo-hint" style="right:14px;bottom:14px;font-size:.64rem;color:#3d4759;text-align:right;pointer-events:none;">
+        drag to rotate &middot; scroll to zoom &middot; right-drag to pan &middot; click node to open<br>
+        shift+click node to focus its neighbourhood &middot; esc to exit
+    </div>
+
+    <!-- Exit-focus chip -->
+    <button id="btn-exit-focus" class="topo-overlay" type="button" aria-label="Exit focus mode"
+            style="display:none;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(249,115,22,.14);border:1px solid rgba(249,115,22,.55);color:#f97316;border-radius:9999px;padding:6px 16px;font-size:.72rem;font-weight:700;cursor:pointer;backdrop-filter:blur(4px);z-index:25;white-space:nowrap;max-width:70%;overflow:hidden;text-overflow:ellipsis;">
+        Focused: <span id="focus-label"></span> &middot; Exit (Esc)
+    </button>
+
+    <!-- Loading -->
+    <div id="topo-loading" class="topo-overlay" style="inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#060a14;z-index:30;">
+        <div class="topo-spinner"></div>
+        <p style="font-size:.74rem;color:#6b7280;">Rendering 3D topology&hellip;</p>
+    </div>
+
+    <!-- WebGL / library fallback -->
+    <div id="topo-fallback" class="topo-overlay" style="inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#060a14;z-index:40;padding:24px;text-align:center;">
+        <svg width="34" height="34" fill="none" stroke="#fbbf24" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <p style="font-size:.92rem;font-weight:700;color:#f1f5f9;">3D view unavailable</p>
+        <p style="font-size:.74rem;color:#6b7280;max-width:420px;">Your browser does not support WebGL (or the 3D graph library failed to load from the CDN). The interactive topology map needs WebGL to render. Try a modern browser with hardware acceleration enabled.</p>
+        <a href="/devices/" style="margin-top:6px;padding:7px 16px;background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.5);border-radius:8px;color:#f97316;font-size:.74rem;font-weight:600;text-decoration:none;">Browse devices instead</a>
+    </div>
 </div>
 
-<!-- Canvas -->
-<div id="cy" style="width:100%;height:calc(100vh - 205px);background:#060a12;border:1px solid #1e2535;border-radius:10px;overflow:hidden;"></div>
-
-<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script src="/static/vendor/3d-force-graph-1.80.0.min.js"></script>
 <script>
-const raw = {{ graph_data | safe }};
+// Pure graph-filtering helper. Kept dependency-free (no DOM, no library
+// globals) so it can be unit-tested standalone in Node.
+//
+// filters = {
+//   sites:  null | { '<site-or-empty-string>': bool, ... }   (null/undefined = all)
+//   status: 'all' | 'online' | 'offline'
+//   types:  null | { switch: bool, ap: bool, gateway: bool }  (groups missing from the map always pass)
+// }
+// Virtual nodes (the internet hub) are always kept; links survive only when
+// both endpoints survive. Returns { nodes, links } of the SAME object
+// instances passed in, so layout positions are preserved.
+function topoFilterGraph(allNodes, allLinks, filters) {
+    'use strict';
+    filters = filters || {};
+    var sites = filters.sites || null;
+    var status = filters.status || 'all';
+    var types = filters.types || null;
+    var hasOwn = Object.prototype.hasOwnProperty;
 
-// ── Icons: clean, recognizable SVG paths inside a 24×24 viewBox ──────────
-function svgIcon(type, stroke, bg) {
-    const icons = {
-        // Wifi symbol: 3 concentric arcs + dot — classic AP look
-        ap: `
-          <circle cx="12" cy="19.5" r="1.8" fill="${stroke}"/>
-          <path d="M8.5 15.5 a5 5 0 0 1 7 0" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round"/>
-          <path d="M5.5 12.2 a9.2 9.2 0 0 1 13 0" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round"/>
-          <path d="M2.5 9 a13.7 13.7 0 0 1 19 0" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round"/>`,
-        // Rack switch: two rows with port LEDs
-        switch: `
-          <rect x="3" y="6.5" width="18" height="4" rx="1.5" fill="none" stroke="${stroke}" stroke-width="1.6"/>
-          <circle cx="6.2" cy="8.5" r="1" fill="${stroke}"/><circle cx="9" cy="8.5" r="1" fill="${stroke}"/><circle cx="11.8" cy="8.5" r="1" fill="${stroke}"/>
-          <rect x="3" y="13.5" width="18" height="4" rx="1.5" fill="none" stroke="${stroke}" stroke-width="1.6"/>
-          <circle cx="6.2" cy="15.5" r="1" fill="${stroke}"/><circle cx="9" cy="15.5" r="1" fill="${stroke}"/><circle cx="11.8" cy="15.5" r="1" fill="${stroke}"/>`,
-        // Router/gateway: box with uplink arrows
-        gateway: `
-          <rect x="3" y="9" width="18" height="8" rx="2" fill="none" stroke="${stroke}" stroke-width="1.6"/>
-          <line x1="8" y1="9" x2="8" y2="5.5" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round"/>
-          <path d="M6 7.5 L8 5.5 L10 7.5" fill="none" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-          <line x1="16" y1="9" x2="16" y2="5.5" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round"/>
-          <path d="M14 7.5 L16 5.5 L18 7.5" fill="none" stroke="${stroke}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="8" cy="13" r="1.1" fill="${stroke}"/><circle cx="12" cy="13" r="1.1" fill="${stroke}"/><circle cx="16" cy="13" r="1.1" fill="${stroke}"/>`,
-        // Globe: circle + latitude waves + vertical meridian
-        internet: `
-          <circle cx="12" cy="12" r="8.5" fill="none" stroke="${stroke}" stroke-width="1.5"/>
-          <path d="M3.5 12 Q7.5 7.5 12 12 Q16.5 16.5 20.5 12" fill="none" stroke="${stroke}" stroke-width="1.2"/>
-          <path d="M3.5 12 Q7.5 16.5 12 12 Q16.5 7.5 20.5 12" fill="none" stroke="${stroke}" stroke-width="1.2"/>
-          <line x1="12" y1="3.5" x2="12" y2="20.5" stroke="${stroke}" stroke-width="1.2"/>`,
-    };
-    const body = icons[type] || icons.internet;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.5" fill="${bg}"/>${body}</svg>`;
-    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    var nodes = allNodes.filter(function (n) {
+        if (n.virtual) return true;
+        if (sites && !sites[n.site || '']) return false;
+        var online = (n.status || '').toLowerCase() === 'online';
+        if (status === 'online' && !online) return false;
+        if (status === 'offline' && online) return false;
+        if (types && hasOwn.call(types, n.group) && !types[n.group]) return false;
+        return true;
+    });
+
+    var ids = {};
+    nodes.forEach(function (n) { ids[n.id] = true; });
+
+    var links = allLinks.filter(function (l) {
+        var s = (l.source && typeof l.source === 'object') ? l.source.id : l.source;
+        var t = (l.target && typeof l.target === 'object') ? l.target.id : l.target;
+        return ids[s] === true && ids[t] === true;
+    });
+
+    return { nodes: nodes, links: links };
 }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFilterGraph: topoFilterGraph }; }
+</script>
+<script>
+(function () {
+    'use strict';
 
-// ── Colors ────────────────────────────────────────────────────────────────
-const COLORS = {
-    switch:   { border: '#6366f1', bg: '#0c1130', hover: '#818cf8', icon: '#a5b4fc' },
-    ap:       { border: '#a855f7', bg: '#100825', hover: '#c084fc', icon: '#d8b4fe' },
-    gateway:  { border: '#f59e0b', bg: '#150a00', hover: '#fbbf24', icon: '#fcd34d' },
-    internet: { border: '#4b5563', bg: '#0c0f18', hover: '#6b7280', icon: '#6b7280' },
-};
-const colorFor = (type, _status) => COLORS[type] || COLORS.internet;
+    var RAW = {{ graph_data | safe }};
 
-// ── Build vis DataSets ─────────────────────────────────────────────────────
-const visNodes = new vis.DataSet();
-const visEdges = new vis.DataSet();
-
-function makeNode(id, label, type, status, extras) {
-    const c = colorFor(type, status);
-    return {
-        id, label, group: type, status,
-        shape: 'circularImage',
-        image: svgIcon(type, c.icon, c.bg),
-        size: 26, borderWidth: 2.5, borderWidthSelected: 3.5,
-        color: { border: c.border, background: c.bg,
-            highlight: { border: '#f97316', background: c.bg },
-            hover: { border: c.hover, background: c.bg } },
-        font: { color: '#94a3b8', size: 11, face: 'ui-monospace, monospace' },
-        ...extras,
+    // ── Shared design tokens ──────────────────────────────────────────────
+    var GROUP = {
+        internet: { color: '#22d3ee', val: 20 },
+        gateway:  { color: '#fbbf24', val: 15 },
+        switch:   { color: '#818cf8', val: 9 },
+        ap:       { color: '#a78bfa', val: 3.5 },
+        unknown:  { color: '#64748b', val: 6 }
     };
-}
+    var C = {
+        offline: '#f87171',
+        dim: '#1d2433',
+        hover: '#f97316',
+        linkReal: '#0e7490',
+        linkRealHi: '#22d3ee',
+        linkVirtual: '#283042',
+        linkVirtualHier: '#3a4660',
+        linkVirtualHi: '#475569',
+        linkFaded: '#131a26'
+    };
+    // Link colour scale by negotiated port speed (Mbps).
+    var SPEED_TIERS = [
+        { min: 10000, color: '#f97316', hi: '#fb923c' },  // 10G+   orange
+        { min: 2500,  color: '#a78bfa', hi: '#c4b5fd' },  // 2.5/5G violet
+        { min: 1000,  color: '#22d3ee', hi: '#67e8f9' },  // 1G     cyan
+        { min: 1,     color: '#64748b', hi: '#94a3b8' }   // <1G    slate
+    ];
+    function speedTier(s) {
+        s = Number(s) || 0;
+        for (var i = 0; i < SPEED_TIERS.length; i++) {
+            if (s >= SPEED_TIERS[i].min) return SPEED_TIERS[i];
+        }
+        return null; // unknown speed
+    }
+    function linkSpeedColor(l, hi) {
+        var t = speedTier(l.speed);
+        if (!t) return hi ? C.linkRealHi : C.linkReal;
+        return hi ? t.hi : t.color;
+    }
 
-// Internet node (slightly smaller, dimmer)
-visNodes.add({ ...makeNode('__internet__', 'Internet', 'internet', 'online', {}), size: 22,
-    font: { color: '#4b5563', size: 11, face: 'ui-monospace, monospace' } });
+    var el = document.getElementById('graph-3d');
+    var loadingEl = document.getElementById('topo-loading');
+    var fallbackEl = document.getElementById('topo-fallback');
 
-// Device nodes
-raw.nodes.forEach(n => {
-    const d = n.data;
-    visNodes.add(makeNode(d.id, d.label, d.group, d.status, { _url: d.url, _model: d.model, _ip: d.ip, _site: d.site }));
-});
+    function webglAvailable() {
+        try {
+            var c = document.createElement('canvas');
+            return !!(window.WebGLRenderingContext &&
+                (c.getContext('webgl') || c.getContext('experimental-webgl')));
+        } catch (e) { return false; }
+    }
 
-// Real infrastructure edges
-raw.edges.forEach(e => {
-    visEdges.add({
-        id: e.data.id, from: e.data.source, to: e.data.target,
-        color: { color: '#1e2d45', highlight: '#14b8a6', hover: '#2d4a6e' },
-        width: 1.5, hoverWidth: 2.5, selectionWidth: 2.5, smooth: { enabled: false },
+    if (typeof ForceGraph3D === 'undefined' || !webglAvailable()) {
+        loadingEl.style.display = 'none';
+        fallbackEl.style.display = 'flex';
+        return;
+    }
+
+    // ── Build graph data (flat contract from topology.py) ─────────────────
+    var isOnline = function (n) { return (n.status || '').toLowerCase() === 'online'; };
+
+    // Master copies — filtering always derives from these, never mutates them.
+    var allNodes = [{ id: '__internet__', label: 'Internet', group: 'internet', status: 'online', virtual: true }];
+    RAW.nodes.forEach(function (n) { allNodes.push(Object.assign({}, n)); });
+
+    var allLinks = RAW.edges.map(function (e) { return Object.assign({ virtual: false }, e); });
+
+    // Synthetic connectivity: internet → gateways, internet → switches,
+    // gateway → switch when no real LLDP edge already exists.
+    var pairKey = function (a, b) { return a < b ? a + '|' + b : b + '|' + a; };
+    var realPairs = new Set(RAW.edges.map(function (e) { return pairKey(e.source, e.target); }));
+    var gws = RAW.nodes.filter(function (n) { return n.group === 'gateway'; });
+    var sws = RAW.nodes.filter(function (n) { return n.group === 'switch'; });
+
+    gws.forEach(function (g) {
+        allLinks.push({ id: '__inet_gw__' + g.id, source: '__internet__', target: g.id, virtual: true });
     });
-});
-
-// ── Connectivity: Internet → gateways AND switches ─────────────────────────
-const gwNodes = raw.nodes.filter(n => n.data.group === 'gateway');
-const swNodes = raw.nodes.filter(n => n.data.group === 'switch');
-
-// Internet connects to all gateways
-gwNodes.forEach(g => {
-    visEdges.add({
-        id: '__inet_gw__' + g.data.id, from: '__internet__', to: g.data.id,
-        dashes: [8, 6], width: 1.2,
-        color: { color: '#1e2535', highlight: '#374151', hover: '#374151' },
-        smooth: { enabled: false },
+    // Switches hang off the internet hub directly only when there is no
+    // gateway to route through — otherwise those links would skip a tier
+    // and clutter the hierarchy.
+    if (!gws.length) {
+        sws.forEach(function (s) {
+            allLinks.push({ id: '__inet_sw__' + s.id, source: '__internet__', target: s.id, virtual: true });
+        });
+    }
+    gws.forEach(function (g) {
+        sws.forEach(function (s) {
+            if (!realPairs.has(pairKey(g.id, s.id))) {
+                allLinks.push({ id: '__gw_sw__' + g.id + '_' + s.id, source: g.id, target: s.id, virtual: true });
+            }
+        });
     });
-});
 
-// Internet connects to all switches
-swNodes.forEach(s => {
-    visEdges.add({
-        id: '__inet_sw__' + s.data.id, from: '__internet__', to: s.data.id,
-        dashes: [8, 6], width: 1.2,
-        color: { color: '#1e2535', highlight: '#374151', hover: '#374151' },
-        smooth: { enabled: false },
+    // Currently-visible subsets (reassigned whenever filters change).
+    var nodes = allNodes.slice();
+    var links = allLinks.slice();
+
+    // ── Stats strip ────────────────────────────────────────────────────────
+    var counts = {
+        switch: sws.length,
+        ap: RAW.nodes.filter(function (n) { return n.group === 'ap'; }).length,
+        gateway: gws.length,
+        online: RAW.nodes.filter(isOnline).length
+    };
+    counts.offline = RAW.nodes.length - counts.online;
+    ['switch', 'ap', 'gateway', 'online', 'offline'].forEach(function (k) {
+        var s = document.getElementById('stat-' + k);
+        if (s) s.textContent = counts[k];
     });
-});
 
-// Gateways → switches: add virtual edge if not already in raw data
-const existingEdgePairs = new Set(raw.edges.map(e => e.data.source + '|' + e.data.target));
-gwNodes.forEach(g => {
-    swNodes.forEach(s => {
-        const key1 = g.data.id + '|' + s.data.id;
-        const key2 = s.data.id + '|' + g.data.id;
-        if (!existingEdgePairs.has(key1) && !existingEdgePairs.has(key2)) {
-            visEdges.add({
-                id: '__gw_sw__' + g.data.id + '_' + s.data.id,
-                from: g.data.id, to: s.data.id,
-                dashes: [4, 4], width: 1,
-                color: { color: '#1e2d45', highlight: '#14b8a6', hover: '#2d4a6e' },
-                smooth: { enabled: false },
+    // ── Tooltips ───────────────────────────────────────────────────────────
+    var esc = function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+        });
+    };
+    var fmtSpeed = function (s) {
+        s = Number(s) || 0;
+        if (!s) return '';
+        return s >= 1000 ? (s / 1000) + ' Gbps' : s + ' Mbps';
+    };
+    function nodeTip(n) {
+        if (n.virtual) {
+            return '<div class="topo-tip"><div class="topo-tip-name">Internet</div>' +
+                '<div class="topo-tip-row">Upstream / WAN</div></div>';
+        }
+        var on = isOnline(n);
+        var sc = on ? '#4ade80' : '#f87171';
+        return '<div class="topo-tip">' +
+            '<div class="topo-tip-name">' + esc(n.label) + '</div>' +
+            (n.model ? '<div class="topo-tip-row">' + esc(n.model) + '</div>' : '') +
+            (n.ip ? '<div class="topo-tip-row topo-tip-mono">IP: ' + esc(n.ip) + '</div>' : '') +
+            (n.site ? '<div class="topo-tip-row">Site: ' + esc(n.site) + '</div>' : '') +
+            '<div class="topo-tip-status" style="color:' + sc + '">' +
+            '<span class="topo-tip-dot" style="background:' + sc + '"></span>' +
+            esc((n.status || 'unknown').toUpperCase()) + '</div></div>';
+    }
+    function linkTip(l) {
+        if (l.virtual) {
+            return '<div class="topo-tip"><div class="topo-tip-row">Inferred uplink (no LLDP data)</div></div>';
+        }
+        var spd = fmtSpeed(l.speed);
+        return '<div class="topo-tip">' +
+            '<div class="topo-tip-name" style="color:' + linkSpeedColor(l, true) + '">' +
+            (l.port ? 'Port ' + esc(l.port) : 'Wired link') + '</div>' +
+            (spd ? '<div class="topo-tip-row">' + spd + '</div>' : '') +
+            '</div>';
+    }
+
+    // ── Highlight / search / focus state ───────────────────────────────────
+    var hoverNode = null;
+    var highlightLinks = new Set();
+    var searchTerm = '';
+    var focusNode = null;       // node object at the centre of focus mode
+    var focusIds = null;        // Set of node ids in focus (null = focus off)
+    var focusLinkSet = null;    // Set of link objects touching the focus node
+    var endpointId = function (x) { return (x && typeof x === 'object') ? x.id : x; };
+
+    function nodeBaseColor(n) {
+        if (!n.virtual && !isOnline(n)) return C.offline;
+        return (GROUP[n.group] || GROUP.unknown).color;
+    }
+    function nodeColorAcc(n) {
+        if (focusIds) {
+            if (n === focusNode) return C.hover;
+            return focusIds.has(n.id) ? nodeBaseColor(n) : C.dim;
+        }
+        if (searchTerm) return n.__match ? C.hover : C.dim;
+        if (hoverNode) {
+            if (n === hoverNode) return C.hover;
+            return n.__nbr ? nodeBaseColor(n) : C.dim;
+        }
+        return nodeBaseColor(n);
+    }
+    var nodeValAcc = function (n) {
+        var v = (GROUP[n.group] || GROUP.unknown).val;
+        // Focus mode shrinks everything outside the focused neighbourhood.
+        return (focusIds && !focusIds.has(n.id)) ? v * 0.3 : v;
+    };
+    var linkColorAcc = function (l) {
+        if (focusIds) {
+            if (!focusLinkSet.has(l)) return C.linkFaded;
+            return l.virtual ? C.linkVirtualHi : linkSpeedColor(l, true);
+        }
+        if (highlightLinks.has(l)) return l.virtual ? C.linkVirtualHi : linkSpeedColor(l, true);
+        // Hierarchy mode: inferred uplinks form the visible spine of the tree.
+        if (l.virtual) return layoutMode === 'hier' ? C.linkVirtualHier : C.linkVirtual;
+        return linkSpeedColor(l, false);
+    };
+    var linkWidthAcc = function (l) {
+        if (focusIds) return focusLinkSet.has(l) ? (l.virtual ? 0.8 : 2.4) : 0;
+        if (highlightLinks.has(l)) return l.virtual ? 0.8 : 2.4;
+        // In hierarchy mode the inferred uplinks are the structural spine of
+        // the diagram, so give them a hairline body instead of a faint line.
+        return l.virtual ? (layoutMode === 'hier' ? 0.7 : 0) : 1.2;
+    };
+    var particlesAcc = function (l) {
+        if (l.virtual) return 0;
+        if (focusIds) return focusLinkSet.has(l) ? 4 : 0;
+        return highlightLinks.has(l) ? 4 : 2;
+    };
+
+    // ── Hierarchical "tiered" layout (default) ─────────────────────────────
+    // Classic network-diagram view: internet on top, then gateways, then
+    // switches, then APs/unknowns. Each node's y is pinned to its tier plane
+    // (node.fy) and z is pinned to 0 (node.fz) so the scene reads like a
+    // flat diagram while the force engine spreads nodes horizontally and the
+    // 3D camera can still orbit it. "Free 3D" clears all pins.
+    var TIER_OF = { internet: 0, gateway: 1, switch: 2, ap: 3, unknown: 3 };
+    var TIER_H = 80;   // vertical spacing between tier planes
+    var SLOT_W = 60;   // horizontal slot width when seeding x positions
+    var nodeTier = function (n) {
+        var t = TIER_OF[n.group];
+        return t === undefined ? 3 : t;
+    };
+    var tierYOf = function (t) { return (1.5 - t) * TIER_H; };  // +120 … -120
+
+    var LAYOUT_KEY = 'topo-layout';
+    var layoutMode = 'hier';
+    try { if (localStorage.getItem(LAYOUT_KEY) === 'free') layoutMode = 'free'; } catch (e) { /* private mode */ }
+
+    // Pin fy/fz for every visible node and seed orderly x positions with a
+    // top-down barycenter sweep: each node is anchored at the mean x of its
+    // neighbours in higher tiers (APs land under their uplink switch,
+    // switches under their gateway), so links run mostly vertically with
+    // minimal crossings. Orphans (no uplink visible) go to the right edge.
+    function applyHierarchyPins(ns, ls) {
+        var adj = {};
+        ns.forEach(function (n) { adj[n.id] = []; });
+        ls.forEach(function (l) {
+            var s = endpointId(l.source), t = endpointId(l.target);
+            if (adj[s] && adj[t]) { adj[s].push(t); adj[t].push(s); }
+        });
+        var byId = {};
+        ns.forEach(function (n) { byId[n.id] = n; });
+        var tiers = [[], [], [], []];
+        ns.forEach(function (n) { tiers[nodeTier(n)].push(n); });
+        var byLabel = function (a, b) {
+            return String(a.label || a.id).localeCompare(String(b.label || b.id));
+        };
+        tiers.forEach(function (tn, t) {
+            if (t === 0) {
+                tn.sort(byLabel);
+            } else {
+                tn.forEach(function (n) {
+                    var sum = 0, cnt = 0;
+                    adj[n.id].forEach(function (oid) {
+                        var o = byId[oid];
+                        if (o && nodeTier(o) < t && typeof o.__hx === 'number') {
+                            sum += o.__hx; cnt++;
+                        }
+                    });
+                    n.__anchor = cnt ? sum / cnt : Infinity;
+                });
+                tn.sort(function (a, b) {
+                    // Infinity-Infinity is NaN (falsy) -> falls through to label
+                    return (a.__anchor - b.__anchor) || byLabel(a, b);
+                });
+            }
+            tn.forEach(function (n, i) {
+                n.__hx = (i - (tn.length - 1) / 2) * SLOT_W;
+            });
+        });
+        ns.forEach(function (n) {
+            var y = tierYOf(nodeTier(n));
+            n.x = n.__hx;
+            n.y = y;
+            n.z = 0;
+            n.fy = y;   // lock the tier plane
+            n.fz = 0;   // lock onto a flat diagram plane
+            delete n.fx;
+        });
+    }
+
+    function clearLayoutPins(ns) {
+        ns.forEach(function (n) {
+            delete n.fx; delete n.fy; delete n.fz;
+            delete n.__hx; delete n.__anchor;
+        });
+    }
+
+    // Seed the default layout before the engine boots.
+    if (layoutMode === 'hier') applyHierarchyPins(nodes, links);
+
+    // ── Graph ──────────────────────────────────────────────────────────────
+    function showFallback() {
+        loadingEl.style.display = 'none';
+        fallbackEl.style.display = 'flex';
+    }
+    // Narrow canvases keep the wrapped toolbar overlaid on the scene; a
+    // moderate padding there keeps the top (internet) tier clear of it
+    // (zoomToFit pads both axes, so large values over-shrink the graph).
+    function fitPadding() { return el.clientWidth < 640 ? 70 : 90; }
+    var booted = false;
+    // Watchdog: if the engine never produces a first tick (silent boot
+    // failure), drop to the fallback instead of spinning forever.
+    var bootWatchdog = setTimeout(function () {
+        if (!booted) showFallback();
+    }, 10000);
+
+    var Graph;
+    try {
+        // preserveDrawingBuffer is required so "Export PNG" can read the
+        // WebGL canvas back out via toDataURL().
+        Graph = new ForceGraph3D(el, {
+            rendererConfig: { preserveDrawingBuffer: true, antialias: true, alpha: true }
+        })
+            .backgroundColor('rgba(0,0,0,0)')
+            .showNavInfo(false)
+            .width(el.clientWidth)
+            .height(el.clientHeight)
+            .nodeLabel(nodeTip)
+            .nodeColor(nodeColorAcc)
+            .nodeVal(nodeValAcc)
+            .nodeOpacity(0.92)
+            .nodeResolution(16)
+            .linkLabel(linkTip)
+            .linkColor(linkColorAcc)
+            .linkWidth(linkWidthAcc)
+            .linkOpacity(0.55)
+            // In hierarchy mode, links between nodes of the same tier (e.g.
+            // switch-to-switch trunks) arc out of the row so they don't run
+            // straight through sibling nodes sitting between the endpoints.
+            .linkCurvature(function (l) {
+                if (layoutMode !== 'hier') return 0;
+                var s = l.source, t = l.target;
+                if (!s || !t || typeof s !== 'object' || typeof t !== 'object') return 0;
+                return nodeTier(s) === nodeTier(t) ? 0.35 : 0;
+            })
+            .linkDirectionalParticles(particlesAcc)
+            .linkDirectionalParticleWidth(1.6)
+            // Particle colour and speed both track the link's negotiated
+            // speed: faster wire => faster, brighter particles.
+            .linkDirectionalParticleColor(function (l) { return linkSpeedColor(l, true); })
+            .linkDirectionalParticleSpeed(function (l) {
+                return 0.004 + (Math.min(Number(l.speed) || 0, 10000) / 10000) * 0.008;
+            })
+            .onNodeHover(setHover)
+            .onNodeClick(function (n, ev) {
+                if (!n) return;
+                if (ev && ev.shiftKey) { enterFocus(n); return; }
+                if (n.url) window.location.href = n.url;
+            })
+            .onBackgroundClick(function () { if (focusIds) exitFocus(); })
+            .onEngineTick(function () {
+                if (!booted) {
+                    booted = true;
+                    clearTimeout(bootWatchdog);
+                    loadingEl.style.display = 'none';
+                }
+                applyGlow();
+            })
+            .graphData({ nodes: nodes, links: links });
+    } catch (err) {
+        if (window.console && console.error) console.error('3D topology failed to initialise:', err);
+        clearTimeout(bootWatchdog);
+        showFallback();
+        return;
+    }
+
+    // Same-tier spacing force (hierarchy mode only). The vendored bundle
+    // doesn't export d3.forceCollide, so register a tiny custom force that
+    // nudges same-tier neighbours apart along x whenever a reheat (filter,
+    // 2D/3D switch, layout toggle) packs a row too tightly.
+    var ROW_GAP = 55;
+    function tierSpacingForce() {
+        var ns = [];
+        function force(alpha) {
+            if (layoutMode !== 'hier') return;
+            var rows = {};
+            ns.forEach(function (n) {
+                var t = nodeTier(n);
+                (rows[t] = rows[t] || []).push(n);
+            });
+            Object.keys(rows).forEach(function (k) {
+                var row = rows[k].sort(function (a, b) { return a.x - b.x; });
+                for (var i = 1; i < row.length; i++) {
+                    var a = row[i - 1], b = row[i];
+                    var overlap = ROW_GAP - (b.x - a.x);
+                    if (overlap > 0) {
+                        var push = overlap * 0.5 * alpha;
+                        a.vx = (a.vx || 0) - push;
+                        b.vx = (b.vx || 0) + push;
+                    }
+                }
             });
         }
-    });
-});
+        force.initialize = function (initNodes) { ns = initNodes; };
+        return force;
+    }
+    try { Graph.d3Force('tierSpacing', tierSpacingForce()); } catch (e) { /* spacing is cosmetic */ }
 
-// ── Layout options ─────────────────────────────────────────────────────────
-function hierarchicalOptions() {
-    return {
-        layout: {
-            hierarchical: {
-                enabled: true, direction: 'LR', sortMethod: 'directed',
-                levelSeparation: 220, nodeSpacing: 80, treeSpacing: 120,
-                blockShifting: true, edgeMinimization: true, parentCentralization: true,
-            },
-        },
-        physics: { enabled: false },
-        interaction: { dragNodes: false }, // locked until we unlock after fit
-        edges: { smooth: { enabled: false } },
-    };
-}
+    // ── Device-type icon sprites ───────────────────────────────────────────
+    // Nodes render as flat icon sprites (rack switch, AP puck, gateway box,
+    // globe) rasterised from /static/icons/*.svg onto 256px canvas textures.
+    // Textures are cached per (type, status-variant) and shared by every
+    // node of that kind; only the SpriteMaterial is per-node so opacity
+    // dimming / texture swaps stay independent. Until the textures are
+    // ready — or if the icon fetch / three.js module load fails — the
+    // original coloured spheres keep rendering, so the graph is never empty.
+    var ICON_FILE = { internet: 'internet', gateway: 'gateway', switch: 'switch', ap: 'ap', unknown: 'device' };
+    // World-unit sprite widths, matching the old sphere size ratios
+    // (sphere radius ~ cbrt(val) * 4): internet/gateway largest, APs smallest.
+    var SPRITE_SCALE = { internet: 34, gateway: 29, switch: 25, ap: 16, unknown: 20 };
+    var iconTex = null;        // { group: { online, offline, hiOnline, hiOffline } }
+    var spriteTHREE = null;    // three.js namespace once the module loads
 
-function physicsOptions() {
-    return {
-        layout: { hierarchical: { enabled: false } },
-        physics: {
-            enabled: true, solver: 'forceAtlas2Based',
-            forceAtlas2Based: { gravitationalConstant: -80, centralGravity: 0.005, springLength: 170, springConstant: 0.08 },
-            stabilization: { iterations: 200 },
-        },
-        interaction: { dragNodes: true },
-        edges: { smooth: { type: 'dynamic' } },
-    };
-}
-
-// ── Create network ─────────────────────────────────────────────────────────
-const container = document.getElementById('cy');
-let currentLayout = 'hierarchical';
-
-const network = new vis.Network(container, { nodes: visNodes, edges: visEdges }, {
-    interaction: {
-        hover: true, tooltipDelay: 9999999,
-        zoomView: true, dragView: true, dragNodes: false,
-        keyboard: { enabled: true, speed: { x: 10, y: 10, zoom: 0.02 } },
-    },
-    nodes: { scaling: { min: 20, max: 40 } },
-    edges: { color: { color: '#1e2d45', highlight: '#14b8a6', hover: '#2d4a6e' }, width: 1.5 },
-    ...hierarchicalOptions(),
-});
-
-// Unlock drag after hierarchical places nodes
-network.once('stabilized', () => {
-    network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
-    // Store positions then unlock — nodes keep their spots but become freely draggable
-    setTimeout(() => {
-        network.storePositions();
-        network.setOptions({ layout: { hierarchical: { enabled: false } }, physics: { enabled: false }, interaction: { dragNodes: true } });
-    }, 600);
-});
-
-// ── Layout switch ──────────────────────────────────────────────────────────
-function setLayout(mode) {
-    currentLayout = mode;
-    const active = '#f97316', inactive = 'transparent';
-    document.getElementById('btn-h').style.cssText += `;background:${mode==='hierarchical'?active:inactive};color:${mode==='hierarchical'?'#fff':'#6b7280'}`;
-    document.getElementById('btn-p').style.cssText += `;background:${mode==='physics'?active:inactive};color:${mode==='physics'?'#fff':'#6b7280'}`;
-
-    if (mode === 'hierarchical') {
-        // Re-run hierarchical from scratch
-        network.setOptions({ layout: { hierarchical: { enabled: true, direction: 'LR', sortMethod: 'directed', levelSeparation: 220, nodeSpacing: 80, treeSpacing: 120 } }, physics: { enabled: false }, interaction: { dragNodes: false } });
-        network.once('stabilized', () => {
-            network.fit({ animation: true });
-            setTimeout(() => {
-                network.storePositions();
-                network.setOptions({ layout: { hierarchical: { enabled: false } }, physics: { enabled: false }, interaction: { dragNodes: true } });
-            }, 600);
+    function spriteForNode(n) {
+        if (!iconTex || !spriteTHREE) return undefined;   // falsy -> default sphere
+        var g = ICON_FILE[n.group] ? n.group : 'unknown';
+        var st = (!n.virtual && !isOnline(n)) ? 'offline' : 'online';
+        var mat = new spriteTHREE.SpriteMaterial({
+            map: iconTex[g][st],
+            transparent: true,
+            alphaTest: 0.1,     // opaque icon body occludes link ends like the spheres did
+            depthWrite: true
         });
+        var spr = new spriteTHREE.Sprite(mat);
+        var s = SPRITE_SCALE[g];
+        spr.scale.set(s, s, 1);
+        spr.userData.__icon = { group: g, status: st, base: s, dimmed: false, tex: iconTex[g][st] };
+        return spr;
+    }
+
+    // Per-frame sprite state: hover/search/focus swap to the brighter
+    // orange-ring texture variant + a small scale bump; dimming is done via
+    // per-node material opacity (texture stays shared).
+    function applySpriteState(n, o) {
+        var d = o.userData.__icon;
+        var hi = false, dim = 0, k = 1;
+        if (focusIds) {
+            if (n === focusNode) { hi = true; }
+            else if (!focusIds.has(n.id)) { dim = 0.08; k = 0.6; }
+        } else if (searchTerm) {
+            if (n.__match) hi = true; else dim = 0.18;
+        } else if (hoverNode) {
+            if (n === hoverNode) hi = true;
+            else if (!n.__nbr) dim = 0.3;
+        }
+        if (hi) k = 1.22;
+        var tex = iconTex[d.group][hi ? (d.status === 'offline' ? 'hiOffline' : 'hiOnline') : d.status];
+        if (d.tex !== tex) {
+            d.tex = tex;
+            o.material.map = tex;
+            o.material.needsUpdate = true;
+        }
+        var dimmed = dim > 0;
+        if (dimmed !== d.dimmed) {
+            d.dimmed = dimmed;
+            // alphaTest would discard the whole sprite once opacity drops
+            // below the threshold, so it is lifted while dimmed.
+            o.material.alphaTest = dimmed ? 0 : 0.1;
+            o.material.depthWrite = !dimmed;
+            o.material.needsUpdate = true;
+        }
+        o.material.opacity = dimmed ? dim : 1;
+        var s = d.base * k;
+        if (o.scale.x !== s) o.scale.set(s, s, 1);
+    }
+
+    // Rasterise one icon image onto a 256px canvas with a status ring /
+    // status dot / highlight glow composited around it.
+    function buildIconTexture(THREE, img, opts, maxAniso) {
+        var c = document.createElement('canvas');
+        c.width = c.height = 256;
+        var ctx = c.getContext('2d');
+        if (opts.glow) {
+            var gr = ctx.createRadialGradient(128, 128, 30, 128, 128, 124);
+            gr.addColorStop(0, 'rgba(249,115,22,.28)');
+            gr.addColorStop(1, 'rgba(249,115,22,0)');
+            ctx.fillStyle = gr;
+            ctx.beginPath(); ctx.arc(128, 128, 124, 0, Math.PI * 2); ctx.fill();
+        }
+        if (opts.ring) {
+            ctx.beginPath(); ctx.arc(128, 128, 119, 0, Math.PI * 2);
+            ctx.strokeStyle = opts.ring;
+            ctx.lineWidth = opts.ringW || 7;
+            ctx.globalAlpha = (opts.ringA == null) ? 1 : opts.ringA;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+        if (opts.dim) {
+            if (typeof ctx.filter === 'string') ctx.filter = 'grayscale(80%) brightness(55%)';
+            else ctx.globalAlpha = 0.45;   // very old canvas: plain fade
+        }
+        ctx.drawImage(img, 30, 30, 196, 196);
+        if (typeof ctx.filter === 'string') ctx.filter = 'none';
+        ctx.globalAlpha = 1;
+        if (opts.dot) {
+            ctx.beginPath(); ctx.arc(206, 50, 15, 0, Math.PI * 2);
+            ctx.fillStyle = '#060a14'; ctx.fill();     // dark rim for separation
+            ctx.beginPath(); ctx.arc(206, 50, 10, 0, Math.PI * 2);
+            ctx.fillStyle = opts.dot; ctx.fill();
+        }
+        var tex = new THREE.CanvasTexture(c);
+        tex.anisotropy = maxAniso;
+        if ('colorSpace' in tex) tex.colorSpace = 'srgb';
+        return tex;
+    }
+
+    // Called by the module loader below once three.js is imported. Fetches
+    // each SVG once, builds the texture cache, then swaps the node objects
+    // from spheres to sprites. Any failure leaves the spheres in place.
+    window.__topoIconInit = function (THREE) {
+        Promise.all(Object.keys(ICON_FILE).map(function (g) {
+            return fetch('/static/icons/' + ICON_FILE[g] + '.svg')
+                .then(function (r) {
+                    if (!r.ok) throw new Error('icon HTTP ' + r.status);
+                    return r.text();
+                })
+                .then(function (svg) {
+                    return new Promise(function (resolve, reject) {
+                        var img = new Image();
+                        img.onload = function () { resolve({ group: g, img: img }); };
+                        img.onerror = function () { reject(new Error('icon decode failed: ' + g)); };
+                        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+                    });
+                });
+        })).then(function (loaded) {
+            var maxAniso = 1;
+            try { maxAniso = Graph.renderer().capabilities.getMaxAnisotropy(); } catch (e) { /* keep 1 */ }
+            var built = {};
+            loaded.forEach(function (it) {
+                built[it.group] = {
+                    online:    buildIconTexture(THREE, it.img, { ring: '#4ade80', ringW: 5, ringA: 0.3, dot: '#4ade80' }, maxAniso),
+                    offline:   buildIconTexture(THREE, it.img, { ring: '#f87171', ringW: 7, ringA: 0.85, dot: '#f87171', dim: true }, maxAniso),
+                    hiOnline:  buildIconTexture(THREE, it.img, { ring: '#f97316', ringW: 8, ringA: 0.95, glow: true, dot: '#4ade80' }, maxAniso),
+                    hiOffline: buildIconTexture(THREE, it.img, { ring: '#f97316', ringW: 8, ringA: 0.95, glow: true, dot: '#f87171' }, maxAniso)
+                };
+            });
+            iconTex = built;
+            spriteTHREE = THREE;
+            Graph.nodeThreeObject(spriteForNode);   // async swap: spheres -> icon sprites
+            applyGlow();
+        }).catch(function (err) {
+            if (window.console && console.warn) console.warn('Topology icons unavailable — keeping sphere nodes:', err);
+        });
+    };
+
+    // Node visual state, applied on every tick. Sprite nodes get the
+    // texture/opacity/scale treatment above; while the graph is still on
+    // sphere nodes (icon textures not ready, or load failed) the original
+    // glowing-sphere effect runs instead: drive the MeshLambertMaterial
+    // emissive channel from the node color so every node softly glows
+    // (offline nodes stay dim). Focus mode drops material opacity of
+    // out-of-focus nodes to ~10% in both modes.
+    function applyGlow() {
+        try {
+            Graph.graphData().nodes.forEach(function (n) {
+                var o = n.__threeObj;
+                if (!o) return;
+                if (o.isSprite && o.userData.__icon && iconTex) { applySpriteState(n, o); return; }
+                if (!o.material || !o.material.emissive || !o.material.color) return;
+                // Default node materials are shared per-color by the library;
+                // clone once per node so emissive tweaks don't bleed across nodes.
+                if (!o.material.userData.__perNode) {
+                    o.material = o.material.clone();
+                    o.material.userData.__perNode = true;
+                }
+                var faded = !!(focusIds && !focusIds.has(n.id));
+                o.material.transparent = true;
+                o.material.opacity = faded ? 0.08 : 0.92;
+                var k;
+                if (faded) k = 0.1;
+                else if (focusIds ? n === focusNode : (hoverNode && n === hoverNode)) k = 0.95;
+                else if (!n.virtual && !isOnline(n)) k = 0.25;
+                else k = 0.55;
+                o.material.emissive.copy(o.material.color).multiplyScalar(k);
+            });
+        } catch (e) { /* node styling is decorative; never break the graph */ }
+    }
+    setInterval(applyGlow, 400);
+
+    function refresh() {
+        Graph.nodeColor(Graph.nodeColor())
+            .linkColor(Graph.linkColor())
+            .linkWidth(Graph.linkWidth())
+            .linkDirectionalParticles(Graph.linkDirectionalParticles());
+        setTimeout(applyGlow, 80);
+    }
+    // Re-triggering nodeVal rebuilds sphere geometry, so it is split out and
+    // only invoked when focus mode toggles (not on every hover refresh).
+    function refreshSizes() {
+        Graph.nodeVal(Graph.nodeVal());
+        refresh();
+    }
+
+    function setHover(node) {
+        hoverNode = node || null;
+        highlightLinks.clear();
+        nodes.forEach(function (n) { n.__nbr = false; });
+        if (node) {
+            node.__nbr = true;
+            links.forEach(function (l) {
+                var s = endpointId(l.source), t = endpointId(l.target);
+                if (s === node.id || t === node.id) {
+                    highlightLinks.add(l);
+                    var otherId = (s === node.id) ? t : s;
+                    for (var i = 0; i < nodes.length; i++) {
+                        if (nodes[i].id === otherId) { nodes[i].__nbr = true; break; }
+                    }
+                }
+            });
+        }
+        el.style.cursor = (node && node.url) ? 'pointer' : null;
+        refresh();
+    }
+
+    // ── Initial camera fit + gentle auto-orbit ─────────────────────────────
+    var fitted = false;
+    Graph.onEngineStop(function () {
+        if (fitted) return;
+        fitted = true;
+        if (layoutMode === 'hier') {
+            // Slightly elevated front view so the tier planes read as layers
+            // (zoomToFit then keeps this direction and only fixes distance).
+            Graph.cameraPosition({ x: 0, y: TIER_H * 2.2, z: 620 }, { x: 0, y: 0, z: 0 }, 0);
+        }
+        Graph.zoomToFit(800, fitPadding());
+        setTimeout(startOrbit, 1400);
+    });
+
+    var orbitTimer = null;
+    var orbitBtn = document.getElementById('btn-orbit');
+    var is2D = false;
+
+    function startOrbit() {
+        if (orbitTimer || is2D) return;
+        var p = Graph.cameraPosition();
+        var angle = Math.atan2(p.x, p.z);
+        var dist = Math.max(Math.hypot(p.x, p.z), 200);
+        var y = p.y;
+        var base = angle, t = 0;
+        orbitTimer = setInterval(function () {
+            if (layoutMode === 'hier') {
+                // Gentle sway: the flat hierarchy plane never goes edge-on.
+                t += 0.012;
+                angle = base + Math.sin(t) * 0.45;
+            } else {
+                angle += Math.PI / 1400;
+            }
+            Graph.cameraPosition({ x: dist * Math.sin(angle), y: y, z: dist * Math.cos(angle) });
+        }, 40);
+        orbitBtn.classList.add('active');
+        orbitBtn.textContent = 'Orbit: on';
+    }
+    function stopOrbit() {
+        if (orbitTimer) { clearInterval(orbitTimer); orbitTimer = null; }
+        orbitBtn.classList.remove('active');
+        orbitBtn.textContent = 'Orbit: off';
+    }
+    orbitBtn.addEventListener('click', function () { orbitTimer ? stopOrbit() : startOrbit(); });
+    // Any direct interaction with the scene stops the auto-orbit
+    el.addEventListener('pointerdown', stopOrbit, { passive: true });
+    el.addEventListener('wheel', stopOrbit, { passive: true });
+
+    // ── Toolbar: fit / 2D-3D toggle / search ───────────────────────────────
+    document.getElementById('btn-fit').addEventListener('click', function () {
+        stopOrbit();
+        Graph.zoomToFit(800, fitPadding());
+    });
+
+    var dimBtn = document.getElementById('btn-dim');
+    dimBtn.addEventListener('click', function () {
+        is2D = !is2D;
+        stopOrbit();
+        // Pins survive the dimension switch: in 2D the engine simply ignores
+        // z, so fy still produces the classic flat tree diagram.
+        if (layoutMode === 'hier') applyHierarchyPins(nodes, links);
+        Graph.numDimensions(is2D ? 2 : 3);
+        dimBtn.textContent = is2D ? 'View: 2D' : 'View: 3D';
+        dimBtn.classList.toggle('active', is2D);
+        setTimeout(function () { Graph.zoomToFit(800, fitPadding()); }, 700);
+    });
+
+    // ── Layout toggle: tiered hierarchy (default) vs free-floating 3D ──────
+    var layoutBtn = document.getElementById('btn-layout');
+    var tierAxis = document.getElementById('topo-tieraxis');
+    function syncLayoutUi() {
+        var hier = layoutMode === 'hier';
+        layoutBtn.textContent = hier ? 'Layout: Hierarchy' : 'Layout: Free 3D';
+        layoutBtn.classList.toggle('active', hier);
+        tierAxis.style.display = hier ? 'flex' : 'none';
+    }
+    syncLayoutUi();
+    layoutBtn.addEventListener('click', function () {
+        layoutMode = (layoutMode === 'hier') ? 'free' : 'hier';
+        try { localStorage.setItem(LAYOUT_KEY, layoutMode); } catch (e) { /* private mode */ }
+        exitFocus(true);             // layout swap moves everything anyway
+        stopOrbit();
+        if (layoutMode === 'hier') {
+            applyHierarchyPins(nodes, links);
+            // Swing back to an elevated front view so the tiers read as rows.
+            var c = Graph.cameraPosition();
+            var d = Math.max(Math.sqrt(c.x * c.x + c.y * c.y + c.z * c.z), 400);
+            Graph.cameraPosition({ x: 0, y: TIER_H * 2.2, z: d }, { x: 0, y: 0, z: 0 }, 500);
+        } else {
+            clearLayoutPins(allNodes);
+        }
+        syncLayoutUi();
+        // Same-tier links straighten/curve and virtual widths flip with mode.
+        Graph.linkCurvature(Graph.linkCurvature());
+        refresh();
+        if (typeof Graph.d3ReheatSimulation === 'function') Graph.d3ReheatSimulation();
+        if (refitTimer) clearTimeout(refitTimer);
+        refitTimer = setTimeout(function () { Graph.zoomToFit(700, fitPadding()); }, 700);
+    });
+
+    var searchInput = document.getElementById('topo-search');
+    var searchCount = document.getElementById('topo-search-count');
+    function applySearch() {
+        var m = 0;
+        nodes.forEach(function (n) {
+            n.__match = !!searchTerm && !n.virtual && (
+                (n.label || '').toLowerCase().indexOf(searchTerm) !== -1 ||
+                (n.ip || '').toLowerCase().indexOf(searchTerm) !== -1);
+            if (n.__match) m++;
+        });
+        searchCount.textContent = searchTerm ? (m + ' match' + (m === 1 ? '' : 'es')) : '';
+    }
+    searchInput.addEventListener('input', function () {
+        searchTerm = searchInput.value.trim().toLowerCase();
+        applySearch();
+        refresh();
+    });
+
+    // ── Filters panel ──────────────────────────────────────────────────────
+    var filtersBtn = document.getElementById('btn-filters');
+    var filtersPanel = document.getElementById('topo-filters');
+    var sitesBox = document.getElementById('flt-sites');
+    var countEl = document.getElementById('flt-count');
+    var statusBtns = Array.prototype.slice.call(document.querySelectorAll('.flt-status'));
+    var typeBtns = Array.prototype.slice.call(document.querySelectorAll('.flt-type'));
+
+    var filterState = {
+        sites: null,  // built below: { '<site key>': bool }
+        status: 'all',
+        types: { switch: true, ap: true, gateway: true }
+    };
+
+    // Distinct sites (client-side), '' bucket = devices with no site.
+    var siteLabels = {};
+    RAW.nodes.forEach(function (n) {
+        var k = n.site || '';
+        if (!(k in siteLabels)) siteLabels[k] = n.site || '(no site)';
+    });
+    var siteKeys = Object.keys(siteLabels).sort(function (a, b) {
+        if (a === '') return 1;   // "(no site)" last
+        if (b === '') return -1;
+        return a.localeCompare(b);
+    });
+    filterState.sites = {};
+    siteKeys.forEach(function (k) { filterState.sites[k] = true; });
+
+    // Build site checkboxes with DOM APIs (site names are user-controlled).
+    if (!siteKeys.length) {
+        var none = document.createElement('div');
+        none.style.cssText = 'font-size:.7rem;color:#4b5563;padding:2px 0;';
+        none.textContent = 'No sites';
+        sitesBox.appendChild(none);
+    }
+    siteKeys.forEach(function (k) {
+        var lab = document.createElement('label');
+        lab.className = 'topo-check';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        cb.setAttribute('aria-label', 'Filter site ' + siteLabels[k]);
+        cb.addEventListener('change', function () {
+            filterState.sites[k] = cb.checked;
+            applyFilters();
+        });
+        var txt = document.createElement('span');
+        txt.textContent = siteLabels[k];
+        txt.title = siteLabels[k];
+        lab.appendChild(cb);
+        lab.appendChild(txt);
+        sitesBox.appendChild(lab);
+    });
+
+    function filtersDirty() {
+        if (filterState.status !== 'all') return true;
+        var t = filterState.types;
+        if (!t.switch || !t.ap || !t.gateway) return true;
+        for (var i = 0; i < siteKeys.length; i++) {
+            if (!filterState.sites[siteKeys[i]]) return true;
+        }
+        return false;
+    }
+
+    function updateCount() {
+        var visible = 0;
+        nodes.forEach(function (n) { if (!n.virtual) visible++; });
+        countEl.textContent = 'Showing ' + visible + ' of ' + RAW.nodes.length + ' devices';
+    }
+    updateCount();
+
+    var refitTimer = null;
+    function applyFilters() {
+        exitFocus(true);                       // focus state can't survive a data swap
+        hoverNode = null;
+        highlightLinks.clear();
+        var res = topoFilterGraph(allNodes, allLinks, filterState);
+        nodes = res.nodes;
+        links = res.links;
+        // Re-pin the visible subset so the tier rows re-pack cleanly
+        // (orderings shift when parents are filtered away).
+        if (layoutMode === 'hier') applyHierarchyPins(nodes, links);
+        Graph.graphData({ nodes: nodes, links: links });
+        applySearch();                          // recompute matches over visible nodes
+        updateCount();
+        filtersBtn.classList.toggle('active', filtersDirty() || filtersPanel.style.display !== 'none');
+        if (typeof Graph.d3ReheatSimulation === 'function') Graph.d3ReheatSimulation();
+        stopOrbit();
+        if (refitTimer) clearTimeout(refitTimer);
+        refitTimer = setTimeout(function () { Graph.zoomToFit(700, fitPadding()); }, 650);
+        refresh();
+    }
+
+    function setFiltersOpen(open) {
+        filtersPanel.style.display = open ? 'block' : 'none';
+        filtersBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        filtersBtn.classList.toggle('active', open || filtersDirty());
+    }
+    filtersBtn.addEventListener('click', function () {
+        setFiltersOpen(filtersPanel.style.display === 'none');
+    });
+
+    statusBtns.forEach(function (b) {
+        b.addEventListener('click', function () {
+            filterState.status = b.getAttribute('data-status');
+            statusBtns.forEach(function (x) {
+                var on = x === b;
+                x.classList.toggle('active', on);
+                x.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            applyFilters();
+        });
+    });
+
+    typeBtns.forEach(function (b) {
+        b.addEventListener('click', function () {
+            var t = b.getAttribute('data-type');
+            filterState.types[t] = !filterState.types[t];
+            b.classList.toggle('active', filterState.types[t]);
+            b.setAttribute('aria-pressed', filterState.types[t] ? 'true' : 'false');
+            applyFilters();
+        });
+    });
+
+    document.getElementById('flt-reset').addEventListener('click', function () {
+        filterState.status = 'all';
+        filterState.types = { switch: true, ap: true, gateway: true };
+        siteKeys.forEach(function (k) { filterState.sites[k] = true; });
+        sitesBox.querySelectorAll('input[type=checkbox]').forEach(function (cb) { cb.checked = true; });
+        statusBtns.forEach(function (x) {
+            var on = x.getAttribute('data-status') === 'all';
+            x.classList.toggle('active', on);
+            x.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        typeBtns.forEach(function (x) {
+            x.classList.add('active');
+            x.setAttribute('aria-pressed', 'true');
+        });
+        applyFilters();
+    });
+
+    // ── Focus mode (shift+click a node) ────────────────────────────────────
+    var exitFocusBtn = document.getElementById('btn-exit-focus');
+    var focusLabel = document.getElementById('focus-label');
+
+    function frameNodes(list) {
+        var pts = list.filter(function (n) { return isFinite(n.x) && isFinite(n.y); });
+        if (!pts.length) return;
+        var cx = 0, cy = 0, cz = 0;
+        pts.forEach(function (n) { cx += n.x; cy += n.y; cz += (n.z || 0); });
+        cx /= pts.length; cy /= pts.length; cz /= pts.length;
+        var r = 0;
+        pts.forEach(function (n) {
+            var d = Math.sqrt(
+                Math.pow(n.x - cx, 2) + Math.pow(n.y - cy, 2) + Math.pow((n.z || 0) - cz, 2));
+            if (d > r) r = d;
+        });
+        var dist = Math.max(r * 2.6, 140);
+        // Approach along the current camera direction to avoid a jarring flip.
+        var cam = Graph.cameraPosition();
+        var dx = cam.x - cx, dy = cam.y - cy, dz = cam.z - cz;
+        var len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        Graph.cameraPosition(
+            { x: cx + (dx / len) * dist, y: cy + (dy / len) * dist, z: cz + (dz / len) * dist },
+            { x: cx, y: cy, z: cz },
+            1000
+        );
+    }
+
+    function enterFocus(node) {
+        stopOrbit();
+        focusNode = node;
+        focusIds = new Set([node.id]);
+        focusLinkSet = new Set();
+        links.forEach(function (l) {
+            var s = endpointId(l.source), t = endpointId(l.target);
+            if (s === node.id || t === node.id) {
+                focusLinkSet.add(l);
+                focusIds.add(s === node.id ? t : s);
+            }
+        });
+        hoverNode = null;
+        highlightLinks.clear();
+        focusLabel.textContent = node.label || node.id;
+        exitFocusBtn.style.display = 'block';
+        refreshSizes();
+        frameNodes(nodes.filter(function (n) { return focusIds.has(n.id); }));
+    }
+
+    function exitFocus(skipFit) {
+        if (!focusIds) return;
+        focusNode = null;
+        focusIds = null;
+        focusLinkSet = null;
+        exitFocusBtn.style.display = 'none';
+        refreshSizes();
+        if (!skipFit) Graph.zoomToFit(700, fitPadding());
+    }
+
+    exitFocusBtn.addEventListener('click', function () { exitFocus(); });
+
+    window.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Escape') return;
+        if (focusIds) exitFocus();
+        else if (filtersPanel.style.display !== 'none') setFiltersOpen(false);
+    });
+
+    // ── PNG export ─────────────────────────────────────────────────────────
+    function pad2(v) { return v < 10 ? '0' + v : '' + v; }
+    document.getElementById('btn-export').addEventListener('click', function () {
+        try {
+            var gl = Graph.renderer().domElement;
+            var w = gl.width, h = gl.height;
+            if (!w || !h) throw new Error('canvas not ready');
+            var out = document.createElement('canvas');
+            out.width = w;
+            out.height = h;
+            var ctx = out.getContext('2d');
+            // Composite onto the page background (the WebGL canvas is alpha).
+            ctx.fillStyle = '#060a14';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(gl, 0, 0, w, h);
+            // Title + timestamp (scaled for devicePixelRatio-sized canvases).
+            var k = Math.max(w / Math.max(el.clientWidth, 1), 1);
+            var now = new Date();
+            var visible = 0;
+            nodes.forEach(function (n) { if (!n.virtual) visible++; });
+            ctx.font = '700 ' + Math.round(14 * k) + 'px Inter, ui-sans-serif, sans-serif';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText('Network Topology', Math.round(16 * k), Math.round(28 * k));
+            ctx.font = '400 ' + Math.round(11 * k) + 'px Inter, ui-sans-serif, sans-serif';
+            ctx.fillStyle = '#64748b';
+            ctx.fillText(
+                now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate()) +
+                ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes()) +
+                ' · ' + visible + ' device' + (visible === 1 ? '' : 's'),
+                Math.round(16 * k), Math.round(46 * k));
+            var name = 'topology-' +
+                now.getFullYear() + pad2(now.getMonth() + 1) + pad2(now.getDate()) +
+                '-' + pad2(now.getHours()) + pad2(now.getMinutes()) + '.png';
+            var a = document.createElement('a');
+            a.download = name;
+            a.href = out.toDataURL('image/png');
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        } catch (err) {
+            if (window.console && console.error) console.error('PNG export failed:', err);
+            if (typeof window.showToast === 'function') window.showToast('PNG export failed');
+        }
+    });
+
+    // Track both container and window size changes (sidebar collapse etc.)
+    function syncSize() {
+        Graph.width(el.clientWidth).height(el.clientHeight);
+    }
+    if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(syncSize).observe(el);
     } else {
-        network.setOptions(physicsOptions());
-        network.once('stabilized', () => network.fit({ animation: true }));
+        window.addEventListener('resize', syncSize);
     }
-}
-
-// ── Tooltip ────────────────────────────────────────────────────────────────
-const tooltip = document.getElementById('topo-tooltip');
-let tooltipNode = null;
-
-network.on('hoverNode', params => {
-    tooltipNode = params.node;
-    const d = visNodes.get(params.node);
-    if (!d || d.group === 'internet') { tooltip.style.display = 'none'; return; }
-    document.getElementById('tt-name').textContent = d.label;
-    document.getElementById('tt-model').textContent = d._model || '';
-    document.getElementById('tt-ip').textContent = d._ip ? 'IP: ' + d._ip : '';
-    document.getElementById('tt-site').textContent = d._site ? 'Site: ' + d._site : '';
-    const st = document.getElementById('tt-status');
-    st.textContent = (d.status || '').toUpperCase();
-    st.style.color = d.status === 'online' ? '#4ade80' : '#f87171';
-    tooltip.style.display = 'block';
-});
-network.on('blurNode', () => { tooltipNode = null; tooltip.style.display = 'none'; });
-container.addEventListener('mousemove', e => {
-    if (tooltipNode !== null) { tooltip.style.left = (e.clientX + 16) + 'px'; tooltip.style.top = (e.clientY - 12) + 'px'; }
-});
-
-// ── Click → device detail ──────────────────────────────────────────────────
-network.on('click', params => {
-    if (params.nodes.length > 0) {
-        const d = visNodes.get(params.nodes[0]);
-        if (d && d._url) window.location.href = d._url;
-    }
-});
-network.on('hoverNode', () => { container.style.cursor = 'pointer'; });
-network.on('blurNode',  () => { container.style.cursor = 'default'; });
+})();
+</script>
+<script type="module">
+// Icon-sprite bootstrap: module scripts always execute after the classic
+// scripts above, so the graph (and window.__topoIconInit) already exist by
+// the time this runs. Only Sprite/SpriteMaterial/CanvasTexture are used
+// from this vendored three build — the graph keeps its own bundled
+// renderer. If the import fails the hook is never called and the topology
+// permanently keeps its sphere nodes (graceful degradation, no error).
+// Must match the three revision bundled inside the 3d-force-graph UMD
+// (r183) — sprites built from a mismatched three instance render blank.
+import * as THREE from '/static/vendor/three-0.183.2/three.module.min.js';
+if (typeof window.__topoIconInit === 'function') window.__topoIconInit(THREE);
 </script>
 
 {% endblock %}

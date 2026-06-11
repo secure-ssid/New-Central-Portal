@@ -100,7 +100,7 @@ class ArubaCentralClient:
         try:
             from vendors.central_bridge import get_devices
             raw = await get_devices(limit=200)
-            return [_norm_device(d) for d in raw]
+            return [_norm_device(d) for d in raw if isinstance(d, dict)]
         except Exception as exc:
             logger.warning("central_bridge unavailable, using mock data: %s", exc)
             return _mock_devices()
@@ -109,7 +109,7 @@ class ArubaCentralClient:
         try:
             from vendors.central_bridge import get_device
             raw = await get_device(serial)
-            return _norm_device(raw) if raw else None
+            return _norm_device(raw) if isinstance(raw, dict) and raw else None
         except Exception as exc:
             logger.warning("central_bridge unavailable, using mock data: %s", exc)
             devices = _mock_devices()
@@ -119,7 +119,7 @@ class ArubaCentralClient:
         try:
             from vendors.central_bridge import get_clients
             raw = await get_clients(limit=200)
-            return [_norm_client(c) for c in raw]
+            return [_norm_client(c) for c in raw if isinstance(c, dict)]
         except Exception as exc:
             logger.warning("central_bridge unavailable, using mock data: %s", exc)
             return _mock_clients()
