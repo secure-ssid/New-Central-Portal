@@ -38,6 +38,13 @@
     .topo-dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
     .topo-line { width:20px; height:0; border-top:2px solid #22d3ee; display:inline-block; flex-shrink:0; }
     .topo-line.dashed { border-top:1px solid #475569; }
+    /* Filters panel */
+    .topo-panel { background:rgba(16,20,31,.93); border:1px solid #1e2535; border-radius:12px; padding:14px 16px; width:232px; backdrop-filter:blur(6px); box-shadow:0 8px 32px rgba(0,0,0,.55); }
+    .topo-panel-label { font-size:.62rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#64748b; margin-bottom:6px; }
+    .topo-check { display:flex; align-items:center; gap:8px; font-size:.72rem; color:#94a3b8; padding:3px 0; cursor:pointer; transition:color .15s; }
+    .topo-check:hover { color:#e2e8f0; }
+    .topo-check input { accent-color:#f97316; width:13px; height:13px; cursor:pointer; flex-shrink:0; }
+    .topo-check span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     /* Restyle the 3d-force-graph tooltip container */
     .scene-tooltip { font-family:inherit !important; color:inherit !important; }
     .topo-tip { background:#10141f; border:1px solid #1e2535; border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 8px 32px rgba(0,0,0,.65); }
@@ -56,12 +63,37 @@
     <!-- Toolbar -->
     <div class="topo-overlay" style="top:14px;left:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:70%;">
         <div style="position:relative;display:flex;align-items:center;">
-            <input id="topo-search" class="topo-input" type="text" placeholder="Search name or IP&hellip;" autocomplete="off">
+            <input id="topo-search" class="topo-input" type="text" placeholder="Search name or IP&hellip;" autocomplete="off" aria-label="Search devices by name or IP">
             <span id="topo-search-count" style="position:absolute;right:10px;font-size:.62rem;color:#22d3ee;pointer-events:none;"></span>
         </div>
+        <button id="btn-filters" class="topo-btn" type="button" aria-expanded="false" aria-controls="topo-filters" aria-label="Toggle filters panel">Filters</button>
         <button id="btn-fit" class="topo-btn" type="button">Fit view</button>
         <button id="btn-dim" class="topo-btn" type="button">View: 3D</button>
         <button id="btn-orbit" class="topo-btn active" type="button">Orbit: on</button>
+        <button id="btn-export" class="topo-btn" type="button" aria-label="Export topology view as PNG image">Export PNG</button>
+    </div>
+
+    <!-- Filters panel (collapsible) -->
+    <div id="topo-filters" class="topo-overlay topo-panel" role="region" aria-label="Topology filters"
+         style="top:58px;left:14px;display:none;max-height:calc(100% - 120px);overflow-y:auto;z-index:25;">
+        <div class="topo-panel-label">Sites</div>
+        <div id="flt-sites" style="max-height:150px;overflow-y:auto;margin-bottom:12px;"></div>
+        <div class="topo-panel-label">Status</div>
+        <div role="group" aria-label="Status filter" style="display:flex;gap:6px;margin-bottom:12px;">
+            <button type="button" class="topo-btn flt-status active" data-status="all" aria-pressed="true" style="flex:1;padding:5px 0;text-align:center;">All</button>
+            <button type="button" class="topo-btn flt-status" data-status="online" aria-pressed="false" style="flex:1;padding:5px 0;text-align:center;">Online</button>
+            <button type="button" class="topo-btn flt-status" data-status="offline" aria-pressed="false" style="flex:1;padding:5px 0;text-align:center;">Offline</button>
+        </div>
+        <div class="topo-panel-label">Device type</div>
+        <div role="group" aria-label="Device type filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+            <button type="button" class="topo-btn flt-type active" data-type="switch" aria-pressed="true">Switches</button>
+            <button type="button" class="topo-btn flt-type active" data-type="ap" aria-pressed="true">APs</button>
+            <button type="button" class="topo-btn flt-type active" data-type="gateway" aria-pressed="true">Gateways</button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #1e2535;padding-top:10px;">
+            <span id="flt-count" style="font-size:.68rem;color:#94a3b8;" aria-live="polite"></span>
+            <button id="flt-reset" type="button" class="topo-btn" aria-label="Reset all filters">Reset</button>
+        </div>
     </div>
 
     <!-- Stats strip -->
@@ -81,15 +113,27 @@
         <div class="topo-legend-row"><span class="topo-dot" style="background:#a78bfa;"></span>Access Point</div>
         <div class="topo-legend-row"><span class="topo-dot" style="background:#f87171;"></span>Offline</div>
         <div style="border-top:1px solid #1e2535;margin-top:8px;padding-top:8px;">
-            <div class="topo-legend-row"><span class="topo-line"></span>Wired link (LLDP)</div>
+            <div class="topo-legend-row" style="font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Wired link speed</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#64748b;"></span>&lt; 1 Gbps</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#22d3ee;"></span>1 Gbps</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#a78bfa;"></span>2.5 / 5 Gbps</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#f97316;"></span>10 Gbps +</div>
+            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#0e7490;"></span>Speed unknown</div>
             <div class="topo-legend-row"><span class="topo-line dashed"></span>Inferred uplink</div>
         </div>
     </div>
 
     <!-- Hint -->
     <div class="topo-overlay" style="right:14px;bottom:14px;font-size:.64rem;color:#3d4759;text-align:right;pointer-events:none;">
-        drag to rotate &middot; scroll to zoom &middot; right-drag to pan &middot; click node to open
+        drag to rotate &middot; scroll to zoom &middot; right-drag to pan &middot; click node to open<br>
+        shift+click node to focus its neighbourhood &middot; esc to exit
     </div>
+
+    <!-- Exit-focus chip -->
+    <button id="btn-exit-focus" class="topo-overlay" type="button" aria-label="Exit focus mode"
+            style="display:none;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(249,115,22,.14);border:1px solid rgba(249,115,22,.55);color:#f97316;border-radius:9999px;padding:6px 16px;font-size:.72rem;font-weight:700;cursor:pointer;backdrop-filter:blur(4px);z-index:25;white-space:nowrap;max-width:70%;overflow:hidden;text-overflow:ellipsis;">
+        Focused: <span id="focus-label"></span> &middot; Exit (Esc)
+    </button>
 
     <!-- Loading -->
     <div id="topo-loading" class="topo-overlay" style="inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#060a14;z-index:30;">
@@ -107,6 +151,49 @@
 </div>
 
 <script src="https://unpkg.com/3d-force-graph@1.80.0/dist/3d-force-graph.min.js"></script>
+<script>
+// Pure graph-filtering helper. Kept dependency-free (no DOM, no library
+// globals) so it can be unit-tested standalone in Node.
+//
+// filters = {
+//   sites:  null | { '<site-or-empty-string>': bool, ... }   (null/undefined = all)
+//   status: 'all' | 'online' | 'offline'
+//   types:  null | { switch: bool, ap: bool, gateway: bool }  (groups missing from the map always pass)
+// }
+// Virtual nodes (the internet hub) are always kept; links survive only when
+// both endpoints survive. Returns { nodes, links } of the SAME object
+// instances passed in, so layout positions are preserved.
+function topoFilterGraph(allNodes, allLinks, filters) {
+    'use strict';
+    filters = filters || {};
+    var sites = filters.sites || null;
+    var status = filters.status || 'all';
+    var types = filters.types || null;
+    var hasOwn = Object.prototype.hasOwnProperty;
+
+    var nodes = allNodes.filter(function (n) {
+        if (n.virtual) return true;
+        if (sites && !sites[n.site || '']) return false;
+        var online = (n.status || '').toLowerCase() === 'online';
+        if (status === 'online' && !online) return false;
+        if (status === 'offline' && online) return false;
+        if (types && hasOwn.call(types, n.group) && !types[n.group]) return false;
+        return true;
+    });
+
+    var ids = {};
+    nodes.forEach(function (n) { ids[n.id] = true; });
+
+    var links = allLinks.filter(function (l) {
+        var s = (l.source && typeof l.source === 'object') ? l.source.id : l.source;
+        var t = (l.target && typeof l.target === 'object') ? l.target.id : l.target;
+        return ids[s] === true && ids[t] === true;
+    });
+
+    return { nodes: nodes, links: links };
+}
+if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFilterGraph: topoFilterGraph }; }
+</script>
 <script>
 (function () {
     'use strict';
@@ -129,8 +216,27 @@
         linkRealHi: '#22d3ee',
         linkVirtual: '#283042',
         linkVirtualHi: '#475569',
-        particle: '#67e8f9'
+        linkFaded: '#131a26'
     };
+    // Link colour scale by negotiated port speed (Mbps).
+    var SPEED_TIERS = [
+        { min: 10000, color: '#f97316', hi: '#fb923c' },  // 10G+   orange
+        { min: 2500,  color: '#a78bfa', hi: '#c4b5fd' },  // 2.5/5G violet
+        { min: 1000,  color: '#22d3ee', hi: '#67e8f9' },  // 1G     cyan
+        { min: 1,     color: '#64748b', hi: '#94a3b8' }   // <1G    slate
+    ];
+    function speedTier(s) {
+        s = Number(s) || 0;
+        for (var i = 0; i < SPEED_TIERS.length; i++) {
+            if (s >= SPEED_TIERS[i].min) return SPEED_TIERS[i];
+        }
+        return null; // unknown speed
+    }
+    function linkSpeedColor(l, hi) {
+        var t = speedTier(l.speed);
+        if (!t) return hi ? C.linkRealHi : C.linkReal;
+        return hi ? t.hi : t.color;
+    }
 
     var el = document.getElementById('graph-3d');
     var loadingEl = document.getElementById('topo-loading');
@@ -153,10 +259,11 @@
     // ── Build graph data (flat contract from topology.py) ─────────────────
     var isOnline = function (n) { return (n.status || '').toLowerCase() === 'online'; };
 
-    var nodes = [{ id: '__internet__', label: 'Internet', group: 'internet', status: 'online', virtual: true }];
-    RAW.nodes.forEach(function (n) { nodes.push(Object.assign({}, n)); });
+    // Master copies — filtering always derives from these, never mutates them.
+    var allNodes = [{ id: '__internet__', label: 'Internet', group: 'internet', status: 'online', virtual: true }];
+    RAW.nodes.forEach(function (n) { allNodes.push(Object.assign({}, n)); });
 
-    var links = RAW.edges.map(function (e) { return Object.assign({ virtual: false }, e); });
+    var allLinks = RAW.edges.map(function (e) { return Object.assign({ virtual: false }, e); });
 
     // Synthetic connectivity: internet → gateways, internet → switches,
     // gateway → switch when no real LLDP edge already exists.
@@ -166,18 +273,22 @@
     var sws = RAW.nodes.filter(function (n) { return n.group === 'switch'; });
 
     gws.forEach(function (g) {
-        links.push({ id: '__inet_gw__' + g.id, source: '__internet__', target: g.id, virtual: true });
+        allLinks.push({ id: '__inet_gw__' + g.id, source: '__internet__', target: g.id, virtual: true });
     });
     sws.forEach(function (s) {
-        links.push({ id: '__inet_sw__' + s.id, source: '__internet__', target: s.id, virtual: true });
+        allLinks.push({ id: '__inet_sw__' + s.id, source: '__internet__', target: s.id, virtual: true });
     });
     gws.forEach(function (g) {
         sws.forEach(function (s) {
             if (!realPairs.has(pairKey(g.id, s.id))) {
-                links.push({ id: '__gw_sw__' + g.id + '_' + s.id, source: g.id, target: s.id, virtual: true });
+                allLinks.push({ id: '__gw_sw__' + g.id + '_' + s.id, source: g.id, target: s.id, virtual: true });
             }
         });
     });
+
+    // Currently-visible subsets (reassigned whenever filters change).
+    var nodes = allNodes.slice();
+    var links = allLinks.slice();
 
     // ── Stats strip ────────────────────────────────────────────────────────
     var counts = {
@@ -225,16 +336,19 @@
         }
         var spd = fmtSpeed(l.speed);
         return '<div class="topo-tip">' +
-            '<div class="topo-tip-name" style="color:#22d3ee">' +
+            '<div class="topo-tip-name" style="color:' + linkSpeedColor(l, true) + '">' +
             (l.port ? 'Port ' + esc(l.port) : 'Wired link') + '</div>' +
             (spd ? '<div class="topo-tip-row">' + spd + '</div>' : '') +
             '</div>';
     }
 
-    // ── Highlight / search state ───────────────────────────────────────────
+    // ── Highlight / search / focus state ───────────────────────────────────
     var hoverNode = null;
     var highlightLinks = new Set();
     var searchTerm = '';
+    var focusNode = null;       // node object at the centre of focus mode
+    var focusIds = null;        // Set of node ids in focus (null = focus off)
+    var focusLinkSet = null;    // Set of link objects touching the focus node
     var endpointId = function (x) { return (x && typeof x === 'object') ? x.id : x; };
 
     function nodeBaseColor(n) {
@@ -242,6 +356,10 @@
         return (GROUP[n.group] || GROUP.unknown).color;
     }
     function nodeColorAcc(n) {
+        if (focusIds) {
+            if (n === focusNode) return C.hover;
+            return focusIds.has(n.id) ? nodeBaseColor(n) : C.dim;
+        }
         if (searchTerm) return n.__match ? C.hover : C.dim;
         if (hoverNode) {
             if (n === hoverNode) return C.hover;
@@ -249,16 +367,27 @@
         }
         return nodeBaseColor(n);
     }
+    var nodeValAcc = function (n) {
+        var v = (GROUP[n.group] || GROUP.unknown).val;
+        // Focus mode shrinks everything outside the focused neighbourhood.
+        return (focusIds && !focusIds.has(n.id)) ? v * 0.3 : v;
+    };
     var linkColorAcc = function (l) {
-        if (highlightLinks.has(l)) return l.virtual ? C.linkVirtualHi : C.linkRealHi;
-        return l.virtual ? C.linkVirtual : C.linkReal;
+        if (focusIds) {
+            if (!focusLinkSet.has(l)) return C.linkFaded;
+            return l.virtual ? C.linkVirtualHi : linkSpeedColor(l, true);
+        }
+        if (highlightLinks.has(l)) return l.virtual ? C.linkVirtualHi : linkSpeedColor(l, true);
+        return l.virtual ? C.linkVirtual : linkSpeedColor(l, false);
     };
     var linkWidthAcc = function (l) {
+        if (focusIds) return focusLinkSet.has(l) ? (l.virtual ? 0.8 : 2.4) : 0;
         if (highlightLinks.has(l)) return l.virtual ? 0.8 : 2.4;
         return l.virtual ? 0 : 1.2;
     };
     var particlesAcc = function (l) {
         if (l.virtual) return 0;
+        if (focusIds) return focusLinkSet.has(l) ? 4 : 0;
         return highlightLinks.has(l) ? 4 : 2;
     };
 
@@ -276,14 +405,18 @@
 
     var Graph;
     try {
-        Graph = new ForceGraph3D(el)
+        // preserveDrawingBuffer is required so "Export PNG" can read the
+        // WebGL canvas back out via toDataURL().
+        Graph = new ForceGraph3D(el, {
+            rendererConfig: { preserveDrawingBuffer: true, antialias: true, alpha: true }
+        })
             .backgroundColor('rgba(0,0,0,0)')
             .showNavInfo(false)
             .width(el.clientWidth)
             .height(el.clientHeight)
             .nodeLabel(nodeTip)
             .nodeColor(nodeColorAcc)
-            .nodeVal(function (n) { return (GROUP[n.group] || GROUP.unknown).val; })
+            .nodeVal(nodeValAcc)
             .nodeOpacity(0.92)
             .nodeResolution(16)
             .linkLabel(linkTip)
@@ -292,12 +425,19 @@
             .linkOpacity(0.55)
             .linkDirectionalParticles(particlesAcc)
             .linkDirectionalParticleWidth(1.6)
-            .linkDirectionalParticleColor(function () { return C.particle; })
+            // Particle colour and speed both track the link's negotiated
+            // speed: faster wire => faster, brighter particles.
+            .linkDirectionalParticleColor(function (l) { return linkSpeedColor(l, true); })
             .linkDirectionalParticleSpeed(function (l) {
                 return 0.004 + (Math.min(Number(l.speed) || 0, 10000) / 10000) * 0.008;
             })
             .onNodeHover(setHover)
-            .onNodeClick(function (n) { if (n && n.url) window.location.href = n.url; })
+            .onNodeClick(function (n, ev) {
+                if (!n) return;
+                if (ev && ev.shiftKey) { enterFocus(n); return; }
+                if (n.url) window.location.href = n.url;
+            })
+            .onBackgroundClick(function () { if (focusIds) exitFocus(); })
             .onEngineTick(function () {
                 if (!booted) {
                     booted = true;
@@ -316,7 +456,8 @@
 
     // Glowing-sphere effect: 3d-force-graph builds MeshLambertMaterial
     // spheres for nodes — drive their emissive channel from the node color
-    // so every node softly glows (offline nodes stay dim).
+    // so every node softly glows (offline nodes stay dim). Focus mode also
+    // drops the material opacity of out-of-focus nodes to ~10%.
     function applyGlow() {
         try {
             Graph.graphData().nodes.forEach(function (n) {
@@ -328,8 +469,12 @@
                     o.material = o.material.clone();
                     o.material.userData.__perNode = true;
                 }
+                var faded = !!(focusIds && !focusIds.has(n.id));
+                o.material.transparent = true;
+                o.material.opacity = faded ? 0.08 : 0.92;
                 var k;
-                if (hoverNode && n === hoverNode) k = 0.95;
+                if (faded) k = 0.1;
+                else if (focusIds ? n === focusNode : (hoverNode && n === hoverNode)) k = 0.95;
                 else if (!n.virtual && !isOnline(n)) k = 0.25;
                 else k = 0.55;
                 o.material.emissive.copy(o.material.color).multiplyScalar(k);
@@ -340,6 +485,7 @@
 
     function refresh() {
         Graph.nodeColor(Graph.nodeColor())
+            .nodeVal(Graph.nodeVal())
             .linkColor(Graph.linkColor())
             .linkWidth(Graph.linkWidth())
             .linkDirectionalParticles(Graph.linkDirectionalParticles());
@@ -421,8 +567,7 @@
 
     var searchInput = document.getElementById('topo-search');
     var searchCount = document.getElementById('topo-search-count');
-    searchInput.addEventListener('input', function () {
-        searchTerm = searchInput.value.trim().toLowerCase();
+    function applySearch() {
         var m = 0;
         nodes.forEach(function (n) {
             n.__match = !!searchTerm && !n.virtual && (
@@ -431,7 +576,260 @@
             if (n.__match) m++;
         });
         searchCount.textContent = searchTerm ? (m + ' match' + (m === 1 ? '' : 'es')) : '';
+    }
+    searchInput.addEventListener('input', function () {
+        searchTerm = searchInput.value.trim().toLowerCase();
+        applySearch();
         refresh();
+    });
+
+    // ── Filters panel ──────────────────────────────────────────────────────
+    var filtersBtn = document.getElementById('btn-filters');
+    var filtersPanel = document.getElementById('topo-filters');
+    var sitesBox = document.getElementById('flt-sites');
+    var countEl = document.getElementById('flt-count');
+    var statusBtns = Array.prototype.slice.call(document.querySelectorAll('.flt-status'));
+    var typeBtns = Array.prototype.slice.call(document.querySelectorAll('.flt-type'));
+
+    var filterState = {
+        sites: null,  // built below: { '<site key>': bool }
+        status: 'all',
+        types: { switch: true, ap: true, gateway: true }
+    };
+
+    // Distinct sites (client-side), '' bucket = devices with no site.
+    var siteLabels = {};
+    RAW.nodes.forEach(function (n) {
+        var k = n.site || '';
+        if (!(k in siteLabels)) siteLabels[k] = n.site || '(no site)';
+    });
+    var siteKeys = Object.keys(siteLabels).sort(function (a, b) {
+        if (a === '') return 1;   // "(no site)" last
+        if (b === '') return -1;
+        return a.localeCompare(b);
+    });
+    filterState.sites = {};
+    siteKeys.forEach(function (k) { filterState.sites[k] = true; });
+
+    // Build site checkboxes with DOM APIs (site names are user-controlled).
+    if (!siteKeys.length) {
+        var none = document.createElement('div');
+        none.style.cssText = 'font-size:.7rem;color:#4b5563;padding:2px 0;';
+        none.textContent = 'No sites';
+        sitesBox.appendChild(none);
+    }
+    siteKeys.forEach(function (k) {
+        var lab = document.createElement('label');
+        lab.className = 'topo-check';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        cb.setAttribute('aria-label', 'Filter site ' + siteLabels[k]);
+        cb.addEventListener('change', function () {
+            filterState.sites[k] = cb.checked;
+            applyFilters();
+        });
+        var txt = document.createElement('span');
+        txt.textContent = siteLabels[k];
+        txt.title = siteLabels[k];
+        lab.appendChild(cb);
+        lab.appendChild(txt);
+        sitesBox.appendChild(lab);
+    });
+
+    function filtersDirty() {
+        if (filterState.status !== 'all') return true;
+        var t = filterState.types;
+        if (!t.switch || !t.ap || !t.gateway) return true;
+        for (var i = 0; i < siteKeys.length; i++) {
+            if (!filterState.sites[siteKeys[i]]) return true;
+        }
+        return false;
+    }
+
+    function updateCount() {
+        var visible = 0;
+        nodes.forEach(function (n) { if (!n.virtual) visible++; });
+        countEl.textContent = 'Showing ' + visible + ' of ' + RAW.nodes.length + ' devices';
+    }
+    updateCount();
+
+    var refitTimer = null;
+    function applyFilters() {
+        exitFocus(true);                       // focus state can't survive a data swap
+        hoverNode = null;
+        highlightLinks.clear();
+        var res = topoFilterGraph(allNodes, allLinks, filterState);
+        nodes = res.nodes;
+        links = res.links;
+        Graph.graphData({ nodes: nodes, links: links });
+        applySearch();                          // recompute matches over visible nodes
+        updateCount();
+        filtersBtn.classList.toggle('active', filtersDirty() || filtersPanel.style.display !== 'none');
+        if (typeof Graph.d3ReheatSimulation === 'function') Graph.d3ReheatSimulation();
+        stopOrbit();
+        if (refitTimer) clearTimeout(refitTimer);
+        refitTimer = setTimeout(function () { Graph.zoomToFit(700, 90); }, 650);
+        refresh();
+    }
+
+    function setFiltersOpen(open) {
+        filtersPanel.style.display = open ? 'block' : 'none';
+        filtersBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        filtersBtn.classList.toggle('active', open || filtersDirty());
+    }
+    filtersBtn.addEventListener('click', function () {
+        setFiltersOpen(filtersPanel.style.display === 'none');
+    });
+
+    statusBtns.forEach(function (b) {
+        b.addEventListener('click', function () {
+            filterState.status = b.getAttribute('data-status');
+            statusBtns.forEach(function (x) {
+                var on = x === b;
+                x.classList.toggle('active', on);
+                x.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            applyFilters();
+        });
+    });
+
+    typeBtns.forEach(function (b) {
+        b.addEventListener('click', function () {
+            var t = b.getAttribute('data-type');
+            filterState.types[t] = !filterState.types[t];
+            b.classList.toggle('active', filterState.types[t]);
+            b.setAttribute('aria-pressed', filterState.types[t] ? 'true' : 'false');
+            applyFilters();
+        });
+    });
+
+    document.getElementById('flt-reset').addEventListener('click', function () {
+        filterState.status = 'all';
+        filterState.types = { switch: true, ap: true, gateway: true };
+        siteKeys.forEach(function (k) { filterState.sites[k] = true; });
+        sitesBox.querySelectorAll('input[type=checkbox]').forEach(function (cb) { cb.checked = true; });
+        statusBtns.forEach(function (x) {
+            var on = x.getAttribute('data-status') === 'all';
+            x.classList.toggle('active', on);
+            x.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        typeBtns.forEach(function (x) {
+            x.classList.add('active');
+            x.setAttribute('aria-pressed', 'true');
+        });
+        applyFilters();
+    });
+
+    // ── Focus mode (shift+click a node) ────────────────────────────────────
+    var exitFocusBtn = document.getElementById('btn-exit-focus');
+    var focusLabel = document.getElementById('focus-label');
+
+    function frameNodes(list) {
+        var pts = list.filter(function (n) { return isFinite(n.x) && isFinite(n.y); });
+        if (!pts.length) return;
+        var cx = 0, cy = 0, cz = 0;
+        pts.forEach(function (n) { cx += n.x; cy += n.y; cz += (n.z || 0); });
+        cx /= pts.length; cy /= pts.length; cz /= pts.length;
+        var r = 0;
+        pts.forEach(function (n) {
+            var d = Math.sqrt(
+                Math.pow(n.x - cx, 2) + Math.pow(n.y - cy, 2) + Math.pow((n.z || 0) - cz, 2));
+            if (d > r) r = d;
+        });
+        var dist = Math.max(r * 2.6, 140);
+        // Approach along the current camera direction to avoid a jarring flip.
+        var cam = Graph.cameraPosition();
+        var dx = cam.x - cx, dy = cam.y - cy, dz = cam.z - cz;
+        var len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        Graph.cameraPosition(
+            { x: cx + (dx / len) * dist, y: cy + (dy / len) * dist, z: cz + (dz / len) * dist },
+            { x: cx, y: cy, z: cz },
+            1000
+        );
+    }
+
+    function enterFocus(node) {
+        stopOrbit();
+        focusNode = node;
+        focusIds = new Set([node.id]);
+        focusLinkSet = new Set();
+        links.forEach(function (l) {
+            var s = endpointId(l.source), t = endpointId(l.target);
+            if (s === node.id || t === node.id) {
+                focusLinkSet.add(l);
+                focusIds.add(s === node.id ? t : s);
+            }
+        });
+        hoverNode = null;
+        highlightLinks.clear();
+        focusLabel.textContent = node.label || node.id;
+        exitFocusBtn.style.display = 'block';
+        refresh();
+        frameNodes(nodes.filter(function (n) { return focusIds.has(n.id); }));
+    }
+
+    function exitFocus(skipFit) {
+        if (!focusIds) return;
+        focusNode = null;
+        focusIds = null;
+        focusLinkSet = null;
+        exitFocusBtn.style.display = 'none';
+        refresh();
+        if (!skipFit) Graph.zoomToFit(700, 90);
+    }
+
+    exitFocusBtn.addEventListener('click', function () { exitFocus(); });
+
+    window.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Escape') return;
+        if (focusIds) exitFocus();
+        else if (filtersPanel.style.display !== 'none') setFiltersOpen(false);
+    });
+
+    // ── PNG export ─────────────────────────────────────────────────────────
+    function pad2(v) { return v < 10 ? '0' + v : '' + v; }
+    document.getElementById('btn-export').addEventListener('click', function () {
+        try {
+            var gl = Graph.renderer().domElement;
+            var w = gl.width, h = gl.height;
+            if (!w || !h) throw new Error('canvas not ready');
+            var out = document.createElement('canvas');
+            out.width = w;
+            out.height = h;
+            var ctx = out.getContext('2d');
+            // Composite onto the page background (the WebGL canvas is alpha).
+            ctx.fillStyle = '#060a14';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(gl, 0, 0, w, h);
+            // Title + timestamp (scaled for devicePixelRatio-sized canvases).
+            var k = Math.max(w / Math.max(el.clientWidth, 1), 1);
+            var now = new Date();
+            var visible = 0;
+            nodes.forEach(function (n) { if (!n.virtual) visible++; });
+            ctx.font = '700 ' + Math.round(14 * k) + 'px Inter, ui-sans-serif, sans-serif';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText('Network Topology', Math.round(16 * k), Math.round(28 * k));
+            ctx.font = '400 ' + Math.round(11 * k) + 'px Inter, ui-sans-serif, sans-serif';
+            ctx.fillStyle = '#64748b';
+            ctx.fillText(
+                now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate()) +
+                ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes()) +
+                ' · ' + visible + ' device' + (visible === 1 ? '' : 's'),
+                Math.round(16 * k), Math.round(46 * k));
+            var name = 'topology-' +
+                now.getFullYear() + pad2(now.getMonth() + 1) + pad2(now.getDate()) +
+                '-' + pad2(now.getHours()) + pad2(now.getMinutes()) + '.png';
+            var a = document.createElement('a');
+            a.download = name;
+            a.href = out.toDataURL('image/png');
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        } catch (err) {
+            if (window.console && console.error) console.error('PNG export failed:', err);
+            if (typeof window.showToast === 'function') window.showToast('PNG export failed');
+        }
     });
 
     // Track both container and window size changes (sidebar collapse etc.)
