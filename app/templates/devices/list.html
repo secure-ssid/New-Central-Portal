@@ -174,6 +174,10 @@ document.addEventListener('alpine:init', () => {
         </div>
     </div>
 
+    {% if total_pages and total_pages > 1 %}
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Search and tabs filter this page only ({{ devices|length }} of {{ total }} devices shown) &mdash; use the pagination below the table to see the rest.</p>
+    {% endif %}
+
     <!-- Tabs -->
     <div class="tabs overflow-x-auto">
         <button @click="tab='all'" class="tab-btn" style="padding-right:24px;"
@@ -255,6 +259,26 @@ document.addEventListener('alpine:init', () => {
             </tbody>
         </table>
     </div>
+
+    <!-- Server-side pagination -->
+    {% if total_pages and total_pages > 1 %}
+    {% set qs = base_qs ~ ('&' if base_qs else '') %}
+    <nav class="flex flex-wrap items-center justify-between gap-2 mt-1 px-0.5 py-3" aria-label="Pagination">
+        <span class="text-xs text-slate-500">Page {{ page }} of {{ total_pages }} &middot; {{ total }} total</span>
+        <div class="flex gap-1 items-center">
+            {% if has_prev %}
+            <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Previous page">&lsaquo; Prev</a>
+            {% else %}
+            <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Previous page">&lsaquo; Prev</button>
+            {% endif %}
+            {% if has_next %}
+            <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Next page">Next &rsaquo;</a>
+            {% else %}
+            <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Next page">Next &rsaquo;</button>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
 </div>
 
 {% endblock %}
