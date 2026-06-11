@@ -55,6 +55,11 @@
     .topo-tip-dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
     @keyframes topo-spin { to { transform:rotate(360deg); } }
     .topo-spinner { width:34px; height:34px; border-radius:50%; border:3px solid #1e2535; border-top-color:#f97316; animation:topo-spin .8s linear infinite; }
+    /* Tier axis strip (hierarchy layout): legend-like vertical rail on the
+       left edge listing the network tiers top-to-bottom. */
+    #topo-tieraxis { right:14px; top:50%; transform:translateY(-50%); display:none; flex-direction:column; align-items:flex-end; gap:38px; border-right:2px solid #1e2535; padding-right:10px; pointer-events:none; z-index:15; }
+    .topo-tier-label { display:flex; align-items:center; gap:7px; font-size:.6rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#64748b; white-space:nowrap; }
+    .topo-tier-label .topo-dot { width:7px; height:7px; }
     /* Small screens: the absolute overlays collide on a narrow canvas —
        give the toolbar the full width, drop the duplicate stats strip and
        the mouse-centric hint, and slim the legend down. Visual only. */
@@ -65,6 +70,8 @@
         .topo-legend { padding:8px 11px !important; }
         .topo-legend .topo-legend-row { font-size:.62rem; gap:6px; margin-top:3px; }
         .topo-legend-speeds { display:none !important; }
+        #topo-tieraxis { gap:26px; padding-right:8px; }
+        .topo-tier-label { font-size:.54rem; letter-spacing:.1em; }
     }
 </style>
 
@@ -79,6 +86,7 @@
         </div>
         <button id="btn-filters" class="topo-btn" type="button" aria-expanded="false" aria-controls="topo-filters" aria-label="Toggle filters panel">Filters</button>
         <button id="btn-fit" class="topo-btn" type="button">Fit view</button>
+        <button id="btn-layout" class="topo-btn active" type="button" aria-label="Toggle between hierarchy and free 3D layout">Layout: Hierarchy</button>
         <button id="btn-dim" class="topo-btn" type="button">View: 3D</button>
         <button id="btn-orbit" class="topo-btn active" type="button">Orbit: on</button>
         <button id="btn-export" class="topo-btn" type="button" aria-label="Export topology view as PNG image">Export PNG</button>
@@ -107,8 +115,16 @@
         </div>
     </div>
 
-    <!-- Stats strip -->
-    <div class="topo-overlay topo-stats" style="top:14px;right:14px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+    <!-- Tier axis (hierarchy layout only; toggled from JS) -->
+    <div id="topo-tieraxis" class="topo-overlay" aria-hidden="true">
+        <div class="topo-tier-label"><span class="topo-dot" style="background:#22d3ee;"></span>Internet</div>
+        <div class="topo-tier-label"><span class="topo-dot" style="background:#fbbf24;"></span>Gateway</div>
+        <div class="topo-tier-label"><span class="topo-dot" style="background:#818cf8;"></span>Switching</div>
+        <div class="topo-tier-label"><span class="topo-dot" style="background:#a78bfa;"></span>Access</div>
+    </div>
+
+    <!-- Stats strip (bottom-right, above the hint, clear of the toolbar) -->
+    <div class="topo-overlay topo-stats" style="bottom:58px;right:14px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:46%;">
         <span class="topo-chip"><span class="topo-dot" style="background:#818cf8;"></span><b id="stat-switch">0</b> switches</span>
         <span class="topo-chip"><span class="topo-dot" style="background:#a78bfa;"></span><b id="stat-ap">0</b> APs</span>
         <span class="topo-chip"><span class="topo-dot" style="background:#fbbf24;"></span><b id="stat-gateway">0</b> gateways</span>
@@ -226,6 +242,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         linkReal: '#0e7490',
         linkRealHi: '#22d3ee',
         linkVirtual: '#283042',
+        linkVirtualHier: '#3a4660',
         linkVirtualHi: '#475569',
         linkFaded: '#131a26'
     };
@@ -286,9 +303,14 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     gws.forEach(function (g) {
         allLinks.push({ id: '__inet_gw__' + g.id, source: '__internet__', target: g.id, virtual: true });
     });
-    sws.forEach(function (s) {
-        allLinks.push({ id: '__inet_sw__' + s.id, source: '__internet__', target: s.id, virtual: true });
-    });
+    // Switches hang off the internet hub directly only when there is no
+    // gateway to route through — otherwise those links would skip a tier
+    // and clutter the hierarchy.
+    if (!gws.length) {
+        sws.forEach(function (s) {
+            allLinks.push({ id: '__inet_sw__' + s.id, source: '__internet__', target: s.id, virtual: true });
+        });
+    }
     gws.forEach(function (g) {
         sws.forEach(function (s) {
             if (!realPairs.has(pairKey(g.id, s.id))) {
@@ -389,12 +411,16 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
             return l.virtual ? C.linkVirtualHi : linkSpeedColor(l, true);
         }
         if (highlightLinks.has(l)) return l.virtual ? C.linkVirtualHi : linkSpeedColor(l, true);
-        return l.virtual ? C.linkVirtual : linkSpeedColor(l, false);
+        // Hierarchy mode: inferred uplinks form the visible spine of the tree.
+        if (l.virtual) return layoutMode === 'hier' ? C.linkVirtualHier : C.linkVirtual;
+        return linkSpeedColor(l, false);
     };
     var linkWidthAcc = function (l) {
         if (focusIds) return focusLinkSet.has(l) ? (l.virtual ? 0.8 : 2.4) : 0;
         if (highlightLinks.has(l)) return l.virtual ? 0.8 : 2.4;
-        return l.virtual ? 0 : 1.2;
+        // In hierarchy mode the inferred uplinks are the structural spine of
+        // the diagram, so give them a hairline body instead of a faint line.
+        return l.virtual ? (layoutMode === 'hier' ? 0.7 : 0) : 1.2;
     };
     var particlesAcc = function (l) {
         if (l.virtual) return 0;
@@ -402,11 +428,97 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         return highlightLinks.has(l) ? 4 : 2;
     };
 
+    // ── Hierarchical "tiered" layout (default) ─────────────────────────────
+    // Classic network-diagram view: internet on top, then gateways, then
+    // switches, then APs/unknowns. Each node's y is pinned to its tier plane
+    // (node.fy) and z is pinned to 0 (node.fz) so the scene reads like a
+    // flat diagram while the force engine spreads nodes horizontally and the
+    // 3D camera can still orbit it. "Free 3D" clears all pins.
+    var TIER_OF = { internet: 0, gateway: 1, switch: 2, ap: 3, unknown: 3 };
+    var TIER_H = 80;   // vertical spacing between tier planes
+    var SLOT_W = 60;   // horizontal slot width when seeding x positions
+    var nodeTier = function (n) {
+        var t = TIER_OF[n.group];
+        return t === undefined ? 3 : t;
+    };
+    var tierYOf = function (t) { return (1.5 - t) * TIER_H; };  // +120 … -120
+
+    var LAYOUT_KEY = 'topo-layout';
+    var layoutMode = 'hier';
+    try { if (localStorage.getItem(LAYOUT_KEY) === 'free') layoutMode = 'free'; } catch (e) { /* private mode */ }
+
+    // Pin fy/fz for every visible node and seed orderly x positions with a
+    // top-down barycenter sweep: each node is anchored at the mean x of its
+    // neighbours in higher tiers (APs land under their uplink switch,
+    // switches under their gateway), so links run mostly vertically with
+    // minimal crossings. Orphans (no uplink visible) go to the right edge.
+    function applyHierarchyPins(ns, ls) {
+        var adj = {};
+        ns.forEach(function (n) { adj[n.id] = []; });
+        ls.forEach(function (l) {
+            var s = endpointId(l.source), t = endpointId(l.target);
+            if (adj[s] && adj[t]) { adj[s].push(t); adj[t].push(s); }
+        });
+        var byId = {};
+        ns.forEach(function (n) { byId[n.id] = n; });
+        var tiers = [[], [], [], []];
+        ns.forEach(function (n) { tiers[nodeTier(n)].push(n); });
+        var byLabel = function (a, b) {
+            return String(a.label || a.id).localeCompare(String(b.label || b.id));
+        };
+        tiers.forEach(function (tn, t) {
+            if (t === 0) {
+                tn.sort(byLabel);
+            } else {
+                tn.forEach(function (n) {
+                    var sum = 0, cnt = 0;
+                    adj[n.id].forEach(function (oid) {
+                        var o = byId[oid];
+                        if (o && nodeTier(o) < t && typeof o.__hx === 'number') {
+                            sum += o.__hx; cnt++;
+                        }
+                    });
+                    n.__anchor = cnt ? sum / cnt : Infinity;
+                });
+                tn.sort(function (a, b) {
+                    // Infinity-Infinity is NaN (falsy) -> falls through to label
+                    return (a.__anchor - b.__anchor) || byLabel(a, b);
+                });
+            }
+            tn.forEach(function (n, i) {
+                n.__hx = (i - (tn.length - 1) / 2) * SLOT_W;
+            });
+        });
+        ns.forEach(function (n) {
+            var y = tierYOf(nodeTier(n));
+            n.x = n.__hx;
+            n.y = y;
+            n.z = 0;
+            n.fy = y;   // lock the tier plane
+            n.fz = 0;   // lock onto a flat diagram plane
+            delete n.fx;
+        });
+    }
+
+    function clearLayoutPins(ns) {
+        ns.forEach(function (n) {
+            delete n.fx; delete n.fy; delete n.fz;
+            delete n.__hx; delete n.__anchor;
+        });
+    }
+
+    // Seed the default layout before the engine boots.
+    if (layoutMode === 'hier') applyHierarchyPins(nodes, links);
+
     // ── Graph ──────────────────────────────────────────────────────────────
     function showFallback() {
         loadingEl.style.display = 'none';
         fallbackEl.style.display = 'flex';
     }
+    // Narrow canvases keep the wrapped toolbar overlaid on the scene; a
+    // moderate padding there keeps the top (internet) tier clear of it
+    // (zoomToFit pads both axes, so large values over-shrink the graph).
+    function fitPadding() { return el.clientWidth < 640 ? 70 : 90; }
     var booted = false;
     // Watchdog: if the engine never produces a first tick (silent boot
     // failure), drop to the fallback instead of spinning forever.
@@ -434,6 +546,15 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
             .linkColor(linkColorAcc)
             .linkWidth(linkWidthAcc)
             .linkOpacity(0.55)
+            // In hierarchy mode, links between nodes of the same tier (e.g.
+            // switch-to-switch trunks) arc out of the row so they don't run
+            // straight through sibling nodes sitting between the endpoints.
+            .linkCurvature(function (l) {
+                if (layoutMode !== 'hier') return 0;
+                var s = l.source, t = l.target;
+                if (!s || !t || typeof s !== 'object' || typeof t !== 'object') return 0;
+                return nodeTier(s) === nodeTier(t) ? 0.35 : 0;
+            })
             .linkDirectionalParticles(particlesAcc)
             .linkDirectionalParticleWidth(1.6)
             // Particle colour and speed both track the link's negotiated
@@ -464,6 +585,38 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         showFallback();
         return;
     }
+
+    // Same-tier spacing force (hierarchy mode only). The vendored bundle
+    // doesn't export d3.forceCollide, so register a tiny custom force that
+    // nudges same-tier neighbours apart along x whenever a reheat (filter,
+    // 2D/3D switch, layout toggle) packs a row too tightly.
+    var ROW_GAP = 55;
+    function tierSpacingForce() {
+        var ns = [];
+        function force(alpha) {
+            if (layoutMode !== 'hier') return;
+            var rows = {};
+            ns.forEach(function (n) {
+                var t = nodeTier(n);
+                (rows[t] = rows[t] || []).push(n);
+            });
+            Object.keys(rows).forEach(function (k) {
+                var row = rows[k].sort(function (a, b) { return a.x - b.x; });
+                for (var i = 1; i < row.length; i++) {
+                    var a = row[i - 1], b = row[i];
+                    var overlap = ROW_GAP - (b.x - a.x);
+                    if (overlap > 0) {
+                        var push = overlap * 0.5 * alpha;
+                        a.vx = (a.vx || 0) - push;
+                        b.vx = (b.vx || 0) + push;
+                    }
+                }
+            });
+        }
+        force.initialize = function (initNodes) { ns = initNodes; };
+        return force;
+    }
+    try { Graph.d3Force('tierSpacing', tierSpacingForce()); } catch (e) { /* spacing is cosmetic */ }
 
     // Glowing-sphere effect: 3d-force-graph builds MeshLambertMaterial
     // spheres for nodes — drive their emissive channel from the node color
@@ -534,7 +687,12 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     Graph.onEngineStop(function () {
         if (fitted) return;
         fitted = true;
-        Graph.zoomToFit(800, 90);
+        if (layoutMode === 'hier') {
+            // Slightly elevated front view so the tier planes read as layers
+            // (zoomToFit then keeps this direction and only fixes distance).
+            Graph.cameraPosition({ x: 0, y: TIER_H * 2.2, z: 620 }, { x: 0, y: 0, z: 0 }, 0);
+        }
+        Graph.zoomToFit(800, fitPadding());
         setTimeout(startOrbit, 1400);
     });
 
@@ -548,8 +706,15 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         var angle = Math.atan2(p.x, p.z);
         var dist = Math.max(Math.hypot(p.x, p.z), 200);
         var y = p.y;
+        var base = angle, t = 0;
         orbitTimer = setInterval(function () {
-            angle += Math.PI / 1400;
+            if (layoutMode === 'hier') {
+                // Gentle sway: the flat hierarchy plane never goes edge-on.
+                t += 0.012;
+                angle = base + Math.sin(t) * 0.45;
+            } else {
+                angle += Math.PI / 1400;
+            }
             Graph.cameraPosition({ x: dist * Math.sin(angle), y: y, z: dist * Math.cos(angle) });
         }, 40);
         orbitBtn.classList.add('active');
@@ -568,17 +733,53 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     // ── Toolbar: fit / 2D-3D toggle / search ───────────────────────────────
     document.getElementById('btn-fit').addEventListener('click', function () {
         stopOrbit();
-        Graph.zoomToFit(800, 90);
+        Graph.zoomToFit(800, fitPadding());
     });
 
     var dimBtn = document.getElementById('btn-dim');
     dimBtn.addEventListener('click', function () {
         is2D = !is2D;
         stopOrbit();
+        // Pins survive the dimension switch: in 2D the engine simply ignores
+        // z, so fy still produces the classic flat tree diagram.
+        if (layoutMode === 'hier') applyHierarchyPins(nodes, links);
         Graph.numDimensions(is2D ? 2 : 3);
         dimBtn.textContent = is2D ? 'View: 2D' : 'View: 3D';
         dimBtn.classList.toggle('active', is2D);
-        setTimeout(function () { Graph.zoomToFit(800, 90); }, 700);
+        setTimeout(function () { Graph.zoomToFit(800, fitPadding()); }, 700);
+    });
+
+    // ── Layout toggle: tiered hierarchy (default) vs free-floating 3D ──────
+    var layoutBtn = document.getElementById('btn-layout');
+    var tierAxis = document.getElementById('topo-tieraxis');
+    function syncLayoutUi() {
+        var hier = layoutMode === 'hier';
+        layoutBtn.textContent = hier ? 'Layout: Hierarchy' : 'Layout: Free 3D';
+        layoutBtn.classList.toggle('active', hier);
+        tierAxis.style.display = hier ? 'flex' : 'none';
+    }
+    syncLayoutUi();
+    layoutBtn.addEventListener('click', function () {
+        layoutMode = (layoutMode === 'hier') ? 'free' : 'hier';
+        try { localStorage.setItem(LAYOUT_KEY, layoutMode); } catch (e) { /* private mode */ }
+        exitFocus(true);             // layout swap moves everything anyway
+        stopOrbit();
+        if (layoutMode === 'hier') {
+            applyHierarchyPins(nodes, links);
+            // Swing back to an elevated front view so the tiers read as rows.
+            var c = Graph.cameraPosition();
+            var d = Math.max(Math.sqrt(c.x * c.x + c.y * c.y + c.z * c.z), 400);
+            Graph.cameraPosition({ x: 0, y: TIER_H * 2.2, z: d }, { x: 0, y: 0, z: 0 }, 500);
+        } else {
+            clearLayoutPins(allNodes);
+        }
+        syncLayoutUi();
+        // Same-tier links straighten/curve and virtual widths flip with mode.
+        Graph.linkCurvature(Graph.linkCurvature());
+        refresh();
+        if (typeof Graph.d3ReheatSimulation === 'function') Graph.d3ReheatSimulation();
+        if (refitTimer) clearTimeout(refitTimer);
+        refitTimer = setTimeout(function () { Graph.zoomToFit(700, fitPadding()); }, 700);
     });
 
     var searchInput = document.getElementById('topo-search');
@@ -678,6 +879,9 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         var res = topoFilterGraph(allNodes, allLinks, filterState);
         nodes = res.nodes;
         links = res.links;
+        // Re-pin the visible subset so the tier rows re-pack cleanly
+        // (orderings shift when parents are filtered away).
+        if (layoutMode === 'hier') applyHierarchyPins(nodes, links);
         Graph.graphData({ nodes: nodes, links: links });
         applySearch();                          // recompute matches over visible nodes
         updateCount();
@@ -685,7 +889,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         if (typeof Graph.d3ReheatSimulation === 'function') Graph.d3ReheatSimulation();
         stopOrbit();
         if (refitTimer) clearTimeout(refitTimer);
-        refitTimer = setTimeout(function () { Graph.zoomToFit(700, 90); }, 650);
+        refitTimer = setTimeout(function () { Graph.zoomToFit(700, fitPadding()); }, 650);
         refresh();
     }
 
@@ -792,7 +996,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         focusLinkSet = null;
         exitFocusBtn.style.display = 'none';
         refreshSizes();
-        if (!skipFit) Graph.zoomToFit(700, 90);
+        if (!skipFit) Graph.zoomToFit(700, fitPadding());
     }
 
     exitFocusBtn.addEventListener('click', function () { exitFocus(); });
