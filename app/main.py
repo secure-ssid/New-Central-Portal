@@ -186,6 +186,11 @@ async def auth_middleware(request: Request, call_next):
 # Static files (CSS, JS, images)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Themed 404/500 pages (JSON for HTMX/API requests)
+from errors import register_error_handlers  # noqa: E402
+
+register_error_handlers(app)
+
 # Make templates available to routes
 templates = Jinja2Templates(directory="templates")
 

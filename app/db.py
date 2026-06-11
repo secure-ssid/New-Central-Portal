@@ -5,6 +5,8 @@ lazily on first use (get_pool), so the app can start without Postgres.
 """
 import logging
 import os
+from typing import Callable
+
 from psycopg2.extras import RealDictCursor
 from psycopg2 import pool
 from contextlib import contextmanager
@@ -185,11 +187,102 @@ CREATE TABLE IF NOT EXISTS report_settings (
 """
 
 
+# ── Lightweight schema migrations ────────────────────────────────────────────
+#
+# How to add a migration:
+#   1. Append a ``(version, action)`` tuple to ``MIGRATIONS`` below. ``version``
+#      must be a new integer strictly greater than every existing entry
+#      (next free number); ``action`` is either a SQL string or a callable
+#      taking the open psycopg2 connection (``def m(conn): ...``).
+#   2. Make the action idempotent where cheap (IF NOT EXISTS / IF EXISTS) —
+#      it only ever runs once per database, but idempotence makes re-runs
+#      after a partial failure painless.
+#   3. Do NOT edit migrations that have already shipped (including the
+#      baseline ``SCHEMA_SQL``) except to add new CREATE-IF-NOT-EXISTS tables
+#      that also get their own ALTER/CREATE migration for existing databases.
+#
+# Each pending migration is applied in its own transaction together with the
+# ``schema_version`` stamp (``get_conn()`` commits on success, rolls back on
+# error), so a failed migration leaves the recorded version untouched.
+#
+# Compatibility with pre-migration deployments: if the baseline tables already
+# exist but ``schema_version`` is empty, the database is stamped at the latest
+# version WITHOUT re-running anything (the baseline used to run on every
+# startup via CREATE TABLE IF NOT EXISTS, so the schema is already in place).
+
+SCHEMA_VERSION_SQL = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    version    INTEGER PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
+MIGRATIONS: list[tuple[int, str | Callable]] = [
+    (1, SCHEMA_SQL),  # baseline schema (CREATE TABLE IF NOT EXISTS ...)
+]
+
+_STAMP_SQL = (
+    "INSERT INTO schema_version (version) VALUES (%s) "
+    "ON CONFLICT (version) DO NOTHING"
+)
+
+
+def _applied_version() -> int:
+    """Highest recorded migration version (0 if none recorded yet)."""
+    row = fetchone("SELECT MAX(version) AS version FROM schema_version")
+    v = row.get("version") if row else None
+    return int(v) if v is not None else 0
+
+
+def _baseline_exists() -> bool:
+    """True if the pre-migration baseline schema is already present."""
+    row = fetchone("SELECT to_regclass('alert_settings') AS reg")
+    return bool(row and row.get("reg"))
+
+
+def run_migrations() -> None:
+    """Bring the schema up to the latest ``MIGRATIONS`` version (see the
+    comment block above for how to add one)."""
+    versions = [v for v, _ in MIGRATIONS]
+    if versions != sorted(set(versions)) or any(v < 1 for v in versions):
+        raise ValueError("MIGRATIONS must be strictly increasing positive ints")
+
+    execute(SCHEMA_VERSION_SQL)
+    current = _applied_version()
+    latest = versions[-1] if versions else 0
+
+    if current == 0 and _baseline_exists():
+        # Existing deployment from before the migration framework: the schema
+        # is already in place — stamp every version without re-running.
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for version in versions:
+                    cur.execute(_STAMP_SQL, (version,))
+        logger.info(
+            "Existing schema detected — stamped schema_version at %s "
+            "without re-running migrations", latest,
+        )
+        return
+
+    for version, action in MIGRATIONS:
+        if version <= current:
+            continue
+        with get_conn() as conn:  # one transaction per migration + stamp
+            if callable(action):
+                action(conn)
+            else:
+                with conn.cursor() as cur:
+                    cur.execute(action)
+            with conn.cursor() as cur:
+                cur.execute(_STAMP_SQL, (version,))
+        logger.info("Applied schema migration %s", version)
+
+
 def init_db():
-    """Create schema and seed defaults. Logs and re-raises on failure so the
-    caller can decide whether startup should continue degraded."""
+    """Create/upgrade schema and seed defaults. Logs and re-raises on failure
+    so the caller can decide whether startup should continue degraded."""
     try:
-        execute(SCHEMA_SQL)
+        run_migrations()
     except Exception:
         logger.exception("Database schema initialisation failed")
         raise
