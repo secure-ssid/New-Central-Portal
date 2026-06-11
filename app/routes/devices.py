@@ -14,6 +14,53 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
+# ── Server-side pagination ────────────────────────────────────────────────────
+
+DEFAULT_PER_PAGE = 50
+MAX_PER_PAGE = 200
+
+
+def _paginate(request: Request, items: list) -> dict:
+    """Slice ``items`` for the current request's ``page``/``per_page`` params.
+
+    ``page`` is 1-based (default 1, clamped into range); ``per_page`` defaults
+    to 50 and is clamped to 1..200. Invalid/non-numeric values fall back to
+    the defaults instead of erroring. Returns the page slice plus
+    template-ready metadata, including ``base_qs`` — the current query string
+    minus ``page`` — so pagination links preserve every other parameter.
+    """
+    from urllib.parse import urlencode
+
+    try:
+        per_page = int(request.query_params.get("per_page", DEFAULT_PER_PAGE))
+    except (TypeError, ValueError):
+        per_page = DEFAULT_PER_PAGE
+    per_page = max(1, min(MAX_PER_PAGE, per_page))
+
+    try:
+        page = int(request.query_params.get("page", 1))
+    except (TypeError, ValueError):
+        page = 1
+
+    total = len(items)
+    total_pages = max(1, -(-total // per_page))  # ceil div, min 1
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+
+    base_qs = urlencode(
+        [(k, v) for k, v in request.query_params.multi_items() if k != "page"]
+    )
+    return {
+        "items": items[start:start + per_page],
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "base_qs": base_qs,
+    }
+
 
 def _normalize_ports(raw_ports) -> list[dict]:
     """Normalize raw Central switch-port dicts into a stable contract.
@@ -108,10 +155,23 @@ async def list_devices(request: Request):
     if isinstance(devices, Exception): devices = []
     if isinstance(groups, Exception): groups = []
     if isinstance(sites, Exception): sites = []
+    pg = _paginate(request, devices)  # slice after fetch/filter logic
     return templates.TemplateResponse(
         request,
         "devices/list.html",
-        {"devices": devices, "groups": groups, "sites": sites, "active": "devices"},
+        {
+            "devices": pg["items"],
+            "groups": groups,
+            "sites": sites,
+            "active": "devices",
+            "page": pg["page"],
+            "per_page": pg["per_page"],
+            "total": pg["total"],
+            "total_pages": pg["total_pages"],
+            "has_prev": pg["has_prev"],
+            "has_next": pg["has_next"],
+            "base_qs": pg["base_qs"],
+        },
     )
 
 
