@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Device-down alert engine
     device_check_interval_seconds: int = 60
     device_fetch_limit: int = 1000
+    # Session authentication (empty portal_password = auth disabled)
+    portal_password: str = ""
+    session_secret: str = ""
+    session_max_age_hours: int = 24
 
     class Config:
         env_file = ".env"
@@ -63,6 +67,26 @@ def validate_settings() -> list[str]:
             "DATABASE_URL not set — using built-in development default. "
             "Set DATABASE_URL explicitly for non-dev deployments."
         )
+
+    # ── Session authentication ────────────────────────────────────────────
+    if not settings.portal_password:
+        warnings.append(
+            "PORTAL_PASSWORD not set — AUTHENTICATION IS DISABLED. Anyone who "
+            "can reach this portal can view and manage devices (including "
+            "reboots). Set PORTAL_PASSWORD to enable the login page."
+        )
+    else:
+        if settings.portal_password.strip().lower() in _PLACEHOLDERS:
+            warnings.append(
+                "PORTAL_PASSWORD looks like a placeholder value — choose a "
+                "real password."
+            )
+        if not settings.session_secret:
+            warnings.append(
+                "SESSION_SECRET not set — using an ephemeral signing secret; "
+                "all login sessions will be invalidated whenever the app "
+                "restarts. Set SESSION_SECRET for persistent sessions."
+            )
 
     for msg in warnings:
         logger.warning("Config: %s", msg)

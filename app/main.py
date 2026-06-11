@@ -5,13 +5,19 @@ Main FastAPI entry point.
 import logging
 import os
 from contextlib import asynccontextmanager
+from urllib.parse import urlencode
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
+import security
+from config import settings
 from routes import home, devices, clients, sites, lab, topology
 from routes import assistant as assistant_routes
+from routes import auth as auth_routes
 from routes import notifications as notifications_routes
 from routes import search as search_routes
 
@@ -39,6 +45,20 @@ async def lifespan(app: FastAPI):
     except Exception:
         # Logged inside init_db; start degraded — /healthz will report db: fail.
         logger.error("Database init failed — continuing without DB (degraded mode)")
+
+    # Audit-log table (best-effort; never blocks startup if the DB is down).
+    try:
+        security.ensure_audit_schema()
+    except Exception:
+        logger.exception("Audit-log schema setup failed — continuing")
+
+    if settings.portal_password:
+        logger.info("Authentication ENABLED — login required at /login")
+    else:
+        logger.warning(
+            "Authentication DISABLED (PORTAL_PASSWORD empty) — the portal is "
+            "open to anyone who can reach it"
+        )
 
     # Background job scheduler (expiry check + device-down alerts + reports)
     scheduler = None
@@ -93,6 +113,76 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="New Central Portal", lifespan=lifespan)
 
+
+# ── Session auth middleware ───────────────────────────────────────────────────
+# Enforced on every request except the exempt paths below. Disabled entirely
+# (pass-through) when PORTAL_PASSWORD is empty. CSRF strategy: SameSite=Lax
+# session cookie + Origin/Referer same-host check on unsafe methods — no
+# per-form tokens needed, so existing templates/HTMX markup stay untouched.
+
+AUTH_EXEMPT_PATHS = {"/login", "/health", "/healthz", "/favicon.ico", "/auth/whoami"}
+AUTH_EXEMPT_PREFIXES = ("/static/",)
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# Noisy endpoints excluded from the audit log (bell polling / chat traffic).
+AUDIT_SKIP_PREFIXES = ("/notifications/api/", "/assistant/chat")
+
+
+def _wants_json(request: Request) -> bool:
+    """API/HTMX callers get 401 JSON instead of a login redirect."""
+    if "hx-request" in request.headers:
+        return True
+    return "application/json" in request.headers.get("accept", "").lower()
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    # Auth disabled — pass everything through (warned loudly at startup).
+    if not settings.portal_password:
+        return await call_next(request)
+
+    path = request.url.path
+    if path in AUTH_EXEMPT_PATHS or path.startswith(AUTH_EXEMPT_PREFIXES):
+        return await call_next(request)
+
+    token = request.cookies.get(security.SESSION_COOKIE)
+    if not security.verify_session_token(token):
+        if _wants_json(request):
+            return JSONResponse(
+                {"ok": False, "error": "Authentication required"},
+                status_code=401,
+                headers={"HX-Redirect": "/login"},
+            )
+        target = path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(
+            f"/login?{urlencode({'next': security.sanitize_next(target)})}",
+            status_code=303,
+        )
+
+    if request.method in UNSAFE_METHODS:
+        ok, reason = security.check_csrf(request)
+        if not ok:
+            logger.warning(
+                "CSRF rejection for %s %s from %s: %s",
+                request.method, path, security.client_ip(request), reason,
+            )
+            if _wants_json(request):
+                return JSONResponse(
+                    {"ok": False, "error": "Cross-origin request rejected"},
+                    status_code=403,
+                )
+            return JSONResponse({"detail": "Cross-origin request rejected"}, status_code=403)
+        # Audit trail for state-changing requests (best-effort, off-thread).
+        if not path.startswith(AUDIT_SKIP_PREFIXES):
+            try:
+                await run_in_threadpool(
+                    security.record_audit, request.method, path, security.client_ip(request)
+                )
+            except Exception:
+                logger.debug("Audit record failed", exc_info=True)
+
+    return await call_next(request)
+
+
 # Static files (CSS, JS, images)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -100,6 +190,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # Wire up the main sections
+app.include_router(auth_routes.router, tags=["auth"])
 app.include_router(home.router)
 app.include_router(devices.router, prefix="/devices", tags=["devices"])
 app.include_router(clients.router, prefix="/clients", tags=["clients"])
