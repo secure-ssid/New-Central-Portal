@@ -327,15 +327,23 @@ def run_expiry_check(subs: list[dict] | None = None):
 _device_state: dict[str, dict] = {}
 _state_seeded = False
 _rules_cache: list[dict] = []
+_rules_loaded = False  # True once rules have been read from the DB successfully
 _recipients_cache: list[dict] = []
+
+# Used only when the DB has *never* been reachable, so alerting still works in
+# degraded mode. Once a successful load happens (even an empty rule list, i.e.
+# alerts intentionally disabled), the cache wins.
+_FALLBACK_RULE = {"id": 0, "enabled": True, "site_filter": None, "device_type_filter": None,
+                  "offline_minutes": 5, "cooldown_minutes": 60}
 
 
 def _reset_engine_state_for_tests():
     """Test helper — clear in-memory engine state."""
-    global _state_seeded, _rules_cache, _recipients_cache
+    global _state_seeded, _rules_cache, _rules_loaded, _recipients_cache
     _device_state.clear()
     _state_seeded = False
     _rules_cache = []
+    _rules_loaded = False
     _recipients_cache = []
 
 
@@ -404,10 +412,15 @@ def _fetch_devices_sync() -> list[dict] | None:
 
 
 def _load_rules() -> list[dict]:
-    global _rules_cache
+    global _rules_cache, _rules_loaded
     try:
         _rules_cache = db.get_alert_rules(enabled_only=True)
+        _rules_loaded = True
     except Exception as e:
+        if not _rules_loaded:
+            logger.warning("Device status check: rules never loaded from DB (%s) — "
+                           "using built-in default rule (5m offline / 60m cooldown)", e)
+            return [dict(_FALLBACK_RULE)]
         logger.warning("Device status check: could not load alert rules (using %d cached): %s",
                        len(_rules_cache), e)
     return _rules_cache
