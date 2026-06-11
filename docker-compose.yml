@@ -3,40 +3,71 @@ services:
     build: ./app
     container_name: netlab-app
     environment:
-      - DATABASE_URL=postgresql://netlab:netlab@db:5432/netlab
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      # Database (points at the bundled postgres service)
+      - DATABASE_URL=postgresql://netlab:${POSTGRES_PASSWORD:-netlab}@db:5432/netlab
+      # Aruba Central (New Central) API
+      - ARUBA_CENTRAL_BASE_URL=${ARUBA_CENTRAL_BASE_URL:-}
+      - ARUBA_CENTRAL_ACCESS_TOKEN=${ARUBA_CENTRAL_ACCESS_TOKEN:-}
+      # Classic Central gateway (group/site management)
+      - CLASSIC_CENTRAL_BASE_URL=${CLASSIC_CENTRAL_BASE_URL:-}
+      - CLASSIC_CENTRAL_CLIENT_ID=${CLASSIC_CENTRAL_CLIENT_ID:-}
+      - CLASSIC_CENTRAL_CLIENT_SECRET=${CLASSIC_CENTRAL_CLIENT_SECRET:-}
+      - CLASSIC_CENTRAL_ACCESS_TOKEN=${CLASSIC_CENTRAL_ACCESS_TOKEN:-}
+      - CLASSIC_CENTRAL_REFRESH_TOKEN=${CLASSIC_CENTRAL_REFRESH_TOKEN:-}
+      # Session authentication (auth is disabled when PORTAL_PASSWORD is empty)
+      - PORTAL_PASSWORD=${PORTAL_PASSWORD:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      - SESSION_MAX_AGE_HOURS=${SESSION_MAX_AGE_HOURS:-24}
+      # LLM backends
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      # centralmcp bridge (mounted read-only below)
       - PYTHONPATH=/centralmcp
       - CREDS_PATH=/centralmcp/config/credentials.yaml
-      - QDRANT_URL=http://host.docker.internal:6333
-      - OLLAMA_URL=http://host.docker.internal:11434
-      - CENTRALMCP_GLP_V2BETA1_WRITES=1
-      - CLASSIC_CENTRAL_BASE_URL=https://internal-apigw.central.arubanetworks.com
-      - CLASSIC_CENTRAL_CLIENT_ID=8yoHqqqACss6A8Sdin9wqHvvF9zTKy54
-      - CLASSIC_CENTRAL_CLIENT_SECRET=KrCuvCZlFK4OLTVBEk4gcAWMJV9lEl7D
-      - CLASSIC_CENTRAL_ACCESS_TOKEN=hALHvyFJ25qVbKTia1J5l4TEZAitkF1j
-      - CLASSIC_CENTRAL_REFRESH_TOKEN=5bQR9BpJPhx2ZooSE1PJnQQGaRRJsEIT
+      - CENTRALMCP_GLP_V2BETA1_WRITES=${CENTRALMCP_GLP_V2BETA1_WRITES:-1}
+      # RAG backends (run on the Docker host by default)
+      - QDRANT_URL=${QDRANT_URL:-http://host.docker.internal:6333}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      # Alerting engine tuning
+      - DEVICE_CHECK_INTERVAL_SECONDS=${DEVICE_CHECK_INTERVAL_SECONDS:-60}
+      - DEVICE_FETCH_LIMIT=${DEVICE_FETCH_LIMIT:-1000}
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: unless-stopped
     volumes:
       - ./app:/app
-      - /Users/stephenchoate/Documents/Claude Projects/Active/MCP/centralmcp:/centralmcp:ro
+      - "${CENTRALMCP_PATH:-/Users/stephenchoate/Documents/Claude Projects/Active/MCP/centralmcp}:/centralmcp:ro"
     ports:
       - "8000:8000"
+    healthcheck:
+      # python:*-slim has no curl/wget — use the stdlib instead.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz', timeout=5).status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 25s
 
   db:
     image: pgvector/pgvector:pg16
     container_name: netlab-db
     environment:
       - POSTGRES_USER=netlab
-      - POSTGRES_PASSWORD=netlab
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-netlab}
       - POSTGRES_DB=netlab
     volumes:
       - db_data:/var/lib/postgresql/data
     restart: unless-stopped
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netlab -d netlab"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   caddy:
     image: caddy:2-alpine
@@ -49,7 +80,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
