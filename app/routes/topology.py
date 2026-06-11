@@ -12,10 +12,18 @@ templates = Jinja2Templates(directory="templates")
 
 @router.get("/")
 async def topology(request: Request):
-    from vendors.central_bridge import get_devices, get_switch_ports
-    from vendors.aruba_central import _norm_device
+    from vendors.aruba_central import _norm_device, aruba
 
-    raw_devices = await get_devices(limit=100)
+    get_switch_ports = None
+    try:
+        from vendors.central_bridge import get_devices, get_switch_ports
+        raw_devices = await get_devices(limit=100)
+    except Exception:
+        # centralmcp unavailable — fall back to the same mock fleet the
+        # rest of the portal uses so topology still renders (without
+        # port-derived edges; the synthetic links cover connectivity).
+        logger.warning("central_bridge unavailable for topology, using fallback devices")
+        raw_devices = await aruba.get_devices()
     devices = [_norm_device(d) for d in raw_devices]
 
     # Keep every device that has a serial; offline devices are rendered
@@ -48,6 +56,8 @@ async def topology(request: Request):
         d for d in devices
         if d["type"] == "switch" and (d.get("status") or "").lower() == "online"
     ]
+    if get_switch_ports is None:
+        switches = []
     port_results = await asyncio.gather(
         *[get_switch_ports(sw["serial"]) for sw in switches],
         return_exceptions=True,
