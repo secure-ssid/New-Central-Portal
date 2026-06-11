@@ -129,16 +129,13 @@ def test_search_api_route_wired(client, mock_central):
     assert "results" in r.json()
 
 
-@pytest.mark.xfail(
-    reason="KNOWN BUG in app/main.py lifespan(): the late "
-           "'from config import settings' (inside the scheduler block, ~line 79) "
-           "makes 'settings' function-local, so 'settings.portal_password' at "
-           "~line 55 raises UnboundLocalError and startup ALWAYS fails. "
-           "Remove this xfail (and the F823 ignore in ruff.toml) once fixed.",
-    strict=False,
-)
 def test_lifespan_starts_degraded_with_dead_db(dead_db, monkeypatch):
-    """App startup must survive a dead database (degraded mode by design)."""
+    """App startup must survive a dead database (degraded mode by design).
+
+    Regression guard: a function-local ``from config import settings`` inside
+    lifespan() once shadowed the module import and crashed every startup with
+    UnboundLocalError before this test existed.
+    """
     import main
     from starlette.testclient import TestClient
     from config import settings
