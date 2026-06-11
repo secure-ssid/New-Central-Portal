@@ -12,9 +12,15 @@
         <span class="text-gray-300">{{ device.name }}</span>
     </div>
 
+    {% set _dtype = (device.type | default('', true) | lower) %}
+    {% set _dicon = 'switch' if 'switch' in _dtype
+        else ('gateway' if 'gateway' in _dtype
+        else ('ap' if (_dtype == 'ap' or 'access' in _dtype)
+        else 'device')) %}
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
             <div class="flex items-center gap-3 mb-2">
+                <img src="/static/icons/{{ _dicon }}.svg" alt="" aria-hidden="true" width="30" height="30" class="flex-shrink-0">
                 <span class="relative flex h-3 w-3 flex-shrink-0">
                     {% if device.status == 'online' %}
                     <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-40"></span>

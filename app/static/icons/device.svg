@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-label="Network device">
+  <!-- generic chassis -->
+  <rect x="34" y="88" width="188" height="96" rx="14" fill="#161b27" stroke="#e2e8f0" stroke-width="12"/>
+  <!-- vents -->
+  <path d="M58 122h106M58 150h106" stroke="#64748b" stroke-width="9" stroke-linecap="round"/>
+  <!-- LED -->
+  <circle cx="192" cy="136" r="9" fill="#64748b"/>
+  <!-- feet -->
+  <path d="M96 186v12M160 186v12" stroke="#e2e8f0" stroke-width="12" stroke-linecap="round"/>
+</svg>
