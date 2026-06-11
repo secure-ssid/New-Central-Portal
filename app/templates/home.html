@@ -2,123 +2,356 @@
 {% block title %}Dashboard - New Central Portal{% endblock %}
 {% block content %}
 
+<style>
+  /* Dashboard charts — hand-rolled SVG donut + segmented bars (no chart lib) */
+  @keyframes donut-in { from { stroke-dasharray: 0 100; } }
+  .donut-seg-anim { animation: donut-in .9s ease-out both; }
+  .mix-bar { display: flex; width: 100%; height: 10px; border-radius: 9999px; overflow: hidden; background: #1e2535; }
+  .mix-seg { height: 100%; min-width: 2px; }
+</style>
+
 <!-- Page header -->
-<div class="page-header flex items-end justify-between">
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
-        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Overview</p>
-        <h1 class="text-2xl font-bold text-white">Network Dashboard</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Real-time view of your Aruba Central infrastructure</p>
+        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Overview</p>
+        <h1 class="text-2xl font-semibold text-white tracking-tight">Network Dashboard</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Real-time view of your Aruba Central infrastructure</p>
     </div>
-    <p class="text-xs text-gray-600">Updated {{ updated }}</p>
+    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-surface-700 bg-surface-800/60 text-[11px]"
+          title="Auto-refreshes every 30 seconds while this tab is visible">
+        <span class="relative flex w-2 h-2 flex-shrink-0" aria-hidden="true">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-40"></span>
+            <span class="relative inline-flex rounded-full w-2 h-2 bg-green-400"></span>
+        </span>
+        <span class="text-green-400 font-semibold tracking-widest uppercase">Live</span>
+        <span id="dash-updated-label" class="text-slate-500">as of {{ updated }}</span>
+    </span>
 </div>
+
+<!-- Live region: HTMX re-fetches this fragment every 30s while the tab is visible.
+     The wrapper (with the polling attributes) is never swapped — only its contents. -->
+<div id="dashboard-live"
+     hx-get="/?partial=1"
+     hx-trigger="every 30s [document.visibilityState=='visible']"
+     hx-swap="innerHTML">
+{% block dashboard_live %}
 
 <!-- Row 1: primary stats -->
-<div class="grid grid-cols-4 gap-4 mb-4">
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
     <div class="stat-card">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Total Devices</p>
+        <div class="flex items-center justify-between mb-3">
+            <p class="section-label">Total Devices</p>
+            <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#fb923c" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+        </div>
         <p class="text-3xl font-bold text-brand-500">{{ stats.total_devices }}</p>
-        <p class="text-xs text-gray-600 mt-1">Managed devices</p>
+        <p class="text-xs text-slate-600 mt-1">{% if stats.total_devices %}{{ stats.switches }} SW &middot; {{ stats.aps }} AP &middot; {{ stats.gateways }} GW{% if stats.other_devices %} &middot; {{ stats.other_devices }} other{% endif %}{% else %}Managed devices{% endif %}</p>
     </div>
     <div class="stat-card">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Online</p>
+        <div class="flex items-center justify-between mb-3">
+            <p class="section-label">Online</p>
+            <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#4ade80" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        </div>
         <p class="text-3xl font-bold text-green-400">{{ stats.online_devices }}</p>
-        <p class="text-xs text-gray-600 mt-1">{{ stats.online_pct }}% of fleet</p>
+        <p class="text-xs mt-1 {% if stats.online_pct >= 90 %}text-green-500/70{% else %}text-slate-600{% endif %}">{{ stats.online_pct }}% of fleet</p>
     </div>
     <div class="stat-card">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Offline</p>
-        <p class="text-3xl font-bold {% if stats.offline_devices > 0 %}text-red-400{% else %}text-gray-500{% endif %}">{{ stats.offline_devices }}</p>
-        <p class="text-xs text-gray-600 mt-1">Require attention</p>
+        <div class="flex items-center justify-between mb-3">
+            <p class="section-label">Offline</p>
+            <svg aria-hidden="true" width="15" height="15" fill="none" stroke="{% if stats.offline_devices > 0 %}#f87171{% else %}#475569{% endif %}" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        </div>
+        <p class="text-3xl font-bold {% if stats.offline_devices > 0 %}text-red-400{% else %}text-slate-500{% endif %}">{{ stats.offline_devices }}</p>
+        <p class="text-xs text-slate-600 mt-1">{% if stats.offline_devices > 0 %}Require attention{% else %}All systems healthy{% endif %}</p>
     </div>
     <div class="stat-card">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Active Clients</p>
+        <div class="flex items-center justify-between mb-3">
+            <p class="section-label">Active Clients</p>
+            <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#60a5fa" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path stroke-linecap="round" d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
         <p class="text-3xl font-bold text-blue-400">{{ stats.total_clients }}</p>
-        <p class="text-xs text-gray-600 mt-1">Connected sessions</p>
+        <p class="text-xs text-slate-600 mt-1">{% if stats.total_clients %}{{ stats.wireless_clients }} wireless &middot; {{ stats.wired_clients }} wired{% else %}Connected sessions{% endif %}</p>
     </div>
 </div>
 
-<!-- Row 2: device type breakdown -->
-<div class="grid grid-cols-4 gap-4 mb-6">
-    <div class="stat-card flex items-center gap-4">
-        <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <svg width="16" height="16" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="4" rx="1"/><rect x="2" y="14" width="20" height="4" rx="1"/></svg>
-        </div>
-        <div>
-            <p class="text-xs text-gray-500 mb-0.5">Switches</p>
-            <p class="text-2xl font-bold text-white">{{ stats.switches }}</p>
-        </div>
-    </div>
-    <div class="stat-card flex items-center gap-4">
-        <div style="width:36px;height:36px;border-radius:8px;background:rgba(168,85,247,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <svg width="16" height="16" fill="none" stroke="#c084fc" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
-        </div>
-        <div>
-            <p class="text-xs text-gray-500 mb-0.5">Access Points</p>
-            <p class="text-2xl font-bold text-white">{{ stats.aps }}</p>
-        </div>
-    </div>
-    <div class="stat-card flex items-center gap-4">
-        <div style="width:36px;height:36px;border-radius:8px;background:rgba(245,158,11,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <svg width="16" height="16" fill="none" stroke="#fbbf24" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-        </div>
-        <div>
-            <p class="text-xs text-gray-500 mb-0.5">Gateways</p>
-            <p class="text-2xl font-bold text-white">{{ stats.gateways }}</p>
-        </div>
-    </div>
-    <div class="stat-card flex items-center gap-4">
-        <div style="width:36px;height:36px;border-radius:8px;background:rgba(20,184,166,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <svg width="16" height="16" fill="none" stroke="#2dd4bf" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
-        </div>
-        <div>
-            <p class="text-xs text-gray-500 mb-0.5">Sites</p>
-            <p class="text-2xl font-bold text-white">{{ stats.sites }}</p>
-        </div>
-    </div>
-</div>
+<!-- Row 2: charts -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
 
-<!-- Recent devices table -->
-{% if devices %}
-<div class="card" style="padding:0;overflow:hidden;">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
-        <p class="text-sm font-semibold text-white">Recent Devices</p>
-        <a href="/devices/" class="text-xs text-brand-500 hover:text-brand-600">View all →</a>
+    <!-- Fleet health donut -->
+    <div class="card">
+        <p class="section-label mb-4">Fleet Health</p>
+        {% if stats.total_devices %}
+        <div class="flex items-center gap-5">
+            <div class="relative w-28 h-28 flex-shrink-0">
+                <svg viewBox="0 0 36 36" class="w-full h-full" role="img"
+                     aria-label="{{ stats.online_pct }}% of devices online: {{ stats.online_devices }} online, {{ stats.offline_devices }} offline">
+                    <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#1e2535" stroke-width="3.2"></circle>
+                    {% for seg in donut_segments %}
+                    <circle class="donut-seg{% if not is_partial %} donut-seg-anim{% endif %}"
+                            cx="18" cy="18" r="15.9155" fill="none"
+                            stroke="{{ seg.color }}" stroke-width="3.2" stroke-linecap="butt"
+                            stroke-dasharray="{{ seg.dash }}" stroke-dashoffset="{{ seg.offset }}"></circle>
+                    {% endfor %}
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <p class="text-xl font-bold text-white leading-none">{{ stats.online_pct }}%</p>
+                    <p class="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">online</p>
+                </div>
+            </div>
+            <ul class="flex-1 min-w-0 space-y-2 text-sm">
+                <li class="flex items-center justify-between gap-3">
+                    <span class="flex items-center gap-2 text-slate-400"><span class="w-2 h-2 rounded-full bg-green-400 inline-block flex-shrink-0"></span>Online</span>
+                    <span class="font-semibold text-slate-200">{{ stats.online_devices }}</span>
+                </li>
+                <li class="flex items-center justify-between gap-3">
+                    <span class="flex items-center gap-2 text-slate-400"><span class="w-2 h-2 rounded-full bg-red-400 inline-block flex-shrink-0"></span>Offline</span>
+                    <span class="font-semibold text-slate-200">{{ stats.offline_devices }}</span>
+                </li>
+                {% if stats.unknown_devices %}
+                <li class="flex items-center justify-between gap-3">
+                    <span class="flex items-center gap-2 text-slate-400"><span class="w-2 h-2 rounded-full bg-slate-500 inline-block flex-shrink-0"></span>Unknown</span>
+                    <span class="font-semibold text-slate-200">{{ stats.unknown_devices }}</span>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+        {% else %}
+        <div class="flex items-center justify-center h-28 text-sm text-slate-600">No devices to chart</div>
+        {% endif %}
     </div>
-    <table style="width:100%;border-collapse:collapse;">
-        <thead>
-            <tr style="background:#0d1117;">
-                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #1e2535;">Name</th>
-                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #1e2535;">Model</th>
-                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #1e2535;">IP Address</th>
-                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #1e2535;">Site</th>
-                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #1e2535;">Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for device in devices %}
-            <tr class="tbl-row" onclick="window.location='/devices/{{ device.serial }}'">
-                <td style="padding:12px 20px;">
-                    <p style="font-weight:500;color:#f1f5f9;font-size:.875rem;">{{ device.name }}</p>
-                    <p style="font-size:.7rem;color:#6b7280;text-transform:uppercase;margin-top:1px;">{{ device.type }}</p>
-                </td>
-                <td style="padding:12px 20px;font-size:.875rem;color:#94a3b8;">{{ device.model }}</td>
-                <td style="padding:12px 20px;font-family:monospace;font-size:.8rem;color:#94a3b8;">{{ device.ip }}</td>
-                <td style="padding:12px 20px;font-size:.875rem;color:#94a3b8;">{{ device.site }}</td>
-                <td style="padding:12px 20px;">
-                    {% if device.status == 'online' %}
-                    <span class="status-badge-online">
-                        <span style="width:5px;height:5px;border-radius:50%;background:#4ade80;display:inline-block;"></span>Online
-                    </span>
-                    {% else %}
-                    <span class="status-badge-offline">
-                        <span style="width:5px;height:5px;border-radius:50%;background:#f87171;display:inline-block;"></span>Offline
-                    </span>
-                    {% endif %}
-                </td>
-            </tr>
+
+    <!-- Device mix segmented bar -->
+    <div class="card">
+        <p class="section-label mb-4">Device Mix</p>
+        {% if stats.total_devices %}
+        <div class="mix-bar mb-4" role="img"
+             aria-label="Device mix: {% for seg in device_mix %}{{ seg.count }} {{ seg.label | lower }}{% if not loop.last %}, {% endif %}{% endfor %}">
+            {% for seg in device_mix if seg.count > 0 %}
+            <div class="mix-seg" style="width:{{ seg.pct }}%;background:{{ seg.color }};"></div>
             {% endfor %}
-        </tbody>
-    </table>
+        </div>
+        <ul class="space-y-2.5 text-sm">
+            {% for seg in device_mix %}
+            {% set _sicon = 'switch' if seg.label == 'Switches'
+                else ('ap' if seg.label == 'Access Points'
+                else ('gateway' if seg.label == 'Gateways'
+                else 'device')) %}
+            <li class="flex items-center justify-between gap-3">
+                <span class="flex items-center gap-2 text-slate-400 min-w-0">
+                    <img src="/static/icons/{{ _sicon }}.svg" alt="" aria-hidden="true" width="16" height="16" class="flex-shrink-0">
+                    <span class="truncate">{{ seg.label }}</span>
+                </span>
+                <span class="flex items-baseline gap-2 flex-shrink-0">
+                    <span class="font-semibold text-slate-200">{{ seg.count }}</span>
+                    <span class="text-[11px] text-slate-600 w-9 text-right">{{ seg.share }}%</span>
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="flex items-center justify-center h-28 text-sm text-slate-600">No devices to chart</div>
+        {% endif %}
+    </div>
+
+    <!-- Clients summary -->
+    <div class="card md:col-span-2 xl:col-span-1">
+        <div class="flex items-center justify-between mb-4">
+            <p class="section-label">Clients</p>
+            <a href="/clients/" class="text-xs text-brand-500 hover:text-brand-400 transition-colors">View all &rarr;</a>
+        </div>
+        <p class="text-3xl font-bold text-white leading-none">{{ stats.total_clients }}</p>
+        <p class="text-xs text-slate-600 mt-1 mb-5">Connected sessions</p>
+        {% if stats.total_clients %}
+        <div class="mix-bar mb-4" role="img"
+             aria-label="Clients: {{ stats.wireless_clients }} wireless, {{ stats.wired_clients }} wired">
+            {% for seg in client_mix if seg.count > 0 %}
+            <div class="mix-seg" style="width:{{ seg.pct }}%;background:{{ seg.color }};"></div>
+            {% endfor %}
+        </div>
+        <ul class="space-y-2.5 text-sm">
+            <li class="flex items-center justify-between gap-3">
+                <span class="flex items-center gap-2 text-slate-400"><span class="w-2 h-2 rounded-full bg-blue-400 inline-block flex-shrink-0"></span>Wireless</span>
+                <span class="flex items-baseline gap-2">
+                    <span class="font-semibold text-slate-200">{{ stats.wireless_clients }}</span>
+                    <span class="text-[11px] text-slate-600 w-9 text-right">{{ stats.wireless_pct }}%</span>
+                </span>
+            </li>
+            <li class="flex items-center justify-between gap-3">
+                <span class="flex items-center gap-2 text-slate-400"><span class="w-2 h-2 rounded-full bg-teal-400 inline-block flex-shrink-0"></span>Wired</span>
+                <span class="flex items-baseline gap-2">
+                    <span class="font-semibold text-slate-200">{{ stats.wired_clients }}</span>
+                    <span class="text-[11px] text-slate-600 w-9 text-right">{{ stats.wired_pct }}%</span>
+                </span>
+            </li>
+        </ul>
+        {% else %}
+        <p class="text-sm text-slate-600">No active clients right now.</p>
+        {% endif %}
+    </div>
 </div>
-{% endif %}
+
+<!-- Row 3: device type breakdown -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card flex items-center gap-4">
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(99,102,241,.12);">
+            <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="4" rx="1"/><rect x="2" y="14" width="20" height="4" rx="1"/></svg>
+        </div>
+        <div class="min-w-0">
+            <p class="text-xs text-slate-500 mb-0.5">Switches</p>
+            <p class="text-2xl font-bold text-white leading-tight">{{ stats.switches }}</p>
+            <p class="text-[10px] text-slate-600">{{ stats.switch_pct }}% of fleet</p>
+        </div>
+    </div>
+    <div class="stat-card flex items-center gap-4">
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(168,85,247,.12);">
+            <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#c084fc" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+        </div>
+        <div class="min-w-0">
+            <p class="text-xs text-slate-500 mb-0.5">Access Points</p>
+            <p class="text-2xl font-bold text-white leading-tight">{{ stats.aps }}</p>
+            <p class="text-[10px] text-slate-600">{{ stats.ap_pct }}% of fleet</p>
+        </div>
+    </div>
+    <div class="stat-card flex items-center gap-4">
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(245,158,11,.12);">
+            <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#fbbf24" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <div class="min-w-0">
+            <p class="text-xs text-slate-500 mb-0.5">Gateways</p>
+            <p class="text-2xl font-bold text-white leading-tight">{{ stats.gateways }}</p>
+            <p class="text-[10px] text-slate-600">{{ stats.gateway_pct }}% of fleet</p>
+        </div>
+    </div>
+    <div class="stat-card flex items-center gap-4">
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(20,184,166,.12);">
+            <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#2dd4bf" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        </div>
+        <div class="min-w-0">
+            <p class="text-xs text-slate-500 mb-0.5">Sites</p>
+            <p class="text-2xl font-bold text-white leading-tight">{{ stats.sites }}</p>
+            <p class="text-[10px] text-slate-600">Configured locations</p>
+        </div>
+    </div>
+</div>
+
+<!-- Row 4: recent devices + events feed -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+
+    <!-- Recent devices table -->
+    <div class="card xl:col-span-2" style="padding:0;overflow:hidden;">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
+            <p class="text-sm font-semibold text-white">Recent Devices</p>
+            <a href="/devices/" class="text-xs text-brand-500 hover:text-brand-400 transition-colors">View all &rarr;</a>
+        </div>
+        {% if devices %}
+        <div class="overflow-x-auto">
+        <table class="tbl" style="min-width:640px;">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Model</th>
+                    <th scope="col">IP Address</th>
+                    <th scope="col">Site</th>
+                    <th scope="col">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for device in devices %}
+                {% set _dtype = (device.type | default('', true) | lower) %}
+                {% set _dicon = 'switch' if 'switch' in _dtype
+                    else ('gateway' if 'gateway' in _dtype
+                    else ('ap' if (_dtype == 'ap' or 'access' in _dtype)
+                    else 'device')) %}
+                <tr class="tbl-row" onclick="window.location='/devices/{{ device.serial }}'">
+                    <td>
+                        <div class="flex items-center gap-2.5">
+                            <img src="/static/icons/{{ _dicon }}.svg" alt="" aria-hidden="true" width="18" height="18" class="flex-shrink-0" loading="lazy">
+                            <div class="min-w-0">
+                                <p class="font-medium text-slate-100 text-sm">{{ device.name | default('—', true) }}</p>
+                                <p class="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5">{{ device.type | default('', true) | replace('_', ' ') }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{ device.model | default('—', true) }}</td>
+                    <td class="font-mono text-xs text-slate-400">{{ device.ip | default('—', true) }}</td>
+                    <td>{{ device.site | default('—', true) }}</td>
+                    <td>
+                        {% if device.status == 'online' %}
+                        <span class="status-badge-online">
+                            <span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span>Online
+                        </span>
+                        {% else %}
+                        <span class="status-badge-offline">
+                            <span class="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span>Offline
+                        </span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <svg aria-hidden="true" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+            <p>No devices found</p>
+            <p class="text-xs text-slate-600">Devices will appear here once Aruba Central is reachable.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Recent events feed -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
+            <p class="text-sm font-semibold text-white">Recent Events</p>
+            <span class="text-[10px] text-slate-600 uppercase tracking-wider">last 24h</span>
+        </div>
+        {% if events %}
+        <ul class="divide-y divide-surface-700/60">
+            {% for ev in events %}
+            <li class="px-5 py-3 flex items-start gap-3">
+                <span class="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 {% if ev.category == 'Client' %}bg-blue-400{% else %}bg-brand-500{% endif %}" aria-hidden="true"></span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-[0.8rem] text-slate-200 leading-snug">{{ ev.text }}</p>
+                    {% if ev.detail %}<p class="text-[0.7rem] text-slate-500 mt-0.5 truncate">{{ ev.detail }}</p>{% endif %}
+                    <p class="text-[0.68rem] text-slate-600 mt-1">
+                        <a href="/devices/{{ ev.device_serial }}" class="text-brand-500/90 hover:text-brand-400 transition-colors">{{ ev.device_name }}</a>{% if ev.ago %} &middot; {{ ev.ago }}{% endif %}{% if ev.category %} &middot; <span class="uppercase tracking-wider text-[0.6rem]">{{ ev.category }}</span>{% endif %}
+                    </p>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="empty-state">
+            <svg aria-hidden="true" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            <p>No recent events</p>
+            <p class="text-xs text-slate-600">Device events from the last 24 hours will appear here.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+</div>
+
+<script>
+  (function () {
+    var label = document.getElementById('dash-updated-label');
+    if (!label) return;
+    var lastUpdated = Date.now();
+    function render() {
+      var s = Math.max(0, Math.floor((Date.now() - lastUpdated) / 1000));
+      label.textContent = s < 10 ? 'updated just now'
+        : s < 90 ? 'updated ' + s + 's ago'
+        : 'updated ' + Math.floor(s / 60) + 'm ago';
+    }
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+      if (evt.target && evt.target.id === 'dashboard-live') {
+        lastUpdated = Date.now();
+        render();
+      }
+    });
+    setInterval(render, 1000);
+    render();
+  })();
+</script>
 
 {% endblock %}

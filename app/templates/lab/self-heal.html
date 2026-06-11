@@ -1,20 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Self-Healing Sim - Lab - New Central Portal{% endblock %}
 {% block content %}
-<div class="mb-6">
-    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
-        <a href="/" class="hover:text-brand-500">Home</a>
-        <span>/</span>
-        <a href="/lab/" class="hover:text-brand-500">Lab</a>
-        <span>/</span>
-        <span class="text-gray-300">Self-Healing Sim</span>
+<div class="page-header">
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <a href="/lab/" class="hover:text-brand-400 transition-colors">Lab</a>
+        <span class="text-slate-700">/</span>
+        <span class="text-slate-400">Self-Healing Sim</span>
     </div>
     <div class="flex items-start justify-between">
         <div>
-            <h1 class="text-3xl font-bold text-white mb-2">Self-Healing Simulation</h1>
-            <p class="text-gray-400">Auto-remediation engine in dry-run mode (no actual changes)</p>
+            <h1 class="text-2xl font-bold text-white">Self-Healing Simulation</h1>
+            <p class="text-sm text-slate-500 mt-0.5">Auto-remediation engine in dry-run mode (no actual changes)</p>
         </div>
-        <span class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-medium">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400" style="box-shadow:inset 0 0 0 1px rgba(245,158,11,.3);">
             DRY-RUN MODE
         </span>
     </div>
@@ -23,75 +21,71 @@
 <!-- Issues detected -->
 <div class="card mb-6">
     <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-white">Detected Issues</h2>
-        <span class="text-sm text-gray-500">{{ issues|length }} active</span>
+        <p class="section-label">Detected Issues</p>
+        <span class="text-sm text-slate-500">{{ issues | default([]) | length }} active</span>
     </div>
 
+    {% if issues %}
     <div class="space-y-3">
         {% for issue in issues %}
-        <div class="p-4 bg-surface-900 rounded-lg border border-surface-700">
+        <div class="p-4 bg-surface-900 rounded-xl border border-surface-700">
             <div class="flex items-start justify-between mb-2">
                 <div>
                     <div class="flex items-center gap-2 mb-1">
-                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                        <span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
                         <h3 class="text-sm font-semibold text-white">{{ issue.device }}</h3>
                     </div>
-                    <p class="text-sm text-gray-400">{{ issue.issue }}</p>
+                    <p class="text-sm text-slate-400">{{ issue.issue }}</p>
                 </div>
-                <span class="text-xs px-2 py-1 rounded
-                    {% if issue.status == 'detected' %}bg-red-500/20 text-red-400 border border-red-500/30
-                    {% elif issue.status == 'remediating' %}bg-amber-500/20 text-amber-400 border border-amber-500/30
-                    {% else %}bg-green-500/20 text-green-400 border border-green-500/30{% endif %}">
-                    {{ issue.status|upper }}
-                </span>
+                {% if issue.status == 'detected' %}
+                <span class="status-badge-offline">DETECTED</span>
+                {% elif issue.status == 'remediating' %}
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400" style="box-shadow:inset 0 0 0 1px rgba(245,158,11,.3);">REMEDIATING</span>
+                {% else %}
+                <span class="status-badge-online">{{ (issue.status | default('')) | upper }}</span>
+                {% endif %}
             </div>
 
-            <div class="mt-3 pt-3 border-t border-surface-700/50 flex items-center justify-between">
+            <div class="mt-3 pt-3 border-t border-surface-700/50 flex items-center justify-between gap-4">
                 <div>
-                    <p class="text-xs text-gray-500 mb-1">Recommended action:</p>
-                    <p class="text-sm text-brand-500 font-medium">{{ issue.remediation }}</p>
+                    <p class="text-xs text-slate-500 mb-1">Recommended action:</p>
+                    <p class="text-sm text-brand-400 font-medium">{{ issue.remediation }}</p>
                 </div>
                 <button hx-post="/lab/self-heal/{{ issue.id }}/remediate"
                         hx-target="this"
                         hx-swap="outerHTML"
-                        class="px-4 py-2 bg-brand-500 text-white text-sm rounded-lg hover:bg-brand-600 transition-colors">
-                    Simulate Fix
+                        hx-disabled-elt="this"
+                        class="btn-primary">
+                    <span>Simulate Fix</span>
+                    <span class="htmx-indicator"><span class="spinner"></span></span>
                 </button>
             </div>
         </div>
         {% endfor %}
     </div>
+    {% else %}
+    <div class="empty-state">
+        <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p>No issues detected. The network is healthy.</p>
+    </div>
+    {% endif %}
 </div>
 
 <!-- How it works -->
+<p class="section-label mb-3">Pipeline</p>
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    {% for num, name, desc in [
+        ('1', 'Detect', 'Monitor metrics and logs for anomalies'),
+        ('2', 'Diagnose', 'Classify issue and lookup known remediations'),
+        ('3', 'Plan', 'Generate remediation steps with safety checks'),
+        ('4', 'Execute', 'Apply fix and verify resolution')] %}
     <div class="card">
         <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
-            <span class="text-amber-500 font-bold">1</span>
+            <span class="text-amber-500 font-bold">{{ num }}</span>
         </div>
-        <h3 class="text-sm font-semibold text-white mb-1">Detect</h3>
-        <p class="text-xs text-gray-400">Monitor metrics and logs for anomalies</p>
+        <h3 class="text-sm font-semibold text-white mb-1">{{ name }}</h3>
+        <p class="text-xs text-slate-400">{{ desc }}</p>
     </div>
-    <div class="card">
-        <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
-            <span class="text-amber-500 font-bold">2</span>
-        </div>
-        <h3 class="text-sm font-semibold text-white mb-1">Diagnose</h3>
-        <p class="text-xs text-gray-400">Classify issue and lookup known remediations</p>
-    </div>
-    <div class="card">
-        <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
-            <span class="text-amber-500 font-bold">3</span>
-        </div>
-        <h3 class="text-sm font-semibold text-white mb-1">Plan</h3>
-        <p class="text-xs text-gray-400">Generate remediation steps with safety checks</p>
-    </div>
-    <div class="card">
-        <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
-            <span class="text-amber-500 font-bold">4</span>
-        </div>
-        <h3 class="text-sm font-semibold text-white mb-1">Execute</h3>
-        <p class="text-xs text-gray-400">Apply fix and verify resolution</p>
-    </div>
+    {% endfor %}
 </div>
 {% endblock %}

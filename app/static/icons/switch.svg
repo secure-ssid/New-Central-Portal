@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-label="Network switch">
+  <!-- 1U rack chassis -->
+  <rect x="16" y="84" width="224" height="88" rx="14" fill="#161b27" stroke="#e2e8f0" stroke-width="12"/>
+  <!-- port row: lit / lit / dark / lit -->
+  <rect x="40" y="114" width="26" height="26" rx="5" fill="#818cf8"/>
+  <rect x="76" y="114" width="26" height="26" rx="5" fill="#818cf8"/>
+  <rect x="112" y="114" width="26" height="26" rx="5" stroke="#e2e8f0" stroke-width="7" opacity=".5"/>
+  <rect x="148" y="114" width="26" height="26" rx="5" fill="#818cf8"/>
+  <!-- status LEDs -->
+  <circle cx="207" cy="112" r="9" fill="#818cf8"/>
+  <circle cx="207" cy="144" r="9" fill="#e2e8f0" opacity=".45"/>
+  <!-- rack feet -->
+  <path d="M38 174v14M218 174v14" stroke="#e2e8f0" stroke-width="12" stroke-linecap="round"/>
+</svg>

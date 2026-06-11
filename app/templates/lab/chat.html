@@ -1,46 +1,44 @@
 {% extends "base.html" %}
 {% block title %}Network Chatbot - Lab - New Central Portal{% endblock %}
 {% block content %}
-<div class="mb-6">
-    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
-        <a href="/" class="hover:text-brand-500">Home</a>
-        <span>/</span>
-        <a href="/lab/" class="hover:text-brand-500">Lab</a>
-        <span>/</span>
-        <span class="text-gray-300">Network Chatbot</span>
+<div class="page-header">
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <a href="/lab/" class="hover:text-brand-400 transition-colors">Lab</a>
+        <span class="text-slate-700">/</span>
+        <span class="text-slate-400">Network Chatbot</span>
     </div>
-    <h1 class="text-3xl font-bold text-white mb-2">Network Chatbot</h1>
-    <p class="text-gray-400">Ask GPT-4o questions about your network infrastructure (via GitHub Copilot)</p>
+    <h1 class="text-2xl font-bold text-white">Network Chatbot</h1>
+    <p class="text-sm text-slate-500 mt-0.5">Ask GPT-4o questions about your network infrastructure (via GitHub Models) — RAG + live MCP tools</p>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Chat interface -->
     <div class="lg:col-span-2">
-        <div class="card">
+        <div class="card flex flex-col" style="padding:0;overflow:hidden;">
             <!-- Chat messages area -->
-            <div id="chat-messages" class="space-y-4 mb-6 min-h-[400px] max-h-[600px] overflow-y-auto">
-                <div class="p-4 bg-surface-900 rounded-lg border border-surface-700">
-                    <p class="text-sm text-gray-400">
-                        👋 Hi! I'm your network assistant (GPT-4o via GitHub Models). Ask me anything about your infrastructure, 
-                        best practices, troubleshooting, or configuration.
-                    </p>
+            <div id="chat-messages" class="space-y-4 p-5 min-h-[420px] max-h-[600px] overflow-y-auto">
+                <div class="flex justify-start">
+                    <div class="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-800 border border-surface-700 px-4 py-3">
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Assistant</p>
+                        <p class="text-sm text-slate-300">
+                            👋 Hi! I'm your network assistant (GPT-4o via GitHub Models). Ask me anything about your infrastructure,
+                            best practices, troubleshooting, or configuration.
+                        </p>
+                    </div>
                 </div>
             </div>
 
             <!-- Input form -->
             <form id="chat-form" hx-post="/lab/chat" hx-target="#chat-messages" hx-swap="beforeend"
-                  class="flex gap-2" hx-indicator="#chat-spinner" hx-disabled-elt="#chat-send"
-                  hx-on::after-request="document.getElementById('chat-input').value = ''">
-                <input id="chat-input" type="text" name="message" required
+                  class="flex gap-2 p-4 border-t border-surface-700 bg-surface-900/60"
+                  hx-indicator="#chat-spinner" hx-disabled-elt="#chat-send, #chat-input"
+                  hx-on::after-request="if(event.detail.successful){ this.reset(); } document.getElementById('chat-input').focus();">
+                <input id="chat-input" type="text" name="message" required autocomplete="off"
                        placeholder="Ask about your network..."
-                       class="flex-1 px-4 py-2 bg-surface-900 border border-surface-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-brand-500">
-                <button type="submit" id="chat-send"
-                        class="px-6 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center gap-2">
+                       class="input flex-1">
+                <button type="submit" id="chat-send" class="btn-primary px-6">
                     <span>Send</span>
-                    <svg id="chat-spinner" class="htmx-indicator animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                    </svg>
+                    <span id="chat-spinner" class="htmx-indicator"><span class="spinner"></span></span>
                 </button>
             </form>
         </div>
@@ -49,8 +47,8 @@
     <!-- Info sidebar -->
     <div class="space-y-4">
         <div class="card">
-            <h3 class="text-sm font-semibold text-white mb-3">💡 Try asking</h3>
-            <div class="space-y-2 text-sm text-gray-400">
+            <p class="section-label mb-3">Try asking</p>
+            <div class="space-y-2 text-sm text-slate-400">
                 <p>"List all my sites"</p>
                 <p>"How many devices are online?"</p>
                 <p>"Show me active alerts"</p>
@@ -60,24 +58,61 @@
         </div>
 
         <div class="card">
-            <h3 class="text-sm font-semibold text-white mb-2">🔧 Features</h3>
-            <ul class="text-xs text-gray-400 space-y-1">
-                <li>• GPT-4o via GitHub Models</li>
-                <li>• RAG: auto-searches Aruba docs</li>
-                <li>• MCP: live tools (devices, clients, alerts…)</li>
-                <li>• Function calling for real-time data</li>
+            <p class="section-label mb-3">Features</p>
+            <ul class="text-xs text-slate-400 space-y-1.5">
+                <li class="flex gap-2"><span class="text-brand-500">•</span> GPT-4o via GitHub Models</li>
+                <li class="flex gap-2"><span class="text-brand-500">•</span> RAG: auto-searches Aruba docs</li>
+                <li class="flex gap-2"><span class="text-brand-500">•</span> MCP: live tools (devices, clients, alerts…)</li>
+                <li class="flex gap-2"><span class="text-brand-500">•</span> Function calling for real-time data</li>
             </ul>
         </div>
 
         <div class="card">
-            <div class="flex items-center gap-2 mb-2">
-                <div class="w-2 h-2 rounded-full bg-green-500"></div>
-                <p class="text-xs text-gray-500">API Status</p>
-            </div>
-            <p class="text-xs text-gray-400">
-                {% if github_token_set %}Connected to GitHub Models (Copilot){% else %}Set GITHUB_TOKEN in .env to enable{% endif %}
-            </p>
+            <p class="section-label mb-2">API Status</p>
+            {% if github_token_set %}
+            <span class="status-badge-online"><span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>Connected to GitHub Models</span>
+            {% else %}
+            <span class="status-badge-offline"><span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>Token not configured</span>
+            <p class="text-xs text-slate-500 mt-2">Set GITHUB_TOKEN in .env to enable.</p>
+            {% endif %}
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var box = document.getElementById('chat-messages');
+    if (!box) return;
+
+    function scrollToBottom() { box.scrollTop = box.scrollHeight; }
+
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (e.detail && e.detail.target && e.detail.target.id === 'chat-messages') {
+            scrollToBottom();
+        }
+    });
+
+    // Show a styled error bubble if the request itself fails (network / 5xx)
+    function appendError(msg) {
+        var div = document.createElement('div');
+        div.className = 'flex justify-start';
+        div.innerHTML =
+            '<div class="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-3" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);">' +
+            '<p class="text-[10px] font-bold uppercase tracking-wider mb-1" style="color:#f87171;">Error</p>' +
+            '<p class="text-sm" style="color:#fca5a5;"></p></div>';
+        div.querySelector('p + p').textContent = msg;
+        box.appendChild(div);
+        scrollToBottom();
+    }
+
+    ['htmx:responseError', 'htmx:sendError', 'htmx:timeout'].forEach(function (evt) {
+        document.body.addEventListener(evt, function (e) {
+            var elt = e.detail && e.detail.elt;
+            if (elt && elt.id === 'chat-form') {
+                appendError('The chat service is unavailable right now. Please try again in a moment.');
+            }
+        });
+    });
+})();
+</script>
 {% endblock %}

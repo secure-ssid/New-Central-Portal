@@ -2,14 +2,15 @@
 {% block title %}Notifications - New Central Portal{% endblock %}
 {% block content %}
 
-<div class="page-header flex items-end justify-between">
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
-        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">GreenLake</p>
-        <h1 class="text-2xl font-bold text-white">Expiry Notifications</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Subscription & SSL certificate expiry alerts — 90, 60, 30, 15 day warnings</p>
+        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">GreenLake</p>
+        <h1 class="text-2xl font-semibold text-white tracking-tight">Expiry Notifications</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Subscription &amp; SSL certificate expiry alerts &mdash; 90, 60, 30, 15 day warnings</p>
     </div>
-    <div style="display:flex;gap:8px;">
-        <button onclick="runCheckNow()" id="btn-check" style="padding:7px 16px;background:#1e2535;border:1px solid #374151;border-radius:6px;color:#94a3b8;font-size:.75rem;font-weight:600;cursor:pointer;">
+    <div class="flex flex-wrap gap-2">
+        <button onclick="runCheckNow()" id="btn-check" class="btn-secondary">
+            <svg aria-hidden="true" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             Run Check Now
         </button>
     </div>
@@ -27,7 +28,8 @@
         <template x-if="upcomingSubs.length > 0">
             <div>
                 <div style="padding:10px 20px;background:#0a0f1a;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;">GreenLake Subscriptions</div>
-                <table style="width:100%;border-collapse:collapse;">
+                <div class="overflow-x-auto">
+                <table style="width:100%;border-collapse:collapse;min-width:640px;">
                     <thead><tr style="border-bottom:1px solid #1e2535;">
                         <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Key</th>
                         <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Tier</th>
@@ -47,6 +49,7 @@
                         </template>
                     </tbody>
                 </table>
+                </div>
             </div>
         </template>
 
@@ -54,7 +57,8 @@
         <template x-if="upcomingCerts.length > 0">
             <div>
                 <div style="padding:10px 20px;background:#0a0f1a;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;font-weight:700;border-top:1px solid #1e2535;">SSL Certificates</div>
-                <table style="width:100%;border-collapse:collapse;">
+                <div class="overflow-x-auto">
+                <table style="width:100%;border-collapse:collapse;min-width:480px;">
                     <thead><tr style="border-bottom:1px solid #1e2535;">
                         <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Hostname</th>
                         <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Expires</th>
@@ -70,6 +74,7 @@
                         </template>
                     </tbody>
                 </table>
+                </div>
             </div>
         </template>
 
@@ -79,7 +84,7 @@
     </div>
 
     <!-- ── Two-column: Settings + Recipients ──────────────────────────────── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         <!-- Recipients -->
         <div class="card" style="padding:0;overflow:hidden;">
@@ -88,16 +93,17 @@
                 <p style="font-size:.7rem;color:#4b5563;margin:4px 0 0;">Admin emails that receive expiry alerts</p>
             </div>
             <div style="padding:16px 20px;">
-                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                     <input x-model="newEmail" type="email" placeholder="admin@example.com"
-                        style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #1e2535;border-radius:6px;color:#e2e8f0;font-size:.78rem;outline:none;"
+                        aria-label="Recipient email address"
+                        class="input flex-1 text-xs" style="min-width:180px;"
                         @keydown.enter="addRecipient()">
-                    <button @click="addRecipient()" style="padding:8px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Add</button>
+                    <button @click="addRecipient()" class="btn-primary">Add</button>
                 </div>
                 <template x-for="r in recipients" :key="r.email">
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0d1117;">
                         <span style="font-size:.78rem;color:#e2e8f0;font-family:monospace;" x-text="r.email"></span>
-                        <button @click="removeRecipient(r.email)" style="padding:4px 10px;background:#7f1d1d30;border:1px solid #7f1d1d;border-radius:4px;color:#f87171;font-size:.68rem;cursor:pointer;">Remove</button>
+                        <button @click="removeRecipient(r.email)" :aria-label="'Remove recipient ' + r.email" style="padding:4px 10px;background:#7f1d1d30;border:1px solid #7f1d1d;border-radius:4px;color:#f87171;font-size:.68rem;cursor:pointer;">Remove</button>
                     </div>
                 </template>
                 <template x-if="recipients.length === 0">
@@ -116,28 +122,28 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div>
                         <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">SMTP Host</label>
-                        <input x-model="cfg.smtp_host" placeholder="smtp.gmail.com"
+                        <input x-model="cfg.smtp_host" placeholder="smtp.gmail.com" aria-label="SMTP host"
                             style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                     </div>
                     <div>
                         <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Port</label>
-                        <input x-model="cfg.smtp_port" placeholder="587"
+                        <input x-model="cfg.smtp_port" placeholder="587" aria-label="SMTP port" inputmode="numeric"
                             style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                     </div>
                 </div>
                 <div>
                     <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Username</label>
-                    <input x-model="cfg.smtp_user" placeholder="your@email.com"
+                    <input x-model="cfg.smtp_user" placeholder="your@email.com" aria-label="SMTP username"
                         style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                 </div>
                 <div>
                     <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Password</label>
-                    <input x-model="cfg.smtp_password" type="password" placeholder="••••••••"
+                    <input x-model="cfg.smtp_password" type="password" placeholder="••••••••" aria-label="SMTP password"
                         style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                 </div>
                 <div>
                     <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">From Address</label>
-                    <input x-model="cfg.smtp_from" placeholder="noreply@yourdomain.com"
+                    <input x-model="cfg.smtp_from" placeholder="noreply@yourdomain.com" aria-label="From address"
                         style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;">
                 </div>
                 <div style="display:flex;gap:12px;align-items:center;">
@@ -147,9 +153,9 @@
                         <span style="font-size:.75rem;color:#94a3b8;">Use TLS (STARTTLS)</span>
                     </label>
                 </div>
-                <div style="display:flex;gap:8px;margin-top:4px;">
-                    <button @click="saveSettings()" style="padding:7px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Save Settings</button>
-                    <button @click="testEmail()" style="padding:7px 16px;background:#1e2535;border:1px solid #374151;border-radius:6px;color:#94a3b8;font-size:.75rem;cursor:pointer;">Send Test Email</button>
+                <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
+                    <button @click="saveSettings()" class="btn-primary">Save Settings</button>
+                    <button @click="testEmail()" class="btn-secondary">Send Test Email</button>
                 </div>
                 <p x-show="smtpMsg" x-text="smtpMsg" :style="'font-size:.75rem;margin:0;color:' + (smtpOk ? '#4ade80' : '#f87171')"></p>
             </div>
@@ -161,20 +167,20 @@
         <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
             <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Monitoring Configuration</h2>
         </div>
-        <div style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="padding:16px 20px;">
             <div>
                 <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Alert Thresholds (days)</label>
-                <input x-model="cfg.thresholds" placeholder="90,60,30,15"
+                <input x-model="cfg.thresholds" placeholder="90,60,30,15" aria-label="Alert thresholds in days"
                     style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;font-family:monospace;">
                 <p style="font-size:.62rem;color:#4b5563;margin:4px 0 0;">Comma-separated days before expiry</p>
             </div>
             <div>
                 <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">SSL Hosts to Monitor</label>
-                <input x-model="cfg.ssl_hosts" placeholder="example.com, api.example.com:8443"
+                <input x-model="cfg.ssl_hosts" placeholder="example.com, api.example.com:8443" aria-label="SSL hosts to monitor"
                     style="width:100%;padding:7px 10px;background:#0d1117;border:1px solid #1e2535;border-radius:5px;color:#e2e8f0;font-size:.78rem;outline:none;font-family:monospace;">
                 <p style="font-size:.62rem;color:#4b5563;margin:4px 0 0;">Comma-separated hostnames (port optional, default 443)</p>
             </div>
-            <div style="display:flex;gap:20px;align-items:center;">
+            <div style="display:flex;gap:12px 20px;align-items:center;flex-wrap:wrap;">
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
                     <input type="checkbox" x-model="cfg.check_subscriptions" true-value="true" false-value="false" style="accent-color:#f97316;">
                     <span style="font-size:.75rem;color:#94a3b8;">Check GLP Subscriptions</span>
@@ -185,8 +191,131 @@
                 </label>
             </div>
             <div style="display:flex;align-items:end;">
-                <button @click="saveSettings()" style="padding:7px 16px;background:#f97316;border:none;border-radius:6px;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;">Save Settings</button>
+                <button @click="saveSettings()" class="btn-primary">Save Settings</button>
             </div>
+        </div>
+    </div>
+
+    <!-- ── Alert Rules (device-down) ──────────────────────────────────────── -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
+            <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Alert Rules</h2>
+            <p style="font-size:.7rem;color:#4b5563;margin:4px 0 0;">Device-down alerts &mdash; the fleet is checked every minute; an alert fires once a device stays offline past the threshold (with per-device cooldown)</p>
+        </div>
+        <div style="padding:16px 20px;">
+            <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end;">
+                <div style="flex:1;min-width:160px;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Site</label>
+                    <template x-if="siteNames.length > 0">
+                        <select x-model="newRule.site_filter" class="select" style="font-size:.78rem;padding:7px 10px;" aria-label="Site filter">
+                            <option value="">All sites</option>
+                            <template x-for="s in siteNames" :key="s">
+                                <option :value="s" x-text="s"></option>
+                            </template>
+                        </select>
+                    </template>
+                    <template x-if="siteNames.length === 0">
+                        <input x-model="newRule.site_filter" placeholder="All sites (or type a site name)"
+                            class="input" style="font-size:.78rem;padding:7px 10px;" aria-label="Site filter">
+                    </template>
+                </div>
+                <div style="min-width:140px;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Device Type</label>
+                    <select x-model="newRule.device_type_filter" class="select" style="font-size:.78rem;padding:7px 10px;" aria-label="Device type filter">
+                        <option value="all">All types</option>
+                        <option value="switch">Switch</option>
+                        <option value="ap">Access Point</option>
+                        <option value="gateway">Gateway</option>
+                    </select>
+                </div>
+                <div style="width:110px;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Offline &ge; (min)</label>
+                    <input type="number" min="1" max="1440" x-model.number="newRule.offline_minutes"
+                        class="input" style="font-size:.78rem;padding:7px 10px;" aria-label="Offline minutes threshold">
+                </div>
+                <div style="width:110px;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Cooldown (min)</label>
+                    <input type="number" min="1" max="1440" x-model.number="newRule.cooldown_minutes"
+                        class="input" style="font-size:.78rem;padding:7px 10px;" aria-label="Cooldown minutes">
+                </div>
+                <button @click="addRule()" class="btn-primary">Add Rule</button>
+            </div>
+
+            <template x-if="rules.length > 0">
+                <div class="overflow-x-auto">
+                <table class="tbl" style="min-width:600px;">
+                    <thead><tr>
+                        <th>Site</th>
+                        <th>Type</th>
+                        <th>Offline &ge;</th>
+                        <th>Cooldown</th>
+                        <th>Status</th>
+                        <th style="text-align:right;"></th>
+                    </tr></thead>
+                    <tbody>
+                        <template x-for="r in rules" :key="r.id">
+                            <tr class="tbl-row">
+                                <td x-text="r.site_filter || 'All sites'"></td>
+                                <td x-text="typeLabel(r.device_type_filter)"></td>
+                                <td x-text="r.offline_minutes + ' min'"></td>
+                                <td x-text="r.cooldown_minutes + ' min'"></td>
+                                <td>
+                                    <button @click="toggleRule(r)"
+                                        :aria-label="(r.enabled ? 'Disable' : 'Enable') + ' rule ' + r.id"
+                                        :style="'padding:3px 10px;border-radius:4px;font-size:.68rem;font-weight:700;cursor:pointer;border:1px solid ' + (r.enabled ? '#14532d;background:#14532d30;color:#4ade80;' : '#374151;background:#37415130;color:#9ca3af;')"
+                                        x-text="r.enabled ? 'Enabled' : 'Disabled'"></button>
+                                </td>
+                                <td style="text-align:right;">
+                                    <button @click="deleteRule(r)" :aria-label="'Delete rule ' + r.id"
+                                        style="padding:3px 10px;background:#7f1d1d30;border:1px solid #7f1d1d;border-radius:4px;color:#f87171;font-size:.68rem;cursor:pointer;">Delete</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+                </div>
+            </template>
+            <template x-if="rules.length === 0">
+                <p style="color:#4b5563;font-size:.78rem;padding:8px 0;">No alert rules configured &mdash; device-down alerts are off.</p>
+            </template>
+            <p x-show="ruleMsg" x-text="ruleMsg" :style="'font-size:.75rem;margin:8px 0 0;color:' + (ruleOk ? '#4ade80' : '#f87171')"></p>
+        </div>
+    </div>
+
+    <!-- ── Summary Reports ────────────────────────────────────────────────── -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
+            <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Summary Reports</h2>
+            <p style="font-size:.7rem;color:#4b5563;margin:4px 0 0;">Scheduled fleet summary emails (status by type, offline devices, recent alerts, upcoming expiries) to all recipients</p>
+        </div>
+        <div style="padding:16px 20px;display:flex;gap:12px 24px;align-items:flex-end;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:8px;">
+                <input type="checkbox" x-model="reportCfg.enabled" style="accent-color:#f97316;">
+                <span style="font-size:.75rem;color:#94a3b8;">Enable scheduled reports</span>
+            </label>
+            <div style="min-width:120px;">
+                <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Frequency</label>
+                <select x-model="reportCfg.frequency" class="select" style="font-size:.78rem;padding:7px 10px;" aria-label="Report frequency">
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly (Mondays)</option>
+                </select>
+            </div>
+            <div style="min-width:120px;">
+                <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Hour (UTC)</label>
+                <select x-model="reportCfg.hour" class="select" style="font-size:.78rem;padding:7px 10px;" aria-label="Report hour (UTC)">
+                    <template x-for="h in 24" :key="h">
+                        <option :value="h - 1" x-text="String(h - 1).padStart(2, '0') + ':00'"></option>
+                    </template>
+                </select>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button @click="saveReportCfg()" class="btn-primary">Save</button>
+                <button @click="sendTestReport()" :disabled="reportBusy" class="btn-secondary"
+                    x-text="reportBusy ? 'Sending…' : 'Send Test Report Now'"></button>
+            </div>
+            <p x-show="reportMsg" x-text="reportMsg" :style="'font-size:.75rem;margin:0 0 8px;flex-basis:100%;color:' + (reportOk ? '#4ade80' : '#f87171')"></p>
+            <p x-show="reportCfg.last_sent" style="font-size:.68rem;color:#4b5563;margin:0;flex-basis:100%;"
+                x-text="'Last sent: ' + String(reportCfg.last_sent || '').slice(0, 16).replace('T', ' ') + ' UTC'"></p>
         </div>
     </div>
 
@@ -196,7 +325,8 @@
             <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Notification History</h2>
         </div>
         <template x-if="history.length > 0">
-            <table style="width:100%;border-collapse:collapse;">
+            <div class="overflow-x-auto">
+            <table style="width:100%;border-collapse:collapse;min-width:760px;">
                 <thead><tr style="border-bottom:1px solid #1e2535;">
                     <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Sent</th>
                     <th style="padding:10px 20px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#4b5563;font-weight:700;">Type</th>
@@ -222,6 +352,7 @@
                     </template>
                 </tbody>
             </table>
+            </div>
         </template>
         <template x-if="history.length === 0">
             <p style="padding:32px 20px;text-align:center;color:#4b5563;font-size:.85rem;">No notifications sent yet.</p>
@@ -234,12 +365,20 @@
 <script type="application/json" id="notif-history-json">{{ history | tojson }}</script>
 <script type="application/json" id="notif-upcoming-subs-json">{{ upcoming_subs | tojson }}</script>
 <script type="application/json" id="notif-upcoming-certs-json">{{ upcoming_certs | tojson }}</script>
+<script type="application/json" id="notif-rules-json">{{ rules | tojson }}</script>
+<script type="application/json" id="notif-sites-json">{{ site_names | tojson }}</script>
+<script type="application/json" id="notif-report-json">{{ report_cfg | tojson }}</script>
 
 <script>
 function notificationsPage() {
     return {
         cfg: {}, recipients: [], history: [], upcomingSubs: [], upcomingCerts: [],
         newEmail: '', smtpMsg: '', smtpOk: false,
+        rules: [], siteNames: [],
+        newRule: {site_filter: '', device_type_filter: 'all', offline_minutes: 5, cooldown_minutes: 60},
+        ruleMsg: '', ruleOk: false,
+        reportCfg: {enabled: false, frequency: 'daily', hour: 8, last_sent: null},
+        reportMsg: '', reportOk: false, reportBusy: false,
 
         init() {
             this.cfg = JSON.parse(document.getElementById('notif-settings-json').textContent);
@@ -247,6 +386,99 @@ function notificationsPage() {
             this.history = JSON.parse(document.getElementById('notif-history-json').textContent);
             this.upcomingSubs = JSON.parse(document.getElementById('notif-upcoming-subs-json').textContent);
             this.upcomingCerts = JSON.parse(document.getElementById('notif-upcoming-certs-json').textContent);
+            this.rules = JSON.parse(document.getElementById('notif-rules-json').textContent);
+            this.siteNames = JSON.parse(document.getElementById('notif-sites-json').textContent);
+            const rc = JSON.parse(document.getElementById('notif-report-json').textContent);
+            if (rc && typeof rc === 'object') this.reportCfg = Object.assign(this.reportCfg, rc);
+        },
+
+        typeLabel(t) {
+            if (!t || t === 'all') return 'All types';
+            return {switch: 'Switch', ap: 'Access Point', gateway: 'Gateway'}[t] || t;
+        },
+
+        async addRule() {
+            this.ruleMsg = '';
+            const payload = {
+                site_filter: this.newRule.site_filter,
+                device_type_filter: this.newRule.device_type_filter,
+                offline_minutes: this.newRule.offline_minutes,
+                cooldown_minutes: this.newRule.cooldown_minutes,
+            };
+            try {
+                const r = await fetch('/notifications/rules', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const j = await r.json();
+                this.ruleOk = !!j.ok;
+                if (j.ok && j.rule) {
+                    this.rules.push(j.rule);
+                    this.newRule = {site_filter: '', device_type_filter: 'all', offline_minutes: 5, cooldown_minutes: 60};
+                    this.ruleMsg = 'Rule added ✓';
+                } else {
+                    this.ruleMsg = j.error || 'Failed';
+                }
+            } catch (e) { this.ruleOk = false; this.ruleMsg = 'Request failed'; }
+            setTimeout(() => this.ruleMsg = '', 3000);
+        },
+
+        async toggleRule(rule) {
+            try {
+                const r = await fetch('/notifications/rules/' + rule.id, {
+                    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({enabled: !rule.enabled})
+                });
+                const j = await r.json();
+                if (j.ok) { rule.enabled = !rule.enabled; return; }
+                this.ruleOk = false; this.ruleMsg = j.error || 'Failed';
+            } catch (e) { this.ruleOk = false; this.ruleMsg = 'Request failed'; }
+            setTimeout(() => this.ruleMsg = '', 3000);
+        },
+
+        async deleteRule(rule) {
+            try {
+                const r = await fetch('/notifications/rules/' + rule.id, {method: 'DELETE'});
+                const j = await r.json();
+                if (j.ok) { this.rules = this.rules.filter(x => x.id !== rule.id); return; }
+                this.ruleOk = false; this.ruleMsg = j.error || 'Failed';
+            } catch (e) { this.ruleOk = false; this.ruleMsg = 'Request failed'; }
+            setTimeout(() => this.ruleMsg = '', 3000);
+        },
+
+        async saveReportCfg() {
+            this.reportMsg = '';
+            try {
+                const r = await fetch('/notifications/reports/settings', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        enabled: !!this.reportCfg.enabled,
+                        frequency: this.reportCfg.frequency,
+                        hour: Number(this.reportCfg.hour),
+                    })
+                });
+                const j = await r.json();
+                this.reportOk = !!j.ok;
+                this.reportMsg = j.ok ? 'Report settings saved ✓' : (j.error || 'Failed');
+            } catch (e) { this.reportOk = false; this.reportMsg = 'Request failed'; }
+            setTimeout(() => this.reportMsg = '', 4000);
+        },
+
+        async sendTestReport() {
+            if (this.reportBusy) return;
+            this.reportBusy = true;
+            this.reportOk = true;
+            this.reportMsg = 'Sending test report…';
+            try {
+                const r = await fetch('/notifications/reports/test', {method: 'POST'});
+                const j = await r.json();
+                this.reportOk = !!j.ok;
+                this.reportMsg = j.ok
+                    ? 'Test report sent to ' + (j.sent || 0) + ' recipient(s) ✓'
+                    : (j.error || 'Failed');
+            } catch (e) { this.reportOk = false; this.reportMsg = 'Request failed'; }
+            this.reportBusy = false;
+            setTimeout(() => this.reportMsg = '', 6000);
         },
 
         async saveSettings() {
@@ -305,8 +537,9 @@ async function runCheckNow() {
     try {
         const r = await fetch('/notifications/check-now', {method: 'POST'});
         const j = await r.json();
-        btn.textContent = j.ok ? `Done — ${j.alerts.length} alerts` : 'Error';
-        setTimeout(() => { if (j.alerts.length > 0) location.reload(); }, 1500);
+        const alerts = j.alerts || [];
+        btn.textContent = j.ok ? `Done — ${alerts.length} alerts` : 'Error';
+        setTimeout(() => { if (j.ok && alerts.length > 0) location.reload(); }, 1500);
     } catch (e) { btn.textContent = 'Error'; }
     setTimeout(() => { btn.textContent = 'Run Check Now'; btn.disabled = false; }, 3000);
 }

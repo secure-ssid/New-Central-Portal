@@ -1,3 +1,14 @@
 :80 {
+    # Compress responses when the client supports it.
+    encode zstd gzip
+
+    # Baseline security headers (kept conservative so embedded pages,
+    # HTMX swaps, and CDN assets keep working unchanged).
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
     reverse_proxy app:8000
 }

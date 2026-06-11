@@ -1,16 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Juniper Corner - Lab - New Central Portal{% endblock %}
 {% block content %}
-<div class="mb-6">
-    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
-        <a href="/" class="hover:text-brand-500">Home</a>
-        <span>/</span>
-        <a href="/lab/" class="hover:text-brand-500">Lab</a>
-        <span>/</span>
-        <span class="text-gray-300">Juniper Corner</span>
+<div class="page-header">
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <a href="/lab/" class="hover:text-brand-400 transition-colors">Lab</a>
+        <span class="text-slate-700">/</span>
+        <span class="text-slate-400">Juniper Corner</span>
     </div>
-    <h1 class="text-3xl font-bold text-white mb-2">Juniper Corner</h1>
-    <p class="text-gray-400">Learning Junos - notes, configs, and experiments</p>
+    <h1 class="text-2xl font-bold text-white">Juniper Corner</h1>
+    <p class="text-sm text-slate-500 mt-0.5">Learning Junos — notes, configs, and experiments</p>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -19,60 +17,73 @@
         {% for note in notes %}
         <div class="card">
             <div class="flex items-start justify-between mb-3">
-                <h3 class="text-lg font-semibold text-white">{{ note.title }}</h3>
-                <span class="text-xs text-gray-500">{{ note.date }}</span>
+                <h3 class="text-base font-semibold text-white">{{ note.title }}</h3>
+                <span class="text-xs text-slate-500 font-mono">{{ note.date | default('') }}</span>
             </div>
-            <pre class="p-3 bg-surface-900 rounded-lg overflow-x-auto"><code class="text-sm text-gray-300">{{ note.content }}</code></pre>
+            <pre class="p-3 bg-surface-900 border border-surface-700 rounded-lg overflow-x-auto"><code class="text-sm font-mono text-slate-300">{{ note.content }}</code></pre>
             <div class="mt-3 flex gap-2">
-                <button class="text-xs text-brand-500 hover:text-brand-400">Copy command</button>
+                <button type="button" class="btn-secondary text-xs"
+                        onclick="navigator.clipboard.writeText(this.closest('.card').querySelector('code').innerText).then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy command', 1200); })">
+                    Copy command
+                </button>
             </div>
         </div>
         {% endfor %}
 
-        <!-- Add note button -->
-        <button class="w-full card hover:border-brand-500 transition-colors text-center py-6">
-            <svg class="w-6 h-6 text-gray-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        {% if not notes %}
+        <div class="card">
+            <div class="empty-state">
+                <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5"/></svg>
+                <p>No notes yet.</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Add note placeholder (persistence not wired up yet) -->
+        <button type="button" disabled title="Note persistence coming soon"
+                class="w-full card text-center py-6 opacity-60 cursor-not-allowed">
+            <svg class="w-6 h-6 text-slate-500 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
             </svg>
-            <p class="text-sm text-gray-400">Add a new note</p>
+            <p class="text-sm text-slate-400">Add a new note <span class="text-xs text-slate-600">(coming soon)</span></p>
         </button>
     </div>
 
     <!-- Resources sidebar -->
     <div class="space-y-4">
         <div class="card">
-            <h3 class="text-sm font-semibold text-white mb-3">📚 Quick Links</h3>
+            <p class="section-label mb-3">Quick Links</p>
             <div class="space-y-2">
-                <a href="https://www.juniper.net/documentation/us/en/software/junos/junos-overview/index.html" target="_blank"
-                   class="block text-sm text-gray-400 hover:text-brand-500 transition-colors">
+                <a href="https://www.juniper.net/documentation/us/en/software/junos/junos-overview/index.html" target="_blank" rel="noopener"
+                   class="block text-sm text-slate-400 hover:text-brand-400 transition-colors">
                     → Junos Docs
                 </a>
-                <a href="https://www.juniper.net/documentation/us/en/software/junos/cli-reference/index.html" target="_blank"
-                   class="block text-sm text-gray-400 hover:text-brand-500 transition-colors">
+                <a href="https://www.juniper.net/documentation/us/en/software/junos/cli-reference/index.html" target="_blank" rel="noopener"
+                   class="block text-sm text-slate-400 hover:text-brand-400 transition-colors">
                     → CLI Reference
                 </a>
-                <a href="https://learningportal.juniper.net/juniper/default.aspx" target="_blank"
-                   class="block text-sm text-gray-400 hover:text-brand-500 transition-colors">
+                <a href="https://learningportal.juniper.net/juniper/default.aspx" target="_blank" rel="noopener"
+                   class="block text-sm text-slate-400 hover:text-brand-400 transition-colors">
                     → Learning Portal
                 </a>
             </div>
         </div>
 
         <div class="card">
-            <h3 class="text-sm font-semibold text-white mb-3">🎯 Topics to explore</h3>
-            <div class="space-y-1 text-xs text-gray-400">
-                <p>• BGP configuration</p>
-                <p>• OSPF areas</p>
-                <p>• Firewall filters</p>
-                <p>• VPN tunnels</p>
-                <p>• Chassis clustering</p>
+            <p class="section-label mb-3">Topics to explore</p>
+            <div class="space-y-1.5 text-xs text-slate-400">
+                <p class="flex gap-2"><span class="text-brand-500">•</span> BGP configuration</p>
+                <p class="flex gap-2"><span class="text-brand-500">•</span> OSPF areas</p>
+                <p class="flex gap-2"><span class="text-brand-500">•</span> Firewall filters</p>
+                <p class="flex gap-2"><span class="text-brand-500">•</span> VPN tunnels</p>
+                <p class="flex gap-2"><span class="text-brand-500">•</span> Chassis clustering</p>
             </div>
         </div>
 
         <div class="card">
-            <h3 class="text-sm font-semibold text-white mb-3">💡 Tip</h3>
-            <p class="text-xs text-gray-400">
-                Use <code class="px-1.5 py-0.5 bg-surface-900 rounded text-brand-500">show | display set</code> 
+            <p class="section-label mb-3">Tip</p>
+            <p class="text-xs text-slate-400">
+                Use <code class="px-1.5 py-0.5 bg-surface-900 border border-surface-700 rounded font-mono text-brand-400">show | display set</code>
                 to see config in set command format
             </p>
         </div>

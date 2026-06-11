@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
-import asyncio, json
+import asyncio
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -8,83 +12,119 @@ templates = Jinja2Templates(directory="templates")
 
 @router.get("/")
 async def topology(request: Request):
-    from vendors.central_bridge import get_devices, get_switch_ports
-    from vendors.aruba_central import _norm_device
+    from vendors.aruba_central import _norm_device, aruba
 
-    raw_devices = await get_devices(limit=100)
+    get_switch_ports = None
+    try:
+        from vendors.central_bridge import get_devices, get_switch_ports
+        raw_devices = await get_devices(limit=100)
+    except Exception:
+        # centralmcp unavailable — fall back to the same mock fleet the
+        # rest of the portal uses so topology still renders (without
+        # port-derived edges; the synthetic links cover connectivity).
+        logger.warning("central_bridge unavailable for topology, using fallback devices")
+        raw_devices = await aruba.get_devices()
     devices = [_norm_device(d) for d in raw_devices]
 
-    # Only show online devices in the topology
-    devices = [d for d in devices if (d.get("status") or "").lower() == "online"]
+    # Keep every device that has a serial; offline devices are rendered
+    # dimmed/red in the 3D view rather than hidden.
+    devices = [d for d in devices if d.get("serial")]
+
+    group_map = {
+        "switch": "switch",
+        "access_point": "ap",
+        "gateway": "gateway",
+    }
 
     nodes = []
-    edges = []
-    seen_edges = set()
-
-    # Build a serial→device map for quick lookup
-    by_serial = {d["serial"]: d for d in devices if d["serial"]}
-
-    # Add all device nodes
     for d in devices:
-        dtype = d["type"]
-        if dtype == "switch":
-            group = "switch"
-        elif dtype == "access_point":
-            group = "ap"
-        elif dtype == "gateway":
-            group = "gateway"
-        else:
-            group = "unknown"
-
         nodes.append({
-            "data": {
-                "id": d["serial"],
-                "label": d["name"] or d["serial"],
-                "group": group,
-                "model": d["model"],
-                "status": d["status"],
-                "ip": d["ip"],
-                "site": d["site"],
-                "url": f"/devices/{d['serial']}",
-            }
+            "id": d["serial"],
+            "label": d["name"] or d["serial"],
+            "group": group_map.get(d["type"], "unknown"),
+            "model": d["model"],
+            "status": d["status"],
+            "ip": d["ip"],
+            "site": d["site"],
+            "url": f"/devices/{d['serial']}",
         })
+    node_ids = {n["id"] for n in nodes}
 
-    # Fetch switch ports to build edges
-    switches = [d for d in devices if d["type"] == "switch"]
+    # Fetch switch ports to build edges. Only query switches that are
+    # online — offline ones can't answer anyway.
+    switches = [
+        d for d in devices
+        if d["type"] == "switch" and (d.get("status") or "").lower() == "online"
+    ]
+    if get_switch_ports is None:
+        switches = []
     port_results = await asyncio.gather(
         *[get_switch_ports(sw["serial"]) for sw in switches],
         return_exceptions=True,
     )
 
+    edges = []
+    seen_edges = set()
+    port_fail_count = 0
+
     for sw, ports in zip(switches, port_results):
-        if isinstance(ports, Exception) or not ports:
+        if isinstance(ports, BaseException):
+            port_fail_count += 1
+            logger.warning(
+                "Failed to fetch ports for switch %s (%s): %r",
+                sw.get("name") or sw["serial"], sw["serial"], ports,
+            )
+            continue
+        if not ports:
             continue
         for port in ports:
-            nbr_serial = port.get("neighbourSerial") or ""
+            nbr_serial = (port.get("neighbourSerial") or "").strip()
             nbr_type = (port.get("neighbourType") or "").lower()
+            # Skip empties and self-loops
             if not nbr_serial or nbr_serial == sw["serial"]:
                 continue
             # Only wire to known infrastructure devices, not raw client MACs
             if nbr_type not in ("access point", "gateway", "switch"):
                 continue
-            edge_key = tuple(sorted([sw["serial"], nbr_serial]))
-            if edge_key in seen_edges:
+            # Don't create edges to devices we don't have a node for
+            if nbr_serial not in node_ids:
+                continue
+            # Dedupe bidirectional reports with a sorted-tuple key
+            edge_key = tuple(sorted((sw["serial"], nbr_serial)))
+            if edge_key[0] == edge_key[1] or edge_key in seen_edges:
                 continue
             seen_edges.add(edge_key)
             edges.append({
-                "data": {
-                    "id": f"{sw['serial']}-{nbr_serial}",
-                    "source": sw["serial"],
-                    "target": nbr_serial,
-                    "port": port.get("name") or port.get("id") or "",
-                    "speed": port.get("speed") or 0,
-                }
+                "id": f"{sw['serial']}-{nbr_serial}",
+                "source": sw["serial"],
+                "target": nbr_serial,
+                "port": port.get("name") or port.get("id") or "",
+                "speed": port.get("speed") or 0,
             })
 
-    graph_data = json.dumps({"nodes": nodes, "edges": edges})
+    if port_fail_count:
+        logger.warning(
+            "Port data unavailable for %d of %d switches in topology view",
+            port_fail_count, len(switches),
+        )
+
+    online_count = sum(
+        1 for n in nodes if (n["status"] or "").lower() == "online"
+    )
+
+    # Escape "</" so the payload can never close its enclosing <script> tag
+    # (device names are user-controlled in Central).
+    graph_json = json.dumps({"nodes": nodes, "edges": edges}).replace("</", "<\\/")
 
     return templates.TemplateResponse(
         request,
         "topology.html",
-        {"graph_data": graph_data, "active": "topology"},
+        {
+            "graph_data": graph_json,
+            "active": "topology",
+            "device_count": len(nodes),
+            "online_count": online_count,
+            "offline_count": len(nodes) - online_count,
+            "port_fail_count": port_fail_count,
+        },
     )
