@@ -196,6 +196,129 @@
         </div>
     </div>
 
+    <!-- ── Alert Rules (device-down) ──────────────────────────────────────── -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
+            <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Alert Rules</h2>
+            <p style="font-size:.7rem;color:#4b5563;margin:4px 0 0;">Device-down alerts &mdash; the fleet is checked every minute; an alert fires once a device stays offline past the threshold (with per-device cooldown)</p>
+        </div>
+        <div style="padding:16px 20px;">
+            <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end;">
+                <div style="flex:1;min-width:160px;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Site</label>
+                    <template x-if="siteNames.length > 0">
+                        <select x-model="newRule.site_filter" class="select" style="font-size:.78rem;padding:7px 10px;" aria-label="Site filter">
+                            <option value="">All sites</option>
+                            <template x-for="s in siteNames" :key="s">
+                                <option :value="s" x-text="s"></option>
+                            </template>
+                        </select>
+                    </template>
+                    <template x-if="siteNames.length === 0">
+                        <input x-model="newRule.site_filter" placeholder="All sites (or type a site name)"
+                            class="input" style="font-size:.78rem;padding:7px 10px;" aria-label="Site filter">
+                    </template>
+                </div>
+                <div style="min-width:140px;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Device Type</label>
+                    <select x-model="newRule.device_type_filter" class="select" style="font-size:.78rem;padding:7px 10px;" aria-label="Device type filter">
+                        <option value="all">All types</option>
+                        <option value="switch">Switch</option>
+                        <option value="ap">Access Point</option>
+                        <option value="gateway">Gateway</option>
+                    </select>
+                </div>
+                <div style="width:110px;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Offline &ge; (min)</label>
+                    <input type="number" min="1" max="1440" x-model.number="newRule.offline_minutes"
+                        class="input" style="font-size:.78rem;padding:7px 10px;" aria-label="Offline minutes threshold">
+                </div>
+                <div style="width:110px;">
+                    <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Cooldown (min)</label>
+                    <input type="number" min="1" max="1440" x-model.number="newRule.cooldown_minutes"
+                        class="input" style="font-size:.78rem;padding:7px 10px;" aria-label="Cooldown minutes">
+                </div>
+                <button @click="addRule()" class="btn-primary">Add Rule</button>
+            </div>
+
+            <template x-if="rules.length > 0">
+                <div class="overflow-x-auto">
+                <table class="tbl" style="min-width:600px;">
+                    <thead><tr>
+                        <th>Site</th>
+                        <th>Type</th>
+                        <th>Offline &ge;</th>
+                        <th>Cooldown</th>
+                        <th>Status</th>
+                        <th style="text-align:right;"></th>
+                    </tr></thead>
+                    <tbody>
+                        <template x-for="r in rules" :key="r.id">
+                            <tr class="tbl-row">
+                                <td x-text="r.site_filter || 'All sites'"></td>
+                                <td x-text="typeLabel(r.device_type_filter)"></td>
+                                <td x-text="r.offline_minutes + ' min'"></td>
+                                <td x-text="r.cooldown_minutes + ' min'"></td>
+                                <td>
+                                    <button @click="toggleRule(r)"
+                                        :aria-label="(r.enabled ? 'Disable' : 'Enable') + ' rule ' + r.id"
+                                        :style="'padding:3px 10px;border-radius:4px;font-size:.68rem;font-weight:700;cursor:pointer;border:1px solid ' + (r.enabled ? '#14532d;background:#14532d30;color:#4ade80;' : '#374151;background:#37415130;color:#9ca3af;')"
+                                        x-text="r.enabled ? 'Enabled' : 'Disabled'"></button>
+                                </td>
+                                <td style="text-align:right;">
+                                    <button @click="deleteRule(r)" :aria-label="'Delete rule ' + r.id"
+                                        style="padding:3px 10px;background:#7f1d1d30;border:1px solid #7f1d1d;border-radius:4px;color:#f87171;font-size:.68rem;cursor:pointer;">Delete</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+                </div>
+            </template>
+            <template x-if="rules.length === 0">
+                <p style="color:#4b5563;font-size:.78rem;padding:8px 0;">No alert rules configured &mdash; device-down alerts are off.</p>
+            </template>
+            <p x-show="ruleMsg" x-text="ruleMsg" :style="'font-size:.75rem;margin:8px 0 0;color:' + (ruleOk ? '#4ade80' : '#f87171')"></p>
+        </div>
+    </div>
+
+    <!-- ── Summary Reports ────────────────────────────────────────────────── -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
+            <h2 style="font-size:.85rem;font-weight:700;color:#f1f5f9;margin:0;">Summary Reports</h2>
+            <p style="font-size:.7rem;color:#4b5563;margin:4px 0 0;">Scheduled fleet summary emails (status by type, offline devices, recent alerts, upcoming expiries) to all recipients</p>
+        </div>
+        <div style="padding:16px 20px;display:flex;gap:12px 24px;align-items:flex-end;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:8px;">
+                <input type="checkbox" x-model="reportCfg.enabled" style="accent-color:#f97316;">
+                <span style="font-size:.75rem;color:#94a3b8;">Enable scheduled reports</span>
+            </label>
+            <div style="min-width:120px;">
+                <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Frequency</label>
+                <select x-model="reportCfg.frequency" class="select" style="font-size:.78rem;padding:7px 10px;" aria-label="Report frequency">
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly (Mondays)</option>
+                </select>
+            </div>
+            <div style="min-width:120px;">
+                <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;display:block;margin-bottom:4px;">Hour (UTC)</label>
+                <select x-model="reportCfg.hour" class="select" style="font-size:.78rem;padding:7px 10px;" aria-label="Report hour (UTC)">
+                    <template x-for="h in 24" :key="h">
+                        <option :value="h - 1" x-text="String(h - 1).padStart(2, '0') + ':00'"></option>
+                    </template>
+                </select>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button @click="saveReportCfg()" class="btn-primary">Save</button>
+                <button @click="sendTestReport()" :disabled="reportBusy" class="btn-secondary"
+                    x-text="reportBusy ? 'Sending…' : 'Send Test Report Now'"></button>
+            </div>
+            <p x-show="reportMsg" x-text="reportMsg" :style="'font-size:.75rem;margin:0 0 8px;flex-basis:100%;color:' + (reportOk ? '#4ade80' : '#f87171')"></p>
+            <p x-show="reportCfg.last_sent" style="font-size:.68rem;color:#4b5563;margin:0;flex-basis:100%;"
+                x-text="'Last sent: ' + String(reportCfg.last_sent || '').slice(0, 16).replace('T', ' ') + ' UTC'"></p>
+        </div>
+    </div>
+
     <!-- ── Notification History ───────────────────────────────────────────── -->
     <div class="card" style="padding:0;overflow:hidden;">
         <div style="padding:16px 20px;border-bottom:1px solid #1e2535;">
@@ -242,12 +365,20 @@
 <script type="application/json" id="notif-history-json">{{ history | tojson }}</script>
 <script type="application/json" id="notif-upcoming-subs-json">{{ upcoming_subs | tojson }}</script>
 <script type="application/json" id="notif-upcoming-certs-json">{{ upcoming_certs | tojson }}</script>
+<script type="application/json" id="notif-rules-json">{{ rules | tojson }}</script>
+<script type="application/json" id="notif-sites-json">{{ site_names | tojson }}</script>
+<script type="application/json" id="notif-report-json">{{ report_cfg | tojson }}</script>
 
 <script>
 function notificationsPage() {
     return {
         cfg: {}, recipients: [], history: [], upcomingSubs: [], upcomingCerts: [],
         newEmail: '', smtpMsg: '', smtpOk: false,
+        rules: [], siteNames: [],
+        newRule: {site_filter: '', device_type_filter: 'all', offline_minutes: 5, cooldown_minutes: 60},
+        ruleMsg: '', ruleOk: false,
+        reportCfg: {enabled: false, frequency: 'daily', hour: 8, last_sent: null},
+        reportMsg: '', reportOk: false, reportBusy: false,
 
         init() {
             this.cfg = JSON.parse(document.getElementById('notif-settings-json').textContent);
@@ -255,6 +386,99 @@ function notificationsPage() {
             this.history = JSON.parse(document.getElementById('notif-history-json').textContent);
             this.upcomingSubs = JSON.parse(document.getElementById('notif-upcoming-subs-json').textContent);
             this.upcomingCerts = JSON.parse(document.getElementById('notif-upcoming-certs-json').textContent);
+            this.rules = JSON.parse(document.getElementById('notif-rules-json').textContent);
+            this.siteNames = JSON.parse(document.getElementById('notif-sites-json').textContent);
+            const rc = JSON.parse(document.getElementById('notif-report-json').textContent);
+            if (rc && typeof rc === 'object') this.reportCfg = Object.assign(this.reportCfg, rc);
+        },
+
+        typeLabel(t) {
+            if (!t || t === 'all') return 'All types';
+            return {switch: 'Switch', ap: 'Access Point', gateway: 'Gateway'}[t] || t;
+        },
+
+        async addRule() {
+            this.ruleMsg = '';
+            const payload = {
+                site_filter: this.newRule.site_filter,
+                device_type_filter: this.newRule.device_type_filter,
+                offline_minutes: this.newRule.offline_minutes,
+                cooldown_minutes: this.newRule.cooldown_minutes,
+            };
+            try {
+                const r = await fetch('/notifications/rules', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const j = await r.json();
+                this.ruleOk = !!j.ok;
+                if (j.ok && j.rule) {
+                    this.rules.push(j.rule);
+                    this.newRule = {site_filter: '', device_type_filter: 'all', offline_minutes: 5, cooldown_minutes: 60};
+                    this.ruleMsg = 'Rule added ✓';
+                } else {
+                    this.ruleMsg = j.error || 'Failed';
+                }
+            } catch (e) { this.ruleOk = false; this.ruleMsg = 'Request failed'; }
+            setTimeout(() => this.ruleMsg = '', 3000);
+        },
+
+        async toggleRule(rule) {
+            try {
+                const r = await fetch('/notifications/rules/' + rule.id, {
+                    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({enabled: !rule.enabled})
+                });
+                const j = await r.json();
+                if (j.ok) { rule.enabled = !rule.enabled; return; }
+                this.ruleOk = false; this.ruleMsg = j.error || 'Failed';
+            } catch (e) { this.ruleOk = false; this.ruleMsg = 'Request failed'; }
+            setTimeout(() => this.ruleMsg = '', 3000);
+        },
+
+        async deleteRule(rule) {
+            try {
+                const r = await fetch('/notifications/rules/' + rule.id, {method: 'DELETE'});
+                const j = await r.json();
+                if (j.ok) { this.rules = this.rules.filter(x => x.id !== rule.id); return; }
+                this.ruleOk = false; this.ruleMsg = j.error || 'Failed';
+            } catch (e) { this.ruleOk = false; this.ruleMsg = 'Request failed'; }
+            setTimeout(() => this.ruleMsg = '', 3000);
+        },
+
+        async saveReportCfg() {
+            this.reportMsg = '';
+            try {
+                const r = await fetch('/notifications/reports/settings', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        enabled: !!this.reportCfg.enabled,
+                        frequency: this.reportCfg.frequency,
+                        hour: Number(this.reportCfg.hour),
+                    })
+                });
+                const j = await r.json();
+                this.reportOk = !!j.ok;
+                this.reportMsg = j.ok ? 'Report settings saved ✓' : (j.error || 'Failed');
+            } catch (e) { this.reportOk = false; this.reportMsg = 'Request failed'; }
+            setTimeout(() => this.reportMsg = '', 4000);
+        },
+
+        async sendTestReport() {
+            if (this.reportBusy) return;
+            this.reportBusy = true;
+            this.reportOk = true;
+            this.reportMsg = 'Sending test report…';
+            try {
+                const r = await fetch('/notifications/reports/test', {method: 'POST'});
+                const j = await r.json();
+                this.reportOk = !!j.ok;
+                this.reportMsg = j.ok
+                    ? 'Test report sent to ' + (j.sent || 0) + ' recipient(s) ✓'
+                    : (j.error || 'Failed');
+            } catch (e) { this.reportOk = false; this.reportMsg = 'Request failed'; }
+            this.reportBusy = false;
+            setTimeout(() => this.reportMsg = '', 6000);
         },
 
         async saveSettings() {
