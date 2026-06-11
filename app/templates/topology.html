@@ -485,11 +485,16 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
 
     function refresh() {
         Graph.nodeColor(Graph.nodeColor())
-            .nodeVal(Graph.nodeVal())
             .linkColor(Graph.linkColor())
             .linkWidth(Graph.linkWidth())
             .linkDirectionalParticles(Graph.linkDirectionalParticles());
         setTimeout(applyGlow, 80);
+    }
+    // Re-triggering nodeVal rebuilds sphere geometry, so it is split out and
+    // only invoked when focus mode toggles (not on every hover refresh).
+    function refreshSizes() {
+        Graph.nodeVal(Graph.nodeVal());
+        refresh();
     }
 
     function setHover(node) {
@@ -765,7 +770,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         highlightLinks.clear();
         focusLabel.textContent = node.label || node.id;
         exitFocusBtn.style.display = 'block';
-        refresh();
+        refreshSizes();
         frameNodes(nodes.filter(function (n) { return focusIds.has(n.id); }));
     }
 
@@ -775,7 +780,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         focusIds = null;
         focusLinkSet = null;
         exitFocusBtn.style.display = 'none';
-        refresh();
+        refreshSizes();
         if (!skipFit) Graph.zoomToFit(700, 90);
     }
 
