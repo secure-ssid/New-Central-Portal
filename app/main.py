@@ -11,7 +11,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from routes import home, devices, clients, sites, lab, topology
+from routes import assistant as assistant_routes
 from routes import notifications as notifications_routes
+from routes import search as search_routes
 
 # Logging: configure once, but don't stomp on uvicorn's handlers if present.
 if not logging.getLogger().handlers:
@@ -80,6 +82,8 @@ app.include_router(sites.router, prefix="/sites", tags=["sites"])
 app.include_router(lab.router, prefix="/lab", tags=["lab"])
 app.include_router(topology.router, prefix="/topology", tags=["topology"])
 app.include_router(notifications_routes.router, prefix="/notifications", tags=["notifications"])
+app.include_router(search_routes.router, prefix="/search", tags=["search"])
+app.include_router(assistant_routes.router, prefix="/assistant", tags=["assistant"])
 
 
 @app.get("/health")
