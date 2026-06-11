@@ -76,7 +76,6 @@ async def lifespan(app: FastAPI):
         # Device-down alert engine — every 60s (configurable).
         try:
             from notifications import run_device_status_check
-            from config import settings
             interval = max(15, int(settings.device_check_interval_seconds or 60))
             scheduler.add_job(
                 run_device_status_check, "interval", seconds=interval,
