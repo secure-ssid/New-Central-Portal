@@ -55,13 +55,24 @@
     .topo-tip-dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
     @keyframes topo-spin { to { transform:rotate(360deg); } }
     .topo-spinner { width:34px; height:34px; border-radius:50%; border:3px solid #1e2535; border-top-color:#f97316; animation:topo-spin .8s linear infinite; }
+    /* Small screens: the absolute overlays collide on a narrow canvas —
+       give the toolbar the full width, drop the duplicate stats strip and
+       the mouse-centric hint, and slim the legend down. Visual only. */
+    @media (max-width: 767px) {
+        .topo-toolbar { max-width:calc(100% - 28px) !important; }
+        .topo-stats { display:none !important; }
+        .topo-hint { display:none !important; }
+        .topo-legend { padding:8px 11px !important; }
+        .topo-legend .topo-legend-row { font-size:.62rem; gap:6px; margin-top:3px; }
+        .topo-legend-speeds { display:none !important; }
+    }
 </style>
 
 <div id="topo-wrap">
     <div id="graph-3d"></div>
 
     <!-- Toolbar -->
-    <div class="topo-overlay" style="top:14px;left:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:70%;">
+    <div class="topo-overlay topo-toolbar" style="top:14px;left:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:70%;">
         <div style="position:relative;display:flex;align-items:center;">
             <input id="topo-search" class="topo-input" type="text" placeholder="Search name or IP&hellip;" autocomplete="off" aria-label="Search devices by name or IP">
             <span id="topo-search-count" style="position:absolute;right:10px;font-size:.62rem;color:#22d3ee;pointer-events:none;"></span>
@@ -97,7 +108,7 @@
     </div>
 
     <!-- Stats strip -->
-    <div class="topo-overlay" style="top:14px;right:14px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+    <div class="topo-overlay topo-stats" style="top:14px;right:14px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
         <span class="topo-chip"><span class="topo-dot" style="background:#818cf8;"></span><b id="stat-switch">0</b> switches</span>
         <span class="topo-chip"><span class="topo-dot" style="background:#a78bfa;"></span><b id="stat-ap">0</b> APs</span>
         <span class="topo-chip"><span class="topo-dot" style="background:#fbbf24;"></span><b id="stat-gateway">0</b> gateways</span>
@@ -106,13 +117,13 @@
     </div>
 
     <!-- Legend -->
-    <div class="topo-overlay" style="left:14px;bottom:14px;background:rgba(16,20,31,.85);border:1px solid #1e2535;border-radius:10px;padding:11px 14px;backdrop-filter:blur(4px);">
+    <div class="topo-overlay topo-legend" style="left:14px;bottom:14px;background:rgba(16,20,31,.85);border:1px solid #1e2535;border-radius:10px;padding:11px 14px;backdrop-filter:blur(4px);">
         <div class="topo-legend-row"><span class="topo-dot" style="background:#22d3ee;"></span>Internet</div>
         <div class="topo-legend-row"><span class="topo-dot" style="background:#fbbf24;"></span>Gateway</div>
         <div class="topo-legend-row"><span class="topo-dot" style="background:#818cf8;"></span>Switch</div>
         <div class="topo-legend-row"><span class="topo-dot" style="background:#a78bfa;"></span>Access Point</div>
         <div class="topo-legend-row"><span class="topo-dot" style="background:#f87171;"></span>Offline</div>
-        <div style="border-top:1px solid #1e2535;margin-top:8px;padding-top:8px;">
+        <div class="topo-legend-speeds" style="border-top:1px solid #1e2535;margin-top:8px;padding-top:8px;">
             <div class="topo-legend-row" style="font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Wired link speed</div>
             <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#64748b;"></span>&lt; 1 Gbps</div>
             <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#22d3ee;"></span>1 Gbps</div>
@@ -124,7 +135,7 @@
     </div>
 
     <!-- Hint -->
-    <div class="topo-overlay" style="right:14px;bottom:14px;font-size:.64rem;color:#3d4759;text-align:right;pointer-events:none;">
+    <div class="topo-overlay topo-hint" style="right:14px;bottom:14px;font-size:.64rem;color:#3d4759;text-align:right;pointer-events:none;">
         drag to rotate &middot; scroll to zoom &middot; right-drag to pan &middot; click node to open<br>
         shift+click node to focus its neighbourhood &middot; esc to exit
     </div>

@@ -23,19 +23,19 @@ A modern, self-hosted operations portal for HPE Aruba Networking Central. It put
 Screenshots live in `docs/screenshots/`.
 
 <!-- screenshot: dashboard -->
-<!-- ![Dashboard — live stats, charts, and events feed](docs/screenshots/dashboard.png) -->
+![Dashboard — live stats, charts, and events feed](docs/screenshots/dashboard-desktop.png)
 
 <!-- screenshot: device-detail -->
-<!-- ![Device detail — 3D switch faceplate and ops panel](docs/screenshots/device-detail.png) -->
+![Device detail — 3D switch faceplate and ops panel](docs/screenshots/device-detail-desktop.png)
 
 <!-- screenshot: topology -->
-<!-- ![3D topology — filters, focus mode, PNG export](docs/screenshots/topology.png) -->
+![3D topology — filters, focus mode, PNG export](docs/screenshots/topology-desktop.png)
 
 <!-- screenshot: notifications -->
-<!-- ![Notifications — alert rules, recipients, and reports](docs/screenshots/notifications.png) -->
+![Notifications — alert rules, recipients, and reports](docs/screenshots/notifications-desktop.png)
 
 <!-- screenshot: assistant -->
-<!-- ![AI assistant drawer and Ctrl+K command palette](docs/screenshots/assistant.png) -->
+![AI assistant drawer and Ctrl+K command palette](docs/screenshots/assistant-palette-desktop.png)
 
 ## Architecture
 

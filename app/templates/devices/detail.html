@@ -566,7 +566,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
                 </div>
                 <div class="flex-shrink-0 text-right">
                     <p class="text-[0.65rem] text-gray-600 whitespace-nowrap">{{ ev.timeAt[:19].replace('T',' ') if ev.timeAt else '' }}</p>
-                    {% if ev.category %}<p class="text-[0.6rem] text-surface-600 mt-0.5 uppercase tracking-wider">{{ ev.category }}</p>{% endif %}
+                    {% if ev.category %}<p class="text-[0.6rem] text-slate-500 mt-0.5 uppercase tracking-wider">{{ ev.category }}</p>{% endif %}
                 </div>
             </div>
             {% endfor %}
