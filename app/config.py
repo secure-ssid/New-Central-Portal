@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     github_token: str = ""
     database_url: str = "postgresql://netlab:netlab@db:5432/netlab"
+    # Device-down alert engine
+    device_check_interval_seconds: int = 60
+    device_fetch_limit: int = 1000
 
     class Config:
         env_file = ".env"

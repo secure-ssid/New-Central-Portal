@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
         # Logged inside init_db; start degraded — /healthz will report db: fail.
         logger.error("Database init failed — continuing without DB (degraded mode)")
 
-    # Daily expiry check scheduler
+    # Background job scheduler (expiry check + device-down alerts + reports)
     scheduler = None
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
@@ -51,6 +51,31 @@ async def lifespan(app: FastAPI):
         logger.info("Expiry-check scheduler started (daily 07:00)")
     except Exception:
         logger.exception("Failed to start expiry-check scheduler")
+
+    if scheduler is not None:
+        # Device-down alert engine — every 60s (configurable).
+        try:
+            from notifications import run_device_status_check
+            from config import settings
+            interval = max(15, int(settings.device_check_interval_seconds or 60))
+            scheduler.add_job(
+                run_device_status_check, "interval", seconds=interval,
+                id="device_status_check", max_instances=1, coalesce=True,
+            )
+            logger.info("Device-status check job registered (every %ss)", interval)
+        except Exception:
+            logger.exception("Failed to register device-status check job")
+        # Scheduled summary reports — hourly; the job itself decides whether
+        # the configured hour/frequency window is due.
+        try:
+            from notifications import run_summary_report
+            scheduler.add_job(
+                run_summary_report, "cron", minute=5,
+                id="summary_report", max_instances=1, coalesce=True,
+            )
+            logger.info("Summary-report job registered (hourly at :05)")
+        except Exception:
+            logger.exception("Failed to register summary-report job")
 
     yield
 
