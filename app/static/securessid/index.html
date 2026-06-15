@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Network Command Translator</title>
+<meta name="description" content="Translate day-to-day network tasks into the right CLI command for Aruba AOS-CX, Aruba AOS-S, Juniper Junos, Cisco IOS, Ruckus FastIron and Juniper Mist.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230D1117'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%233FB950'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#results">Skip to commands</a>
+
+<header class="hdr">
+  <div class="hdr-row">
+    <h1 class="wordmark"><span class="led" aria-hidden="true"></span>Network&nbsp;Cmd&nbsp;Translator</h1>
+    <div class="hdr-tools">
+      <input id="search" type="search" placeholder="search tasks…  /" autocomplete="off" spellcheck="false" aria-label="Search tasks and tags">
+      <button id="settingsBtn" class="iconbtn" aria-label="Display settings" aria-expanded="false">
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg>
+      </button>
+      <button id="themeBtn" class="iconbtn" aria-label="Switch to light mode">☀</button>
+      <div id="settingsPop" class="pop" hidden>
+        <label class="silk" for="fontSlider">code font size · <span id="fontVal">14</span>px</label>
+        <input id="fontSlider" type="range" min="12" max="18" step="1">
+      </div>
+    </div>
+  </div>
+  <div class="filters">
+    <div class="filter-row"><span class="silk frlabel">vendors</span><div id="vendorPills" class="pills" role="group" aria-label="Toggle vendors"></div></div>
+    <div class="filter-row"><span class="silk frlabel">category</span><div id="catPills" class="pills" role="group" aria-label="Filter by category"></div></div>
+  </div>
+</header>
+
+<div id="varsBar" class="vars">
+  <button id="varsToggle" class="vars-toggle" aria-expanded="true" aria-controls="varsFields">
+    <span class="silk">live vars</span><span class="chev" aria-hidden="true">▾</span>
+  </button>
+  <div id="varsFields" class="vars-fields">
+    <label class="var"><span class="silk">iface</span><input id="var-interface" placeholder="1/1/24" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label class="var var-vlan"><span class="silk">vlan</span><input id="var-vlan" type="number" min="1" max="4094" placeholder="120"><input id="vlanSlider" type="range" min="1" max="4094" step="1" value="1" aria-label="VLAN ID slider"></label>
+    <label class="var"><span class="silk">ip</span><input id="var-ip" placeholder="10.0.0.1" autocomplete="off" inputmode="decimal" spellcheck="false"></label>
+    <label class="var"><span class="silk">host</span><input id="var-hostname" placeholder="sw-core-01" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <button id="varsClear" class="iconbtn vars-clear" aria-label="Clear all variables" title="Clear variables">×</button>
+  </div>
+</div>
+
+<main id="results" class="results"></main>
+
+<footer class="ftr">
+  <span id="statLine" class="stat"></span>
+  <a id="requestLink" href="#" target="_blank" rel="noopener">request a command ↗</a>
+</footer>
+
+<noscript><p class="noscript">This tool needs JavaScript to load its command data.</p></noscript>
+<script src="app.js"></script>
+</body>
+</html>

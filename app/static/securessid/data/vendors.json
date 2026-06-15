@@ -1,0 +1,10 @@
+{
+  "vendors": [
+    { "id": "aos-cx",    "name": "Aruba AOS-CX" },
+    { "id": "aos-s",     "name": "Aruba AOS-S" },
+    { "id": "junos",     "name": "Juniper Junos" },
+    { "id": "cisco-ios", "name": "Cisco IOS" },
+    { "id": "ruckus",    "name": "Ruckus FastIron" },
+    { "id": "mist",      "name": "Juniper Mist (cloud)" }
+  ]
+}
