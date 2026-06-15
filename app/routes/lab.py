@@ -57,7 +57,7 @@ async def lab_menu(request: Request):
         {"slug": "assistant", "name": "AI Assistant",
          "desc": "Choose the AI backend (Claude subscription or GitHub Models), pick a model, and test it.",
          "status": "new", "color": "purple"},
-        {"slug": "securessid", "name": "SecureSSID — CLI Translator",
+        {"slug": "securessid", "name": "Vendor CLI Translator",
          "desc": "Side-by-side equivalent CLI commands across Aruba AOS-CX/AOS-S, Juniper, Cisco, Ruckus, and Mist.",
          "status": "new", "color": "teal"},
         {"slug": "password", "name": "Change Password",
