@@ -1,11 +1,14 @@
 import logging
+from html import escape
 
 from fastapi import APIRouter, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import httpx
 import json
 from config import settings
+import db
+from routes import assistant as assistant_routes
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +53,89 @@ async def lab_menu(request: Request):
         {"slug": "greenlake", "name": "GreenLake Platform",
          "desc": "GLP inventory, subscriptions, users, and audit log from the HPE GreenLake workspace.",
          "status": "new", "color": "green"},
+        {"slug": "assistant", "name": "AI Assistant",
+         "desc": "Choose the AI backend (Claude subscription or GitHub Models), pick a model, and test it.",
+         "status": "new", "color": "purple"},
+        {"slug": "securessid", "name": "SecureSSID — CLI Translator",
+         "desc": "Side-by-side equivalent CLI commands across Aruba AOS-CX/AOS-S, Juniper, Cisco, Ruckus, and Mist.",
+         "status": "new", "color": "teal"},
     ]
     return templates.TemplateResponse(
         request,
         "lab/menu.html",
         {"experiments": experiments, "active": "lab"},
+    )
+
+
+def _assistant_ctx(request: Request, **extra) -> dict:
+    ctx = {
+        "active": "lab",
+        "backend": assistant_routes._resolve_backend(),
+        "model": assistant_routes._resolve_model(),
+        "backends": assistant_routes.VALID_BACKENDS,
+        "labels": assistant_routes.BACKEND_LABELS,
+    }
+    ctx.update(extra)
+    return ctx
+
+
+@router.get("/assistant")
+async def assistant_settings(request: Request):
+    """AI assistant backend configuration (UI for ASSISTANT_BACKEND)."""
+    return templates.TemplateResponse(
+        request,
+        "lab/assistant.html",
+        _assistant_ctx(request, saved=request.query_params.get("saved") == "1"),
+    )
+
+
+@router.post("/assistant")
+async def assistant_settings_save(
+    request: Request,
+    backend: str = Form(...),
+    model: str = Form(""),
+):
+    backend = (backend or "").strip().lower()
+    if backend not in assistant_routes.VALID_BACKENDS:
+        backend = "claude_cli"
+    model = (model or "").strip()
+    if model.startswith("-"):  # never let a model value be parsed as a CLI flag
+        model = ""
+    try:
+        db.set_setting("assistant_backend", backend)
+        db.set_setting("assistant_model", model)
+    except Exception as exc:
+        logger.error("Failed to save assistant settings: %s", exc)
+        return templates.TemplateResponse(
+            request,
+            "lab/assistant.html",
+            _assistant_ctx(
+                request, backend=backend, model=model,
+                error="Could not save — the database is unavailable.",
+            ),
+        )
+    return RedirectResponse(url="/lab/assistant?saved=1", status_code=303)
+
+
+@router.post("/assistant/test")
+async def assistant_settings_test(request: Request):
+    """HTMX: run a quick prompt through the currently-configured backend."""
+    reply = await assistant_routes.generate_reply(
+        "Reply in one short sentence confirming you are online and what you "
+        "help with.",
+        [],
+    )
+    return HTMLResponse(
+        '<div class="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">'
+        f"{escape(reply)}</div>"
+    )
+
+
+@router.get("/securessid")
+async def securessid_page(request: Request):
+    """Embed the vendored SecureSSID CLI-translator static tool."""
+    return templates.TemplateResponse(
+        request, "lab/securessid.html", {"active": "lab"}
     )
 
 
@@ -466,6 +547,9 @@ Write a structured health report with sections: Overall Status, Issues Requiring
                 r.raise_for_status()
                 import re
                 md = r.json()["content"][0]["text"]
+                # Escape first so device/alert names echoed by the LLM cannot
+                # inject HTML; our own markdown→HTML tags are added afterward.
+                md = escape(md)
                 # Basic markdown → HTML
                 md = re.sub(r'^### (.+)$', r'<h3 style="font-size:.9rem;font-weight:700;color:#f97316;margin:18px 0 8px;">\1</h3>', md, flags=re.M)
                 md = re.sub(r'^## (.+)$', r'<h2 style="font-size:1rem;font-weight:700;color:#f1f5f9;margin:20px 0 8px;">\1</h2>', md, flags=re.M)
