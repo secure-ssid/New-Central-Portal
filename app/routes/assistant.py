@@ -12,12 +12,15 @@ render it as a normal message.
 """
 import asyncio
 import logging
+import os
+import shutil
 
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from config import settings
+import db
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,44 @@ UNAVAILABLE_REPLY = (
     "backend could not be reached). The rest of the portal still works; "
     "please try again in a few minutes."
 )
+ASSISTANT_OFF_REPLY = (
+    "The AI assistant is turned off. An administrator can enable it under "
+    "Lab → AI Assistant."
+)
+
+# Available LLM backends, configurable per-deployment (DB setting overrides env).
+#   claude_cli — local Claude Code CLI using the operator's subscription
+#   github     — GitHub Models (OpenAI-compatible), needs GITHUB_TOKEN
+#   off        — assistant disabled
+VALID_BACKENDS = ("claude_cli", "github", "off")
+BACKEND_LABELS = {
+    "claude_cli": "Claude CLI (subscription)",
+    "github": "GitHub Models (gpt-4o)",
+    "off": "Disabled",
+}
+
+
+def _resolve_backend() -> str:
+    """Effective backend: DB setting → ASSISTANT_BACKEND env → 'github'."""
+    try:
+        v = (db.get_setting("assistant_backend") or "").strip().lower()
+        if v in VALID_BACKENDS:
+            return v
+    except Exception:
+        pass
+    v = (os.environ.get("ASSISTANT_BACKEND") or "github").strip().lower()
+    return v if v in VALID_BACKENDS else "github"
+
+
+def _resolve_model() -> str:
+    """Effective model override: DB setting → ASSISTANT_CLAUDE_MODEL env → ''."""
+    try:
+        v = (db.get_setting("assistant_model") or "").strip()
+        if v:
+            return v
+    except Exception:
+        pass
+    return os.environ.get("ASSISTANT_CLAUDE_MODEL", "").strip()
 
 
 def _sanitize_history(history) -> list[dict]:
@@ -139,6 +180,147 @@ def _build_system_prompt(live_context: str) -> str:
     return "\n".join(parts)
 
 
+# ── Claude Code CLI backend (uses the operator's Claude subscription) ─────────
+# Enabled with ASSISTANT_BACKEND=claude_cli. Shells out to the `claude` binary
+# in headless (-p) mode with our own system prompt and no tools/MCP, so it
+# behaves as a plain chat completion. Auth comes from
+# CLAUDE_CONFIG_DIR/.credentials.json or CLAUDE_CODE_OAUTH_TOKEN in the env.
+CLAUDE_TIMEOUT_SECONDS = 120
+_EMPTY_MCP = '{"mcpServers":{}}'
+
+# Warn loudly at import if the CLI backend is selected but the binary is absent,
+# instead of deferring the failure to the first user request.
+if (os.environ.get("ASSISTANT_BACKEND") or "").strip().lower() == "claude_cli":
+    _cli = os.environ.get("CLAUDE_BIN", "claude")
+    if not (os.path.isfile(_cli) or shutil.which(_cli)):
+        logger.warning(
+            "[assistant] ASSISTANT_BACKEND=claude_cli but CLAUDE_BIN is not "
+            "available in this container: %s", _cli,
+        )
+
+
+def _claude_prompt(messages: list[dict]) -> tuple[str, str]:
+    """Split chat messages into (system_prompt, conversation_text)."""
+    system = ""
+    convo: list[str] = []
+    for m in messages:
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        role = m.get("role")
+        # Collapse whitespace (incl. newlines) on user/assistant turns so a
+        # message can't inject fake "User:"/"Assistant:" turns into the prompt.
+        if role == "system":
+            system = content
+        elif role == "assistant":
+            convo.append(f"Assistant: {' '.join(content.split())}")
+        else:
+            convo.append(f"User: {' '.join(content.split())}")
+    return system, "\n\n".join(convo)
+
+
+async def _claude_cli_complete(messages: list[dict], model: str = "") -> str:
+    """Generate a reply via the local Claude Code CLI. Raises on failure."""
+    system, prompt = _claude_prompt(messages)
+    claude_bin = os.environ.get("CLAUDE_BIN", "claude")
+    args = [
+        claude_bin, "-p", prompt,
+        "--output-format", "text",
+        "--allowed-tools", "",
+        "--strict-mcp-config", "--mcp-config", _EMPTY_MCP,
+    ]
+    if system:
+        args += ["--system-prompt", system]
+    if model and not model.startswith("-"):
+        args += ["--model", model]
+
+    env = os.environ.copy()
+    # Use the Claude subscription (OAuth creds in CLAUDE_CONFIG_DIR), not an API
+    # key: a set ANTHROPIC_API_KEY would override OAuth and fail with "Invalid
+    # API key". A present-but-empty OAuth token also breaks auth, so drop it
+    # unless a real one was provided.
+    env.pop("ANTHROPIC_API_KEY", None)
+    if not env.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=CLAUDE_TIMEOUT_SECONDS
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError("claude CLI timed out")
+    if proc.returncode != 0:
+        detail = stderr.decode(errors="replace").strip()[:500]
+        raise RuntimeError(f"claude CLI exited {proc.returncode}: {detail}")
+    return stdout.decode(errors="replace").strip()
+
+
+async def generate_reply(message: str, history: list[dict]) -> str:
+    """Produce an assistant reply using the configured backend.
+
+    Always returns a user-safe string (never raises) so callers can render it
+    directly. The backend is resolved from the DB setting (UI-configurable),
+    falling back to the ASSISTANT_BACKEND env var.
+    """
+    backend = _resolve_backend()
+    if backend == "off":
+        return ASSISTANT_OFF_REPLY
+
+    live_context = await _build_live_context()
+    messages = (
+        [{"role": "system", "content": _build_system_prompt(live_context)}]
+        + history
+        + [{"role": "user", "content": message}]
+    )
+
+    # Backend: local Claude Code CLI (operator's subscription).
+    if backend == "claude_cli":
+        try:
+            reply = await _claude_cli_complete(messages, _resolve_model())
+        except Exception as exc:
+            logger.exception("[assistant] claude CLI call failed: %s", exc)
+            return UNAVAILABLE_REPLY
+        return reply.strip() or UNAVAILABLE_REPLY
+
+    # Backend: GitHub Models (OpenAI-compatible chat completions).
+    if backend != "github":
+        logger.warning("[assistant] unknown backend %r — refusing to answer", backend)
+        return UNAVAILABLE_REPLY
+    if not settings.github_token or settings.github_token == "your_github_pat_here":
+        logger.warning("[assistant] no GitHub token configured — assistant disabled")
+        return UNAVAILABLE_REPLY
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                LLM_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.github_token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": _resolve_model() or LLM_MODEL,
+                    "max_tokens": LLM_MAX_TOKENS,
+                    "messages": messages,
+                },
+            )
+            r.raise_for_status()
+            reply = r.json()["choices"][0]["message"]["content"] or ""
+    except Exception as exc:
+        logger.exception("[assistant] LLM call failed: %s", exc)
+        return UNAVAILABLE_REPLY
+
+    return reply.strip() or UNAVAILABLE_REPLY
+
+
 @router.post("/chat")
 async def chat(request: Request):
     try:
@@ -154,36 +336,5 @@ async def chat(request: Request):
         return JSONResponse({"reply": "Please enter a message and try again."})
 
     history = _sanitize_history(body.get("history"))
-
-    if not settings.github_token or settings.github_token == "your_github_pat_here":
-        logger.warning("[assistant] no GitHub token configured — assistant disabled")
-        return JSONResponse({"reply": UNAVAILABLE_REPLY})
-
-    live_context = await _build_live_context()
-    messages = (
-        [{"role": "system", "content": _build_system_prompt(live_context)}]
-        + history
-        + [{"role": "user", "content": message}]
-    )
-
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            r = await client.post(
-                LLM_URL,
-                headers={
-                    "Authorization": f"Bearer {settings.github_token}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": LLM_MODEL,
-                    "max_tokens": LLM_MAX_TOKENS,
-                    "messages": messages,
-                },
-            )
-            r.raise_for_status()
-            reply = r.json()["choices"][0]["message"]["content"] or ""
-    except Exception as exc:
-        logger.exception("[assistant] LLM call failed: %s", exc)
-        return JSONResponse({"reply": UNAVAILABLE_REPLY})
-
-    return JSONResponse({"reply": reply.strip() or UNAVAILABLE_REPLY})
+    reply = await generate_reply(message, history)
+    return JSONResponse({"reply": reply})
