@@ -8,6 +8,7 @@ import httpx
 import json
 from config import settings
 import db
+import security
 from routes import assistant as assistant_routes
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,9 @@ async def lab_menu(request: Request):
         {"slug": "securessid", "name": "SecureSSID — CLI Translator",
          "desc": "Side-by-side equivalent CLI commands across Aruba AOS-CX/AOS-S, Juniper, Cisco, Ruckus, and Mist.",
          "status": "new", "color": "teal"},
+        {"slug": "password", "name": "Change Password",
+         "desc": "Update the portal login password (stored hashed in the database).",
+         "status": "new", "color": "amber"},
     ]
     return templates.TemplateResponse(
         request,
@@ -137,6 +141,40 @@ async def securessid_page(request: Request):
     return templates.TemplateResponse(
         request, "lab/securessid.html", {"active": "lab"}
     )
+
+
+@router.get("/password")
+async def password_page(request: Request):
+    """Change the portal login password."""
+    return templates.TemplateResponse(request, "lab/password.html", {"active": "lab"})
+
+
+@router.post("/password")
+async def password_change(
+    request: Request,
+    current_password: str = Form(""),
+    new_password: str = Form(""),
+    confirm_password: str = Form(""),
+):
+    def render(error=None, saved=False):
+        return templates.TemplateResponse(
+            request, "lab/password.html",
+            {"active": "lab", "error": error, "saved": saved},
+        )
+
+    if not security.verify_password(current_password):
+        return render(error="Current password is incorrect.")
+    if len(new_password) < 8:
+        return render(error="New password must be at least 8 characters.")
+    if new_password != confirm_password:
+        return render(error="New password and confirmation do not match.")
+    try:
+        security.set_portal_password(new_password)
+    except Exception as exc:
+        logger.error("Password change failed: %s", exc)
+        return render(error="Could not save — the database is unavailable.")
+    logger.info("Portal password changed via UI")
+    return render(saved=True)
 
 
 @router.get("/chat")

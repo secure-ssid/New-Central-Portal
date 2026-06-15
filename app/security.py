@@ -38,8 +38,9 @@ _MAX_TOKEN_LEN = 512
 # ── Auth state ────────────────────────────────────────────────────────────────
 
 def auth_enabled() -> bool:
-    """Auth is enabled iff a portal password is configured (non-empty)."""
-    return bool(settings.portal_password)
+    """Auth is enabled iff a portal password is configured — either the env
+    bootstrap password or a hash saved via the Change Password UI."""
+    return bool(settings.portal_password) or bool(_db_password_hash())
 
 
 def _secret_bytes() -> bytes:
@@ -87,11 +88,57 @@ def verify_session_token(token) -> bool:
     return time.time() < expires
 
 
-def verify_password(submitted) -> bool:
-    """Constant-time comparison against the configured portal password."""
-    if not auth_enabled():
+# Password storage: a hash saved in the DB (via the Change Password UI) takes
+# precedence over the PORTAL_PASSWORD env bootstrap value. Clearing the DB
+# setting (set it to "") reverts authentication to the env password.
+_PBKDF2_ITERATIONS = 240_000
+
+
+def hash_password(pw: str) -> str:
+    """Salted PBKDF2-SHA256 hash, formatted as algo$iterations$salt$hash."""
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, _PBKDF2_ITERATIONS)
+    return f"pbkdf2_sha256${_PBKDF2_ITERATIONS}${salt.hex()}${dk.hex()}"
+
+
+def _verify_pbkdf2(submitted: str, stored: str) -> bool:
+    try:
+        algo, iters, salt_hex, hash_hex = stored.split("$")
+        if algo != "pbkdf2_sha256":
+            return False
+        dk = hashlib.pbkdf2_hmac(
+            "sha256", submitted.encode("utf-8"), bytes.fromhex(salt_hex), int(iters)
+        )
+        return hmac.compare_digest(dk.hex(), hash_hex)
+    except Exception:
         return False
+
+
+def _db_password_hash():
+    """The DB-stored portal password hash, or None if unset/unavailable."""
+    try:
+        import db
+        v = (db.get_setting("portal_password_hash") or "").strip()
+        return v or None
+    except Exception:
+        return None
+
+
+def set_portal_password(pw: str) -> None:
+    """Persist a new portal password (hashed) in the DB, superseding env."""
+    import db
+    db.set_setting("portal_password_hash", hash_password(pw))
+
+
+def verify_password(submitted) -> bool:
+    """Check a submitted password against the DB hash if one is set, else the
+    env bootstrap password. Constant-time; never raises on bad input."""
     if not isinstance(submitted, str):
+        return False
+    stored = _db_password_hash()
+    if stored:
+        return _verify_pbkdf2(submitted, stored)
+    if not settings.portal_password:
         return False
     return secrets.compare_digest(
         submitted.encode("utf-8"), settings.portal_password.encode("utf-8")
