@@ -1,0 +1,1555 @@
+[
+  {
+    "id": "show-interface-status",
+    "task": "Show interface status (all ports)",
+    "category": "Interfaces",
+    "tags": [
+      "interface",
+      "status",
+      "ports",
+      "link",
+      "brief"
+    ],
+    "commands": {
+      "aos-cx": "show interface brief",
+      "aos-s": "show interfaces brief",
+      "junos": "show interfaces terse",
+      "cisco-ios": "show interfaces status",
+      "ruckus": "show interfaces brief"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List",
+    "notes": "Cisco's 'show interfaces status' exists on switching platforms only; on routers use 'show ip interface brief' instead."
+  },
+  {
+    "id": "show-interface-errors",
+    "task": "Show interface errors",
+    "category": "Interfaces",
+    "tags": [
+      "interface",
+      "errors",
+      "counters",
+      "drops",
+      "crc"
+    ],
+    "commands": {
+      "aos-cx": "show interface {{interface}}",
+      "aos-s": "show interfaces {{interface}}",
+      "junos": "show interfaces {{interface}} extensive",
+      "cisco-ios": "show interfaces {{interface}}",
+      "ruckus": "show interfaces ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List > select port"
+  },
+  {
+    "id": "show-transceiver",
+    "task": "Show transceiver / optics info",
+    "category": "Interfaces",
+    "tags": [
+      "transceiver",
+      "optics",
+      "sfp",
+      "dom",
+      "light"
+    ],
+    "commands": {
+      "aos-cx": "show interface {{interface}} transceiver",
+      "aos-s": "show interfaces transceiver",
+      "junos": "show interfaces diagnostics optics {{interface}}",
+      "cisco-ios": "show interfaces {{interface}} transceiver",
+      "ruckus": "show optic {{interface}}"
+    },
+    "notes": "DOM data only appears on optics that support digital monitoring; on Ruckus FastIron enable 'optical-monitor' first."
+  },
+  {
+    "id": "set-interface-description",
+    "task": "Set interface description",
+    "category": "Interfaces",
+    "tags": [
+      "interface",
+      "description",
+      "port",
+      "label"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\ndescription LINK-TO-CORE",
+      "aos-s": "interface {{interface}}\nname LINK-TO-CORE",
+      "junos": "set interfaces {{interface}} description LINK-TO-CORE",
+      "cisco-ios": "interface {{interface}}\ndescription LINK-TO-CORE",
+      "ruckus": "interface ethernet {{interface}}\nport-name LINK-TO-CORE"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration (Description field)",
+    "notes": "AOS-S uses 'name' and Ruckus FastIron uses 'port-name' instead of 'description'."
+  },
+  {
+    "id": "interface-disable",
+    "task": "Shut down an interface",
+    "category": "Interfaces",
+    "tags": [
+      "interface",
+      "shutdown",
+      "disable",
+      "port"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nshutdown",
+      "aos-s": "interface {{interface}}\ndisable",
+      "junos": "set interfaces {{interface}} disable",
+      "cisco-ios": "interface {{interface}}\nshutdown",
+      "ruckus": "interface ethernet {{interface}}\ndisable"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Modify Port Configuration (assign 'disabled' profile)",
+    "notes": "AOS-S and Ruckus use 'disable' in the interface context rather than 'shutdown'."
+  },
+  {
+    "id": "interface-enable",
+    "task": "Bring up an interface (no shutdown)",
+    "category": "Interfaces",
+    "tags": [
+      "interface",
+      "enable",
+      "shutdown",
+      "port",
+      "up"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nno shutdown",
+      "aos-s": "interface {{interface}}\nenable",
+      "junos": "delete interfaces {{interface}} disable",
+      "cisco-ios": "interface {{interface}}\nno shutdown",
+      "ruckus": "interface ethernet {{interface}}\nenable"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Modify Port Configuration (remove 'disabled' profile)",
+    "notes": "Junos has no 'no shutdown' equivalent — you re-enable by deleting the disable statement, while AOS-S and Ruckus use 'enable'."
+  },
+  {
+    "id": "show-interface-counters",
+    "task": "Show interface traffic counters",
+    "category": "Interfaces",
+    "tags": [
+      "counters",
+      "statistics",
+      "traffic",
+      "packets",
+      "bytes"
+    ],
+    "commands": {
+      "aos-cx": "show interface {{interface}}",
+      "aos-s": "show interfaces {{interface}}",
+      "junos": "show interfaces {{interface}} statistics",
+      "cisco-ios": "show interfaces {{interface}} counters",
+      "ruckus": "show statistics ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List > select port for traffic insights",
+    "notes": "Cisco 'show interfaces <port> counters' is Catalyst switch syntax — on IOS routers use plain 'show interfaces <port>' for packet/byte counts."
+  },
+  {
+    "id": "clear-interface-counters",
+    "task": "Clear interface counters",
+    "category": "Interfaces",
+    "tags": [
+      "clear",
+      "counters",
+      "statistics",
+      "reset"
+    ],
+    "commands": {
+      "aos-cx": "clear interface {{interface}} statistics",
+      "aos-s": "clear statistics {{interface}}",
+      "junos": "clear interfaces statistics {{interface}}",
+      "cisco-ios": "clear counters {{interface}}",
+      "ruckus": "clear statistics ethernet {{interface}}"
+    },
+    "notes": "On AOS-CX this zeroes counters only for your current CLI session — use 'clear interface statistics global' to reset them for all sessions.",
+    "verify": [
+      "aos-cx"
+    ]
+  },
+  {
+    "id": "set-interface-speed",
+    "task": "Set interface speed and duplex",
+    "category": "Interfaces",
+    "tags": [
+      "speed",
+      "duplex",
+      "autoneg",
+      "gigabit"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nspeed 1000-full",
+      "aos-s": "interface {{interface}}\nspeed-duplex 1000-full",
+      "junos": "set interfaces {{interface}} ether-options speed 1g\nset interfaces {{interface}} ether-options link-mode full-duplex",
+      "cisco-ios": "interface {{interface}}\nspeed 1000\nduplex full",
+      "ruckus": "interface ethernet {{interface}}\nspeed-duplex 1000-full"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration > edit port profile (Speed/Duplex)",
+    "notes": "The Junos hierarchy varies by EX/QFX generation — newer platforms put forced speed and autoneg under 'ether-options' (e.g. 'set interfaces ge-0/0/0 ether-options no-auto-negotiation') — so confirm on your platform before pasting.",
+    "verify": [
+      "junos"
+    ]
+  },
+  {
+    "id": "set-interface-mtu",
+    "task": "Set interface MTU (jumbo frames)",
+    "category": "Interfaces",
+    "tags": [
+      "mtu",
+      "jumbo",
+      "frames",
+      "9000"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nmtu 9198",
+      "aos-s": "vlan {{vlan}}\njumbo",
+      "junos": "set interfaces {{interface}} mtu 9216",
+      "cisco-ios": "interface {{interface}}\nmtu 9198",
+      "ruckus": "jumbo"
+    },
+    "mist_note": "Mist dashboard: MTU is set in the port profile under Switches > [switch] > Port Configuration",
+    "notes": "AOS-S has no per-port MTU (jumbo is enabled per VLAN), Ruckus 'jumbo' is global and needs write memory plus a reload, and per-port mtu on Catalyst requires IOS XE 17.1+ (older Catalyst L2 switches use global 'system mtu jumbo 9000' plus a reload instead)."
+  },
+  {
+    "id": "configure-interface-range",
+    "task": "Configure a range of ports at once",
+    "category": "Interfaces",
+    "tags": [
+      "range",
+      "bulk",
+      "ports",
+      "batch"
+    ],
+    "commands": {
+      "aos-cx": "interface 1/1/1-1/1/4\nshutdown",
+      "aos-s": "interface 1-4\ndisable",
+      "junos": "set interfaces interface-range RANGE1 member-range ge-0/0/0 to ge-0/0/3\nset interfaces interface-range RANGE1 disable",
+      "cisco-ios": "interface range GigabitEthernet1/0/1 - 4\nshutdown",
+      "ruckus": "interface ethernet 1/1/1 to 1/1/4\ndisable"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration accepts port ranges (e.g. ge-0/0/0-3)",
+    "notes": "Junos has no interactive range context — the interface-range group (named RANGE1 here) is committed configuration that persists, unlike the throwaway range contexts on IOS-style CLIs."
+  },
+  {
+    "id": "show-interface-descriptions",
+    "task": "Show all interface descriptions",
+    "category": "Interfaces",
+    "tags": [
+      "descriptions",
+      "names",
+      "ports",
+      "list"
+    ],
+    "commands": {
+      "aos-cx": "show interface brief",
+      "aos-s": "show name",
+      "junos": "show interfaces descriptions",
+      "cisco-ios": "show interfaces description",
+      "ruckus": "show interfaces brief"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List",
+    "notes": "AOS-S calls port descriptions 'names' (hence 'show name'), and on AOS-CX and Ruckus the description/name is the right-most column of the brief listing and may be truncated.",
+    "verify": [
+      "mist"
+    ]
+  },
+  {
+    "id": "show-vlans",
+    "task": "Show VLANs",
+    "category": "VLANs",
+    "tags": [
+      "vlan",
+      "show",
+      "list",
+      "layer2"
+    ],
+    "commands": {
+      "aos-cx": "show vlan",
+      "aos-s": "show vlans",
+      "junos": "show vlans",
+      "cisco-ios": "show vlan brief",
+      "ruckus": "show vlan"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List",
+    "notes": "AOS-S uses the plural 'show vlans' while AOS-CX and Ruckus use the singular 'show vlan'."
+  },
+  {
+    "id": "create-vlan",
+    "task": "Create a VLAN with a name",
+    "category": "VLANs",
+    "tags": [
+      "vlan",
+      "create",
+      "name",
+      "layer2"
+    ],
+    "commands": {
+      "aos-cx": "vlan {{vlan}}\nname USERS",
+      "aos-s": "vlan {{vlan}}\nname USERS",
+      "junos": "set vlans USERS vlan-id {{vlan}}",
+      "cisco-ios": "vlan {{vlan}}\nname USERS",
+      "ruckus": "vlan {{vlan}} name USERS by port"
+    },
+    "mist_note": "Mist dashboard: Organization > Switch Templates > Shared Elements > Networks",
+    "notes": "Junos keys the VLAN by its name (USERS) with the numeric ID as an attribute — the reverse of IOS-style CLIs."
+  },
+  {
+    "id": "vlan-access-port",
+    "task": "Assign access (untagged) port to a VLAN",
+    "category": "VLANs",
+    "tags": [
+      "vlan",
+      "access",
+      "untagged",
+      "port"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nvlan access {{vlan}}",
+      "aos-s": "vlan {{vlan}}\nuntagged {{interface}}",
+      "junos": "set interfaces {{interface}} unit 0 family ethernet-switching interface-mode access\nset interfaces {{interface}} unit 0 family ethernet-switching vlan members {{vlan}}",
+      "cisco-ios": "interface {{interface}}\nswitchport mode access\nswitchport access vlan {{vlan}}",
+      "ruckus": "vlan {{vlan}}\nuntagged ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration (assign an access port profile)",
+    "notes": "AOS-S and Ruckus FastIron assign untagged membership from the VLAN context, not the interface context."
+  },
+  {
+    "id": "vlan-trunk-port",
+    "task": "Configure trunk/tagged VLAN on a port",
+    "category": "VLANs",
+    "tags": [
+      "vlan",
+      "trunk",
+      "tagged",
+      "dot1q",
+      "port"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nvlan trunk allowed {{vlan}}",
+      "aos-s": "vlan {{vlan}}\ntagged {{interface}}",
+      "junos": "set interfaces {{interface}} unit 0 family ethernet-switching interface-mode trunk\nset interfaces {{interface}} unit 0 family ethernet-switching vlan members {{vlan}}",
+      "cisco-ios": "interface {{interface}}\nswitchport mode trunk\nswitchport trunk allowed vlan {{vlan}}",
+      "ruckus": "vlan {{vlan}}\ntagged ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration (assign a trunk port profile)",
+    "notes": "On Cisco IOS, 'switchport trunk allowed vlan <id>' replaces the existing allowed list — use 'switchport trunk allowed vlan add <id>' to append to a live trunk."
+  },
+  {
+    "id": "show-vlan-ports",
+    "task": "Show which ports are in a VLAN",
+    "category": "VLANs",
+    "tags": [
+      "vlan",
+      "ports",
+      "membership",
+      "show",
+      "tagged"
+    ],
+    "commands": {
+      "aos-cx": "show vlan {{vlan}}",
+      "aos-s": "show vlans {{vlan}}",
+      "junos": "show vlans {{vlan}}",
+      "cisco-ios": "show vlan id {{vlan}}",
+      "ruckus": "show vlan {{vlan}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List (VLAN column)",
+    "notes": "Junos identifies VLANs by configured name rather than numeric ID, so pass the VLAN name (e.g. vlan-100) to show vlans.",
+    "verify": [
+      "mist"
+    ]
+  },
+  {
+    "id": "delete-vlan",
+    "task": "Delete a VLAN",
+    "category": "VLANs",
+    "tags": [
+      "vlan",
+      "delete",
+      "remove",
+      "cleanup"
+    ],
+    "commands": {
+      "aos-cx": "no vlan {{vlan}}",
+      "aos-s": "no vlan {{vlan}}",
+      "junos": "delete vlans {{vlan}}",
+      "cisco-ios": "no vlan {{vlan}}",
+      "ruckus": "no vlan {{vlan}}"
+    },
+    "mist_note": "Mist dashboard: Organization > Switch Templates > Shared Elements > Networks (delete the network)",
+    "notes": "On Cisco IOS, access ports still assigned to a deleted VLAN go inactive and silently blackhole traffic until reassigned, and Junos deletes by VLAN name with delete vlans <name>."
+  },
+  {
+    "id": "set-native-vlan",
+    "task": "Set native/untagged VLAN on a trunk port",
+    "category": "VLANs",
+    "tags": [
+      "native",
+      "vlan",
+      "trunk",
+      "untagged"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nvlan trunk native {{vlan}}",
+      "aos-s": "vlan {{vlan}}\nuntagged {{interface}}",
+      "junos": "set interfaces {{interface}} native-vlan-id {{vlan}}\nset interfaces {{interface}} unit 0 family ethernet-switching vlan members {{vlan}}",
+      "cisco-ios": "interface {{interface}}\nswitchport trunk native vlan {{vlan}}",
+      "ruckus": "vlan {{vlan}}\nuntagged ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Organization > Switch Templates > Port Profiles (trunk mode, Port Network = native VLAN)",
+    "notes": "AOS-S and Ruckus have no per-port native-vlan keyword (untagged membership is set from VLAN context, and Ruckus releases before FastIron 08.0.80 instead need the port tagged plus dual-mode <vlan-id> under the interface), while Junos also requires the native VLAN in the trunk's vlan members list."
+  },
+  {
+    "id": "voice-vlan",
+    "task": "Configure voice VLAN on a port",
+    "category": "VLANs",
+    "tags": [
+      "voice",
+      "vlan",
+      "voip",
+      "phone",
+      "lldp-med"
+    ],
+    "commands": {
+      "aos-cx": "vlan {{vlan}}\nvoice\ninterface {{interface}}\nvlan trunk allowed {{vlan}}",
+      "aos-s": "vlan {{vlan}}\nvoice\ntagged {{interface}}",
+      "junos": "set switch-options voip interface {{interface}}.0 vlan {{vlan}}",
+      "cisco-ios": "interface {{interface}}\nswitchport voice vlan {{vlan}}",
+      "ruckus": "vlan {{vlan}}\ntagged ethernet {{interface}}\nexit\nlldp med network-policy application voice tagged vlan {{vlan}} priority 5 dscp 46 ports ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Organization > Switch Templates > Port Profiles (set VoIP Network on the profile)",
+    "notes": "Phones learn the voice VLAN via LLDP-MED on all five vendors, and on Junos the value must be the configured VLAN name (not the numeric ID)."
+  },
+  {
+    "id": "create-svi",
+    "task": "Create an SVI (VLAN interface) with an IP",
+    "category": "VLANs",
+    "tags": [
+      "svi",
+      "vlan",
+      "interface",
+      "ip",
+      "layer3"
+    ],
+    "commands": {
+      "aos-cx": "interface vlan {{vlan}}\nip address {{ip}}/24",
+      "aos-s": "vlan {{vlan}}\nip address {{ip}} 255.255.255.0",
+      "junos": "set vlans {{vlan}} l3-interface irb.{{vlan}}\nset interfaces irb unit {{vlan}} family inet address {{ip}}/24",
+      "cisco-ios": "interface Vlan{{vlan}}\nip address {{ip}} 255.255.255.0\nno shutdown",
+      "ruckus": "vlan {{vlan}}\nrouter-interface ve {{vlan}}\ninterface ve {{vlan}}\nip address {{ip}} 255.255.255.0"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Other IP Configuration (add an IP on the network)",
+    "notes": "Ruckus needs the Layer 3 (router) FastIron image for ve interfaces, and on Junos the irb unit replaces the older interface vlan RVI used by pre-ELS EX code."
+  },
+  {
+    "id": "enable-igmp-snooping",
+    "task": "Enable IGMP snooping on a VLAN",
+    "category": "VLANs",
+    "tags": [
+      "igmp",
+      "snooping",
+      "multicast",
+      "vlan"
+    ],
+    "commands": {
+      "aos-cx": "vlan {{vlan}}\nip igmp snooping enable",
+      "aos-s": "vlan {{vlan}}\nip igmp",
+      "junos": "set protocols igmp-snooping vlan {{vlan}}",
+      "cisco-ios": "ip igmp snooping vlan {{vlan}}",
+      "ruckus": "vlan {{vlan}}\nmulticast passive"
+    },
+    "mist_note": "Mist dashboard: no IGMP Snooping section in the UI — add 'set protocols igmp-snooping vlan all' under Organization > Switch Templates > Additional CLI Commands",
+    "notes": "Cisco IOS already has IGMP snooping on by default for every VLAN, and on Ruckus choosing multicast active instead of passive also makes the switch the IGMP querier.",
+    "verify": [
+      "mist"
+    ]
+  },
+  {
+    "id": "show-routes",
+    "task": "Show the routing table",
+    "category": "Routing",
+    "tags": [
+      "route",
+      "routing",
+      "table",
+      "rib"
+    ],
+    "commands": {
+      "aos-cx": "show ip route",
+      "aos-s": "show ip route",
+      "junos": "show route",
+      "cisco-ios": "show ip route",
+      "ruckus": "show ip route"
+    },
+    "notes": "Junos drops the \"ip\" keyword — the command is \"show route\", not \"show ip route\"."
+  },
+  {
+    "id": "show-ospf-neighbors",
+    "task": "Show OSPF neighbors",
+    "category": "Routing",
+    "tags": [
+      "ospf",
+      "neighbor",
+      "adjacency",
+      "routing"
+    ],
+    "commands": {
+      "aos-cx": "show ip ospf neighbors",
+      "aos-s": "show ip ospf neighbor",
+      "junos": "show ospf neighbor",
+      "cisco-ios": "show ip ospf neighbor",
+      "ruckus": "show ip ospf neighbor"
+    },
+    "notes": "AOS-CX uses the plural \"neighbors\" while AOS-S, Cisco IOS, and Ruckus FastIron use the singular \"neighbor\"."
+  },
+  {
+    "id": "show-bgp-summary",
+    "task": "Show BGP summary",
+    "category": "Routing",
+    "tags": [
+      "bgp",
+      "summary",
+      "peers",
+      "routing"
+    ],
+    "commands": {
+      "aos-cx": "show bgp ipv4 unicast summary",
+      "junos": "show bgp summary",
+      "cisco-ios": "show ip bgp summary",
+      "ruckus": "show ip bgp summary"
+    },
+    "notes": "AOS-S 2530/2930F-class switches do not support BGP, so no aos-s equivalent exists."
+  },
+  {
+    "id": "add-static-route",
+    "task": "Add a static route",
+    "category": "Routing",
+    "tags": [
+      "static",
+      "route",
+      "next-hop",
+      "config",
+      "routing"
+    ],
+    "commands": {
+      "aos-cx": "ip route 192.0.2.0/24 {{ip}}",
+      "aos-s": "ip route 192.0.2.0 255.255.255.0 {{ip}}",
+      "junos": "set routing-options static route 192.0.2.0/24 next-hop {{ip}}",
+      "cisco-ios": "ip route 192.0.2.0 255.255.255.0 {{ip}}",
+      "ruckus": "ip route 192.0.2.0 255.255.255.0 {{ip}}"
+    },
+    "notes": "AOS-CX and Junos take CIDR prefix notation while AOS-S and Cisco IOS require a dotted-decimal mask (FastIron accepts either form)."
+  },
+  {
+    "id": "show-route-to-host",
+    "task": "Look up the route to a destination",
+    "category": "Routing",
+    "tags": [
+      "route",
+      "lookup",
+      "destination",
+      "longest-match"
+    ],
+    "commands": {
+      "aos-cx": "show ip route {{ip}}",
+      "aos-s": "show ip route {{ip}}",
+      "junos": "show route {{ip}}",
+      "cisco-ios": "show ip route {{ip}}",
+      "ruckus": "show ip route {{ip}}"
+    },
+    "notes": "Junos omits the 'ip' keyword — 'show ip route' is not a valid command on EX/QFX.",
+    "verify": [
+      "aos-s"
+    ]
+  },
+  {
+    "id": "add-default-route",
+    "task": "Add a default route",
+    "category": "Routing",
+    "tags": [
+      "default",
+      "route",
+      "gateway",
+      "static"
+    ],
+    "commands": {
+      "aos-cx": "ip route 0.0.0.0/0 {{ip}}",
+      "aos-s": "ip route 0.0.0.0 0.0.0.0 {{ip}}",
+      "junos": "set routing-options static route 0.0.0.0/0 next-hop {{ip}}",
+      "cisco-ios": "ip route 0.0.0.0 0.0.0.0 {{ip}}",
+      "ruckus": "ip route 0.0.0.0 0.0.0.0 {{ip}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Static Route (also at Organization > Switch Templates)",
+    "notes": "On L2-only AOS-S models such as the 2530, IP routing is unavailable — use 'ip default-gateway <ip>' instead of an ip route statement."
+  },
+  {
+    "id": "show-ip-interfaces",
+    "task": "Show IP interfaces summary",
+    "category": "Routing",
+    "tags": [
+      "interface",
+      "ip",
+      "brief",
+      "svi",
+      "summary"
+    ],
+    "commands": {
+      "aos-cx": "show ip interface brief",
+      "aos-s": "show ip",
+      "junos": "show interfaces terse",
+      "cisco-ios": "show ip interface brief",
+      "ruckus": "show ip interface"
+    },
+    "notes": "AOS-S has no 'brief' form — 'show ip' prints the per-VLAN IP table, and Junos 'show interfaces terse' includes L2 ports too (filter with '| match irb' for SVIs only)."
+  },
+  {
+    "id": "dhcp-relay",
+    "task": "Configure DHCP relay (IP helper) on an SVI",
+    "category": "Routing",
+    "tags": [
+      "dhcp",
+      "relay",
+      "helper",
+      "svi",
+      "vlan"
+    ],
+    "commands": {
+      "aos-cx": "interface vlan {{vlan}}\nip helper-address {{ip}}",
+      "aos-s": "vlan {{vlan}}\nip helper-address {{ip}}",
+      "junos": "set forwarding-options dhcp-relay server-group DHCP-SERVERS {{ip}}\nset forwarding-options dhcp-relay active-server-group DHCP-SERVERS\nset forwarding-options dhcp-relay group RELAY-GROUP interface irb.{{vlan}}",
+      "cisco-ios": "interface Vlan{{vlan}}\nip helper-address {{ip}}",
+      "ruckus": "interface ve {{vlan}}\nip helper-address 1 {{ip}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Services > DHCP Server / Relay",
+    "notes": "On non-ELS Junos EX the SVI is vlan.<unit> rather than irb.<unit>, and the FastIron ve number matches the VLAN id only by convention (it is whatever 'router-interface ve' assigned under the VLAN)."
+  },
+  {
+    "id": "show-version",
+    "task": "Show version / software info",
+    "category": "System",
+    "tags": [
+      "version",
+      "firmware",
+      "software",
+      "os",
+      "uptime"
+    ],
+    "commands": {
+      "aos-cx": "show version",
+      "aos-s": "show version",
+      "junos": "show version",
+      "cisco-ios": "show version",
+      "ruckus": "show version"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] (firmware version in switch details)",
+    "notes": "On AOS-S, show version reports only the software revision — use show system for serial number and uptime, which Cisco IOS includes in show version."
+  },
+  {
+    "id": "show-running-config",
+    "task": "Show running configuration",
+    "category": "System",
+    "tags": [
+      "running",
+      "config",
+      "configuration",
+      "show"
+    ],
+    "commands": {
+      "aos-cx": "show running-config",
+      "aos-s": "show running-config",
+      "junos": "show configuration",
+      "cisco-ios": "show running-config",
+      "ruckus": "show running-config"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Utilities > Download Junos Config",
+    "notes": "Junos has no show running-config — use show configuration from operational mode (append | display set for set-style output)."
+  },
+  {
+    "id": "save-config",
+    "task": "Save the configuration",
+    "category": "System",
+    "tags": [
+      "save",
+      "write",
+      "memory",
+      "startup",
+      "commit"
+    ],
+    "commands": {
+      "aos-cx": "write memory",
+      "aos-s": "write memory",
+      "junos": "commit",
+      "cisco-ios": "write memory",
+      "ruckus": "write memory"
+    },
+    "notes": "Junos has no separate save step — commit is run from configuration mode and both applies and persists the candidate configuration."
+  },
+  {
+    "id": "reboot-switch",
+    "task": "Reboot the switch",
+    "category": "System",
+    "tags": [
+      "reboot",
+      "reload",
+      "restart",
+      "boot"
+    ],
+    "commands": {
+      "aos-cx": "boot system",
+      "aos-s": "reload",
+      "junos": "request system reboot",
+      "cisco-ios": "reload",
+      "ruckus": "reload"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Utilities > Reboot Switch",
+    "notes": "AOS-CX has no reload command — boot system is the reboot, and it prompts to save if there are unsaved configuration changes."
+  },
+  {
+    "id": "set-hostname",
+    "task": "Set the hostname",
+    "category": "System",
+    "tags": [
+      "hostname",
+      "name",
+      "system",
+      "identity"
+    ],
+    "commands": {
+      "aos-cx": "hostname {{hostname}}",
+      "aos-s": "hostname {{hostname}}",
+      "junos": "set system host-name {{hostname}}",
+      "cisco-ios": "hostname {{hostname}}",
+      "ruckus": "hostname {{hostname}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > rename switch (pushed to the device as its Junos host-name)",
+    "notes": "Junos spells it host-name (hyphenated) under the system hierarchy, not hostname."
+  },
+  {
+    "id": "show-cpu-memory",
+    "task": "Show CPU and memory usage",
+    "category": "System",
+    "tags": [
+      "cpu",
+      "memory",
+      "utilization",
+      "performance",
+      "health"
+    ],
+    "commands": {
+      "aos-cx": "show system resource-utilization",
+      "aos-s": "show system",
+      "junos": "show chassis routing-engine",
+      "cisco-ios": "show processes cpu sorted",
+      "ruckus": "show cpu-utilization"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Switch Insights (CPU & Memory Utilization)",
+    "notes": "Cisco IOS and FastIron report memory with a separate command (show processes memory / show memory) — the commands shown cover CPU only on those two platforms."
+  },
+  {
+    "id": "show-environment",
+    "task": "Show temperature, fans, power supplies",
+    "category": "System",
+    "tags": [
+      "temperature",
+      "fans",
+      "power",
+      "environment",
+      "hardware"
+    ],
+    "commands": {
+      "aos-cx": "show environment temperature",
+      "aos-s": "show system fans",
+      "junos": "show chassis environment",
+      "cisco-ios": "show env all",
+      "ruckus": "show chassis"
+    },
+    "notes": "Aruba splits environment status across commands — AOS-CX also has show environment fan and show environment power-supply, and AOS-S also has show system temperature and show system power-supply."
+  },
+  {
+    "id": "show-inventory",
+    "task": "Show serial numbers / hardware inventory",
+    "category": "System",
+    "tags": [
+      "serial",
+      "inventory",
+      "hardware",
+      "model",
+      "modules"
+    ],
+    "commands": {
+      "aos-cx": "show system",
+      "aos-s": "show modules",
+      "junos": "show chassis hardware",
+      "cisco-ios": "show inventory",
+      "ruckus": "show version"
+    },
+    "mist_note": "Mist dashboard: Organization > Inventory",
+    "notes": "FastIron has no show inventory command — serial numbers appear in show version output."
+  },
+  {
+    "id": "backup-config-tftp",
+    "task": "Back up the config to a TFTP server",
+    "category": "System",
+    "tags": [
+      "backup",
+      "tftp",
+      "config",
+      "copy",
+      "export"
+    ],
+    "commands": {
+      "aos-cx": "copy running-config tftp://{{ip}}/backup.cfg cli",
+      "aos-s": "copy running-config tftp {{ip}} backup.cfg",
+      "cisco-ios": "copy running-config tftp://{{ip}}/backup.cfg",
+      "ruckus": "copy running-config tftp {{ip}} backup.cfg"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Utilities > Download Junos Config",
+    "notes": "Junos cannot copy files over TFTP (use file copy /config/juniper.conf.gz scp://<server>/backup.cfg instead), and AOS-CX requires the trailing cli format keyword."
+  },
+  {
+    "id": "set-ntp-server",
+    "task": "Configure an NTP server",
+    "category": "System",
+    "tags": [
+      "ntp",
+      "time",
+      "clock",
+      "sync"
+    ],
+    "commands": {
+      "aos-cx": "ntp server {{ip}}\nntp enable",
+      "aos-s": "timesync ntp\nntp unicast\nntp server {{ip}}\nntp enable",
+      "junos": "set system ntp server {{ip}}",
+      "cisco-ios": "ntp server {{ip}}",
+      "ruckus": "ntp\nserver {{ip}}"
+    },
+    "mist_note": "Mist dashboard: Organization > Switch Templates > [template] > All Switches Configuration > NTP",
+    "notes": "Older AOS-S firmware (2530 class) may only support SNTP (timesync sntp / sntp unicast / sntp server priority 1 <ip>), and FastIron will not sync until the clock is first set within 1000 seconds of real time (clock set)."
+  },
+  {
+    "id": "set-dns-server",
+    "task": "Configure a DNS server",
+    "category": "System",
+    "tags": [
+      "dns",
+      "nameserver",
+      "resolver",
+      "domain"
+    ],
+    "commands": {
+      "aos-cx": "ip dns server-address {{ip}}",
+      "aos-s": "ip dns server-address priority 1 {{ip}}",
+      "junos": "set system name-server {{ip}}",
+      "cisco-ios": "ip name-server {{ip}}",
+      "ruckus": "ip dns server-address {{ip}}"
+    },
+    "mist_note": "Mist dashboard: Organization > Switch Templates > [template] > All Switches Configuration > DNS"
+  },
+  {
+    "id": "set-syslog-server",
+    "task": "Send logs to a syslog server",
+    "category": "System",
+    "tags": [
+      "syslog",
+      "logging",
+      "logs",
+      "server"
+    ],
+    "commands": {
+      "aos-cx": "logging {{ip}}",
+      "aos-s": "logging {{ip}}",
+      "junos": "set system syslog host {{ip}} any any",
+      "cisco-ios": "logging host {{ip}}",
+      "ruckus": "logging host {{ip}}"
+    },
+    "mist_note": "Mist dashboard: Organization > Switch Templates > [template] > All Switches Configuration > Syslog",
+    "notes": "The Junos line logs every facility at every severity (any any) — most deployments tighten this to any notice or any warning."
+  },
+  {
+    "id": "create-admin-user",
+    "task": "Create a local admin user",
+    "category": "System",
+    "tags": [
+      "user",
+      "admin",
+      "username",
+      "password",
+      "account"
+    ],
+    "commands": {
+      "aos-cx": "user netadmin group administrators password plaintext PASSWORD",
+      "aos-s": "password manager user-name netadmin plaintext PASSWORD",
+      "junos": "set system login user netadmin class super-user authentication plain-text-password",
+      "cisco-ios": "username netadmin privilege 15 secret PASSWORD",
+      "ruckus": "username netadmin privilege 0 password PASSWORD"
+    },
+    "notes": "Junos prompts interactively for the password, AOS-S has no arbitrary local users (only the fixed manager/operator accounts), and FastIron local users only take effect at login once aaa authentication login default local is configured."
+  },
+  {
+    "id": "ping-host",
+    "task": "Ping a host",
+    "category": "Troubleshooting",
+    "tags": [
+      "ping",
+      "icmp",
+      "reachability",
+      "connectivity"
+    ],
+    "commands": {
+      "aos-cx": "ping {{ip}}",
+      "aos-s": "ping {{ip}}",
+      "junos": "ping {{ip}} count 5",
+      "cisco-ios": "ping {{ip}}",
+      "ruckus": "ping {{ip}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Utilities > Testing Tools > Ping",
+    "notes": "Junos ping runs continuously until Ctrl+C, so a count is included here; the other vendors stop after a fixed packet count by default."
+  },
+  {
+    "id": "traceroute-host",
+    "task": "Traceroute to a host",
+    "category": "Troubleshooting",
+    "tags": [
+      "traceroute",
+      "path",
+      "hops",
+      "latency"
+    ],
+    "commands": {
+      "aos-cx": "traceroute {{ip}}",
+      "aos-s": "traceroute {{ip}}",
+      "junos": "traceroute {{ip}}",
+      "cisco-ios": "traceroute {{ip}}",
+      "ruckus": "traceroute {{ip}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Utilities > Testing Tools > Traceroute"
+  },
+  {
+    "id": "show-logs",
+    "task": "Show system logs",
+    "category": "Troubleshooting",
+    "tags": [
+      "logs",
+      "syslog",
+      "events",
+      "history"
+    ],
+    "commands": {
+      "aos-cx": "show events",
+      "aos-s": "show logging",
+      "junos": "show log messages",
+      "cisco-ios": "show logging",
+      "ruckus": "show logging"
+    },
+    "mist_note": "Mist dashboard: Monitor > Service Levels > Insights > [switch] > Switch Events",
+    "notes": "AOS-CX prints oldest entries first (add '-r' for newest first), and Junos reads a named syslog file rather than a 'show logging' buffer."
+  },
+  {
+    "id": "show-arp",
+    "task": "Show ARP table",
+    "category": "Troubleshooting",
+    "tags": [
+      "arp",
+      "ip",
+      "mac",
+      "resolution"
+    ],
+    "commands": {
+      "aos-cx": "show arp",
+      "aos-s": "show arp",
+      "junos": "show arp",
+      "cisco-ios": "show ip arp",
+      "ruckus": "show arp"
+    }
+  },
+  {
+    "id": "show-mac-table",
+    "task": "Show MAC address table",
+    "category": "Troubleshooting",
+    "tags": [
+      "mac",
+      "address",
+      "table",
+      "layer2",
+      "forwarding"
+    ],
+    "commands": {
+      "aos-cx": "show mac-address-table",
+      "aos-s": "show mac-address",
+      "junos": "show ethernet-switching table",
+      "cisco-ios": "show mac address-table",
+      "ruckus": "show mac-address"
+    },
+    "mist_note": "Mist dashboard: Clients > Wired Clients",
+    "notes": "Older Cisco IOS releases use the hyphenated 'show mac-address-table', while AOS-S and Ruckus drop 'table' from the command entirely."
+  },
+  {
+    "id": "show-lldp-neighbors",
+    "task": "Show LLDP neighbors",
+    "category": "Troubleshooting",
+    "tags": [
+      "lldp",
+      "neighbors",
+      "discovery",
+      "topology",
+      "cdp"
+    ],
+    "commands": {
+      "aos-cx": "show lldp neighbor-info",
+      "aos-s": "show lldp info remote-device",
+      "junos": "show lldp neighbors",
+      "cisco-ios": "show lldp neighbors",
+      "ruckus": "show lldp neighbors"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List",
+    "notes": "Cisco IOS ships with LLDP disabled (enable with 'lldp run') and CDP enabled, so 'show cdp neighbors' often works when LLDP returns nothing."
+  },
+  {
+    "id": "ping-with-source",
+    "task": "Ping with a source interface or VLAN",
+    "category": "Troubleshooting",
+    "tags": [
+      "ping",
+      "source",
+      "svi",
+      "icmp",
+      "connectivity"
+    ],
+    "commands": {
+      "aos-cx": "ping {{ip}} source vlan{{vlan}}",
+      "aos-s": "ping {{ip}} source {{vlan}}",
+      "junos": "ping {{ip}} interface irb.{{vlan}} count 5",
+      "cisco-ios": "ping {{ip}} source vlan {{vlan}}",
+      "ruckus": "ping {{ip}} source 10.0.0.1"
+    },
+    "notes": "Junos sources from the interface you name (the SVI is irb.<unit> on ELS switches, vlan.<unit> on older EX), while Ruckus FastIron only accepts a source IP address, so replace 10.0.0.1 with the VE's own address."
+  },
+  {
+    "id": "find-mac-address",
+    "task": "Find which port a MAC address is on",
+    "category": "Troubleshooting",
+    "tags": [
+      "mac",
+      "lookup",
+      "port",
+      "switching",
+      "forwarding"
+    ],
+    "commands": {
+      "aos-cx": "show mac-address-table address 00:1b:2c:3d:4e:5f",
+      "aos-s": "show mac-address 001b2c-3d4e5f",
+      "junos": "show ethernet-switching table address 00:1b:2c:3d:4e:5f",
+      "cisco-ios": "show mac address-table address 001b.2c3d.4e5f",
+      "ruckus": "show mac-address 001b.2c3d.4e5f"
+    },
+    "mist_note": "Mist dashboard: Clients > Wired Clients (search the MAC)",
+    "notes": "MAC notation differs by vendor: Cisco and Ruckus use 001b.2c3d.4e5f, AOS-CX and Junos use 00:1b:2c:3d:4e:5f, and AOS-S uses 001b2c-3d4e5f."
+  },
+  {
+    "id": "show-mac-on-port",
+    "task": "Show MAC addresses learned on a port",
+    "category": "Troubleshooting",
+    "tags": [
+      "mac",
+      "port",
+      "learned",
+      "switching"
+    ],
+    "commands": {
+      "aos-cx": "show mac-address-table port {{interface}}",
+      "aos-s": "show mac-address {{interface}}",
+      "junos": "show ethernet-switching table interface {{interface}}",
+      "cisco-ios": "show mac address-table interface {{interface}}",
+      "ruckus": "show mac-address ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List"
+  },
+  {
+    "id": "clear-arp-cache",
+    "task": "Clear the ARP cache",
+    "category": "Troubleshooting",
+    "tags": [
+      "arp",
+      "clear",
+      "cache",
+      "layer3"
+    ],
+    "commands": {
+      "aos-cx": "clear arp",
+      "aos-s": "clear arp",
+      "junos": "clear arp",
+      "cisco-ios": "clear arp-cache",
+      "ruckus": "clear arp"
+    },
+    "notes": "On AOS-CX a bare clear arp only flushes the default VRF; add vrf all-vrfs to clear every VRF."
+  },
+  {
+    "id": "port-mirroring",
+    "task": "Mirror a port to a sniffer port (SPAN)",
+    "category": "Troubleshooting",
+    "tags": [
+      "span",
+      "mirror",
+      "sniffer",
+      "capture",
+      "monitoring"
+    ],
+    "commands": {
+      "aos-cx": "mirror session 1\ndestination interface 1/1/48\nsource interface {{interface}} both\nenable",
+      "aos-s": "mirror-port 48\ninterface {{interface}} monitor",
+      "junos": "set forwarding-options analyzer SPAN input ingress interface {{interface}}.0\nset forwarding-options analyzer SPAN input egress interface {{interface}}.0\nset forwarding-options analyzer SPAN output interface ge-0/0/47.0",
+      "cisco-ios": "monitor session 1 source interface {{interface}} both\nmonitor session 1 destination interface GigabitEthernet1/0/48",
+      "ruckus": "mirror-port ethernet 1/1/48\ninterface ethernet {{interface}}\nmonitor ethernet 1/1/48 both"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Mirroring",
+    "notes": "Mirror destination ports stop forwarding normal traffic on most platforms, and pre-ELS Junos (older EX) configures the analyzer under ethernet-switching-options instead of forwarding-options."
+  },
+  {
+    "id": "cable-diagnostics",
+    "task": "Run cable diagnostics (TDR)",
+    "category": "Troubleshooting",
+    "tags": [
+      "tdr",
+      "cable",
+      "diagnostics",
+      "physical",
+      "link"
+    ],
+    "commands": {
+      "aos-cx": "diag cable-diagnostic test {{interface}}",
+      "aos-s": "test cable-diagnostics {{interface}}",
+      "junos": "request diagnostics tdr start interface {{interface}}",
+      "cisco-ios": "test cable-diagnostics tdr interface {{interface}}",
+      "ruckus": "phy cable-diag tdr {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Utilities > Cable Test",
+    "notes": "TDR works only on copper ports and briefly drops the link, and results are read with a second command on most platforms (show cable-diagnostics tdr on Cisco/Ruckus, diag cable-diagnostic show <port> on AOS-CX, show diagnostics tdr interface <port> on Junos)."
+  },
+  {
+    "id": "show-tech-support",
+    "task": "Collect tech-support diagnostics dump",
+    "category": "Troubleshooting",
+    "tags": [
+      "tech-support",
+      "diagnostics",
+      "support",
+      "dump"
+    ],
+    "commands": {
+      "aos-cx": "show tech",
+      "aos-s": "show tech",
+      "junos": "request support information | save /var/tmp/rsi.txt",
+      "cisco-ios": "show tech-support",
+      "ruckus": "show tech-support"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Utilities > Send Switch Log to Mist",
+    "notes": "Output runs to thousands of lines, so enable terminal session logging or redirect to a file before running it."
+  },
+  {
+    "id": "show-stp",
+    "task": "Show spanning tree status",
+    "category": "Spanning Tree",
+    "tags": [
+      "stp",
+      "spanning-tree",
+      "status",
+      "topology",
+      "loop"
+    ],
+    "commands": {
+      "aos-cx": "show spanning-tree",
+      "aos-s": "show spanning-tree",
+      "junos": "show spanning-tree bridge",
+      "cisco-ios": "show spanning-tree",
+      "ruckus": "show span"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List (per-port STP state/role)",
+    "notes": "Ruckus FastIron's display command depends on the STP flavor in use — 'show span' for per-VLAN 802.1D, 'show 802-1w' for RSTP, 'show mstp' for MSTP; on Junos add 'show spanning-tree interface' for per-port roles/states."
+  },
+  {
+    "id": "show-stp-root",
+    "task": "Show STP root bridge info",
+    "category": "Spanning Tree",
+    "tags": [
+      "stp",
+      "root",
+      "bridge",
+      "spanning-tree"
+    ],
+    "commands": {
+      "aos-cx": "show spanning-tree summary root",
+      "aos-s": "show spanning-tree",
+      "junos": "show spanning-tree bridge",
+      "cisco-ios": "show spanning-tree root",
+      "ruckus": "show span"
+    },
+    "notes": "Only Cisco IOS and AOS-CX have a dedicated root summary command (AOS-CX supports it in both MSTP and RPVST+ modes); AOS-S, Junos, and Ruckus report the root bridge ID, cost, and root port inside their general spanning-tree output."
+  },
+  {
+    "id": "stp-edge-port",
+    "task": "Make a port an edge port (PortFast)",
+    "category": "Spanning Tree",
+    "tags": [
+      "portfast",
+      "edge",
+      "admin-edge",
+      "rstp",
+      "stp"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nspanning-tree port-type admin-edge",
+      "aos-s": "spanning-tree {{interface}} admin-edge-port",
+      "junos": "set protocols rstp interface {{interface}} edge",
+      "cisco-ios": "interface {{interface}}\nspanning-tree portfast",
+      "ruckus": "spanning-tree 802-1w ethernet {{interface}} admin-edge-port"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration > assign a port profile with 'STP Edge' enabled",
+    "notes": "AOS-S and Ruckus take the port inline at global config (no interface context), and the Ruckus form assumes 802.1W is enabled globally — with per-VLAN RSTP enter the same line under the VLAN context (e.g. vlan 10) instead."
+  },
+  {
+    "id": "enable-bpdu-guard",
+    "task": "Enable BPDU guard on a port",
+    "category": "Spanning Tree",
+    "tags": [
+      "bpduguard",
+      "bpdu",
+      "protection",
+      "edge",
+      "security"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nspanning-tree bpdu-guard",
+      "aos-s": "spanning-tree {{interface}} bpdu-protection",
+      "junos": "set protocols rstp interface {{interface}} edge\nset protocols rstp bpdu-block-on-edge",
+      "cisco-ios": "interface {{interface}}\nspanning-tree bpduguard enable",
+      "ruckus": "interface ethernet {{interface}}\nstp-bpdu-guard"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration > port profile with 'STP Edge' enabled (BPDU guard is applied automatically)",
+    "notes": "Junos has no per-port BPDU guard under rstp — bpdu-block-on-edge applies to every edge port on the switch, so warn users translating from Cisco's per-interface bpduguard."
+  },
+  {
+    "id": "show-stp-port",
+    "task": "Show STP state for one port",
+    "category": "Spanning Tree",
+    "tags": [
+      "stp",
+      "port",
+      "state",
+      "role",
+      "interface"
+    ],
+    "commands": {
+      "aos-cx": "show spanning-tree mst 0 interface {{interface}}",
+      "aos-s": "show spanning-tree {{interface}}",
+      "junos": "show spanning-tree interface {{interface}}",
+      "cisco-ios": "show spanning-tree interface {{interface}}",
+      "ruckus": "show span detail vlan {{vlan}} ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Front Panel > select port (port stats include STP role/state)",
+    "notes": "Ruckus needs the VLAN because FastIron runs per-VLAN spanning tree, and the AOS-CX form assumes the default MSTP mode (instance 0 = CIST) — under RPVST+ use 'show spanning-tree detail' instead."
+  },
+  {
+    "id": "show-poe-status",
+    "task": "Show PoE status",
+    "category": "PoE",
+    "tags": [
+      "poe",
+      "power",
+      "status",
+      "inline"
+    ],
+    "commands": {
+      "aos-cx": "show power-over-ethernet brief",
+      "aos-s": "show power-over-ethernet brief",
+      "junos": "show poe interface",
+      "cisco-ios": "show power inline",
+      "ruckus": "show inline power"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List (Power Draw column)"
+  },
+  {
+    "id": "show-poe-budget",
+    "task": "Show PoE power budget / consumption",
+    "category": "PoE",
+    "tags": [
+      "poe",
+      "budget",
+      "consumption",
+      "watts"
+    ],
+    "commands": {
+      "aos-cx": "show power-over-ethernet",
+      "aos-s": "show power-over-ethernet",
+      "junos": "show poe controller",
+      "cisco-ios": "show power inline",
+      "ruckus": "show inline power detail"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Switch Insights > Power Draw chart",
+    "notes": "Cisco IOS has no separate budget command — available/used/remaining watts are the header lines of 'show power inline'."
+  },
+  {
+    "id": "poe-cycle-port",
+    "task": "Power-cycle PoE on a port",
+    "category": "PoE",
+    "tags": [
+      "poe",
+      "bounce",
+      "cycle",
+      "restart",
+      "port"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\nno power-over-ethernet\npower-over-ethernet",
+      "aos-s": "no interface {{interface}} power-over-ethernet\ninterface {{interface}} power-over-ethernet",
+      "junos": "request interface bounce poe {{interface}}",
+      "cisco-ios": "interface {{interface}}\npower inline never\npower inline auto",
+      "ruckus": "interface ethernet {{interface}}\nno inline power\ninline power"
+    },
+    "notes": "Junos 'request interface bounce poe' requires Junos OS 24.2R1 or later; on older EX code you must 'set poe interface <port> disable', commit, then delete that statement and commit again.",
+    "verify": [
+      "junos"
+    ]
+  },
+  {
+    "id": "set-poe-priority",
+    "task": "Set PoE priority on a port",
+    "category": "PoE",
+    "tags": [
+      "poe",
+      "priority",
+      "power",
+      "critical",
+      "interface"
+    ],
+    "commands": {
+      "aos-cx": "interface {{interface}}\npower-over-ethernet priority critical",
+      "aos-s": "interface {{interface}} power-over-ethernet critical",
+      "junos": "set poe interface {{interface}} priority high",
+      "cisco-ios": "interface {{interface}}\npower inline port priority high",
+      "ruckus": "interface ethernet {{interface}}\ninline power priority 1"
+    },
+    "notes": "Priority levels do not map 1:1 across vendors: Cisco IOS-XE (Catalyst 9K/3850-class only; older classic-IOS Catalysts have no priority command) and Junos offer only high/low with no critical, while Ruckus uses numeric 1=critical/highest through 3=low/default."
+  },
+  {
+    "id": "show-poe-port",
+    "task": "Show PoE detail for one port",
+    "category": "PoE",
+    "tags": [
+      "poe",
+      "port",
+      "power",
+      "status",
+      "detail"
+    ],
+    "commands": {
+      "aos-cx": "show power-over-ethernet {{interface}}",
+      "aos-s": "show power-over-ethernet {{interface}}",
+      "junos": "show poe interface {{interface}}",
+      "cisco-ios": "show power inline {{interface}} detail",
+      "ruckus": "show inline power {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port List (per-port PoE draw)",
+    "notes": "Ruckus takes the bare stack/slot/port here (show inline power 1/1/1) with no ethernet keyword, unlike its inline power config command."
+  },
+  {
+    "id": "create-lag",
+    "task": "Create an LACP LAG / port-channel",
+    "category": "LAG & LACP",
+    "tags": [
+      "lag",
+      "lacp",
+      "port-channel",
+      "etherchannel",
+      "aggregation"
+    ],
+    "commands": {
+      "aos-cx": "interface lag 1\nno shutdown\nlacp mode active\ninterface {{interface}}\nno shutdown\nlag 1",
+      "aos-s": "trunk {{interface}} trk1 lacp",
+      "junos": "set chassis aggregated-devices ethernet device-count 2\nset interfaces ae1 aggregated-ether-options lacp active\nset interfaces {{interface}} ether-options 802.3ad ae1",
+      "cisco-ios": "interface {{interface}}\nchannel-group 1 mode active",
+      "ruckus": "lag lag1 dynamic id 1\nports ethernet {{interface}}"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration — select the member ports and enable Port Aggregation (LACP).",
+    "notes": "Junos only creates ae interfaces numbered up to device-count minus 1, so ae1 requires chassis aggregated-devices ethernet device-count of at least 2."
+  },
+  {
+    "id": "show-lag-status",
+    "task": "Show LAG / port-channel status",
+    "category": "LAG & LACP",
+    "tags": [
+      "lag",
+      "port-channel",
+      "status",
+      "etherchannel",
+      "lacp"
+    ],
+    "commands": {
+      "aos-cx": "show lag",
+      "aos-s": "show trunks",
+      "junos": "show interfaces ae1 terse",
+      "cisco-ios": "show etherchannel summary",
+      "ruckus": "show lag brief"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Front Panel — aggregated ports are highlighted; hover over or select a port to view LACP status.",
+    "notes": "On AOS-S a \"trunk\" (Trk1) is a LAG, not an 802.1Q tagged port as in Cisco terminology, and VLAN membership is applied to Trk1 rather than the member ports.",
+    "verify": [
+      "mist"
+    ]
+  },
+  {
+    "id": "show-lacp-neighbors",
+    "task": "Show LACP partner / neighbor info",
+    "category": "LAG & LACP",
+    "tags": [
+      "lacp",
+      "neighbor",
+      "partner",
+      "lag"
+    ],
+    "commands": {
+      "aos-cx": "show lacp interfaces",
+      "aos-s": "show lacp peer",
+      "junos": "show lacp interfaces",
+      "cisco-ios": "show lacp neighbor",
+      "ruckus": "show lag"
+    },
+    "notes": "Ruckus FastIron has no dedicated LACP neighbor command; the partner system ID and key appear in the \"Partner Info and PDU Statistics\" section of show lag output."
+  },
+  {
+    "id": "show-stack-members",
+    "task": "Show stack / VSF / Virtual Chassis members",
+    "category": "Stacking",
+    "tags": [
+      "stack",
+      "vsf",
+      "virtual-chassis",
+      "members",
+      "stacking"
+    ],
+    "commands": {
+      "aos-cx": "show vsf",
+      "aos-s": "show vsf",
+      "junos": "show virtual-chassis status",
+      "cisco-ios": "show switch",
+      "ruckus": "show stack"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] (Virtual Chassis panel shows members and roles)",
+    "notes": "On AOS-S 'show vsf' applies to VSF-capable models like the 2930F; backplane-stacked models (2930M/3810M) use 'show stacking' instead, and the 2530 does not stack at all."
+  },
+  {
+    "id": "show-stack-topology",
+    "task": "Show stack ports / topology",
+    "category": "Stacking",
+    "tags": [
+      "stack",
+      "topology",
+      "vsf",
+      "vc-port",
+      "stack-ports"
+    ],
+    "commands": {
+      "aos-cx": "show vsf topology",
+      "aos-s": "show vsf link",
+      "junos": "show virtual-chassis vc-port",
+      "cisco-ios": "show switch stack-ports",
+      "ruckus": "show stack stack-ports"
+    },
+    "notes": "Cisco 'show switch stack-ports' is for StackWise stacks (9200/9300 class); StackWise Virtual pairs (9500/9600) use 'show stackwise-virtual link' instead."
+  },
+  {
+    "id": "port-security-limit",
+    "task": "Limit learned MACs on a port (port security)",
+    "category": "Security",
+    "tags": [
+      "port-security",
+      "mac",
+      "limit",
+      "lockdown"
+    ],
+    "commands": {
+      "aos-cx": "port-access port-security enable\ninterface {{interface}}\nport-access port-security enable\nport-access port-security client-limit 2",
+      "aos-s": "port-security {{interface}} learn-mode limited-continuous address-limit 2",
+      "junos": "set switch-options interface {{interface}} interface-mac-limit 2\nset switch-options interface {{interface}} interface-mac-limit packet-action drop",
+      "cisco-ios": "interface {{interface}}\nswitchport mode access\nswitchport port-security\nswitchport port-security maximum 2",
+      "ruckus": "interface ethernet {{interface}}\nport security\nenable\nmaximum 2"
+    },
+    "mist_note": "Mist dashboard: Switches > [switch] > Port Configuration — set MAC Limit in the applied port profile",
+    "notes": "AOS-CX needs the global 'port-access port-security enable' line as well as the interface ones, and Junos expects the logical unit in switch-options (ge-0/0/1.0, not ge-0/0/1)."
+  },
+  {
+    "id": "enable-dhcp-snooping",
+    "task": "Enable DHCP snooping on a VLAN",
+    "category": "Security",
+    "tags": [
+      "dhcp",
+      "snooping",
+      "vlan",
+      "rogue"
+    ],
+    "commands": {
+      "aos-cx": "dhcp-snooping\nvlan {{vlan}}\ndhcp-snooping",
+      "aos-s": "dhcp-snooping\ndhcp-snooping vlan {{vlan}}",
+      "junos": "set vlans {{vlan}} forwarding-options dhcp-security",
+      "cisco-ios": "ip dhcp snooping\nip dhcp snooping vlan {{vlan}}",
+      "ruckus": "ip dhcp snooping vlan {{vlan}}"
+    },
+    "mist_note": "Mist dashboard: Organization > Switch Templates > [template] > DHCP Snooping",
+    "notes": "Junos takes the VLAN name rather than the numeric ID, and on every vendor remember to mark DHCP-server-facing uplinks as trusted afterwards (Junos trusts trunk ports automatically)."
+  },
+  {
+    "id": "show-dhcp-snooping-bindings",
+    "task": "Show DHCP snooping bindings",
+    "category": "Security",
+    "tags": [
+      "dhcp",
+      "snooping",
+      "binding",
+      "lease"
+    ],
+    "commands": {
+      "aos-cx": "show dhcp-snooping binding",
+      "aos-s": "show dhcp-snooping binding",
+      "junos": "show dhcp-security binding",
+      "cisco-ios": "show ip dhcp snooping binding",
+      "ruckus": "show ip dhcp snooping info"
+    },
+    "notes": "On Ruckus the binding table comes from 'show ip dhcp snooping info' — plain 'show ip dhcp snooping' only shows feature status, not bindings."
+  },
+  {
+    "id": "show-dot1x-sessions",
+    "task": "Show 802.1X authentication sessions",
+    "category": "Security",
+    "tags": [
+      "dot1x",
+      "802.1x",
+      "authentication",
+      "sessions",
+      "radius"
+    ],
+    "commands": {
+      "aos-cx": "show port-access clients",
+      "aos-s": "show port-access clients",
+      "junos": "show dot1x interface brief",
+      "cisco-ios": "show authentication sessions",
+      "ruckus": "show dot1x sessions all"
+    },
+    "mist_note": "Mist dashboard: Clients > Wired Clients",
+    "notes": "Aruba's 'show port-access clients' (both CX and AOS-S) lists MAC-auth and other authenticated clients alongside 802.1X — check the flags/auth-method column."
+  },
+  {
+    "id": "show-logged-in-users",
+    "task": "Show who is logged in to the switch",
+    "category": "Security",
+    "tags": [
+      "users",
+      "sessions",
+      "ssh",
+      "console",
+      "login"
+    ],
+    "commands": {
+      "aos-cx": "show ssh server sessions",
+      "aos-s": "show telnet",
+      "junos": "show system users",
+      "cisco-ios": "show users",
+      "ruckus": "show who"
+    },
+    "notes": "On Ruckus 'show users' lists configured accounts rather than live sessions (use 'show who'), and AOS-S 'show telnet' covers console and SSH sessions despite its name."
+  }
+]

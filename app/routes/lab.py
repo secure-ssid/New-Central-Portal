@@ -137,10 +137,8 @@ async def assistant_settings_test(request: Request):
 
 @router.get("/securessid")
 async def securessid_page(request: Request):
-    """Embed the vendored SecureSSID CLI-translator static tool."""
-    return templates.TemplateResponse(
-        request, "lab/securessid.html", {"active": "lab"}
-    )
+    """Open the vendored SecureSSID CLI-translator tool (served from /static)."""
+    return RedirectResponse("/static/securessid/index.html")
 
 
 @router.get("/password")
