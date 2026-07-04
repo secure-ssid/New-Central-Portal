@@ -50,6 +50,7 @@ def test_platform_config_shows_compliance_table(client, mock_central, stub_db, m
                 "firmwareVersion": "10.13.1110",
                 "targetVersion": "10.13.1110",
                 "complianceStatus": "Compliant",
+                "siteName": "HQ",
             }]
         }
 
@@ -59,6 +60,7 @@ def test_platform_config_shows_compliance_table(client, mock_central, stub_db, m
     assert "Firmware Compliance" in r.text
     assert "core-sw-1" in r.text
     assert "1 compliant" in r.text
+    assert "/devices/?site=HQ" in r.text
 
 
 def test_platform_bridge_error_is_sanitized(client, mock_central, stub_db, monkeypatch):
@@ -103,3 +105,4 @@ def test_nac_pagination(client, mock_central, stub_db, monkeypatch):
     r = client.get("/platform/nac?per_page=2")
     assert r.status_code == 200
     assert "Page 1 of 3" in r.text
+    assert 'aria-label="Rows per page"' in r.text

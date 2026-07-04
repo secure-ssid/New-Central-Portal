@@ -21,12 +21,6 @@
     </div>
 </div>
 
-<div id="alerts-live"
-     hx-get="/alerts/?partial=1{% if severity_filter %}&severity={{ severity_filter }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if page %}&page={{ page }}{% endif %}{% if per_page %}&per_page={{ per_page }}{% endif %}"
-     hx-trigger="every 60s [document.visibilityState=='visible']"
-     hx-swap="innerHTML">
-{% block alerts_live %}
-
 <form method="get" class="mb-4 max-w-xl flex flex-wrap gap-2 items-center">
     {% if severity_filter %}<input type="hidden" name="severity" value="{{ severity_filter }}">{% endif %}
     <input name="q" value="{{ q }}" type="search" placeholder="Search alerts by title, device, site…"
@@ -53,6 +47,12 @@
 {% elif total_pages and total_pages > 1 %}
 <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">{{ total }} alerts &mdash; page {{ page }} of {{ total_pages }}.</p>
 {% endif %}
+
+<div id="alerts-live"
+     hx-get="/alerts/?partial=1{% if severity_filter %}&severity={{ severity_filter }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if page %}&page={{ page }}{% endif %}{% if per_page %}&per_page={{ per_page }}{% endif %}"
+     hx-trigger="every 60s [document.visibilityState=='visible']"
+     hx-swap="innerHTML">
+{% block alerts_live %}
 
 <!-- Severity filter tabs (inside live region so counts refresh) -->
 <div class="tabs mb-4 overflow-x-auto">

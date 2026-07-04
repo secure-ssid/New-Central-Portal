@@ -136,6 +136,21 @@ class TestDashboardRender:
         assert r.status_code == 200
         assert "Total Devices" in r.text
 
+    def test_lite_partial_excludes_slow_widgets(self, client, mock_central, stub_db):
+        body = client.get("/?partial=1&lite=1").text
+        assert "Recent Events" not in body
+        assert "Site Health" not in body
+        assert "Offline Device Health" not in body
+
+    def test_full_page_slow_widgets_outside_live_poll(self, client, mock_central, stub_db):
+        html = client.get("/").text
+        assert "Recent Events" in html
+        assert html.index("Recent Events") > html.index('data-poll="dashboard"')
+
+    def test_dashboard_recent_devices_site_links(self, client, mock_central, stub_db):
+        r = client.get("/")
+        assert "/devices/?site=" in r.text
+
     def test_dashboard_survives_total_backend_failure(self, client, monkeypatch,
                                                       stub_db):
         from vendors.aruba_central import aruba

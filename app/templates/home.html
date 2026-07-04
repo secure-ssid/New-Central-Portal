@@ -253,11 +253,10 @@
     </div>
 </div>
 
-<!-- Row 3b: alerts + offline health -->
-{% if alert_summary.total or health_notes %}
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-    {% if alert_summary.total %}
-    <div class="card">
+<!-- Active alerts summary (refreshes with live stats) -->
+{% if alert_summary.total %}
+<div class="mb-6">
+    <div class="card max-w-md">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Active Alerts</p>
             <a href="/alerts/" class="text-xs text-brand-500 hover:text-brand-400 transition-colors">View all &rarr;</a>
@@ -268,100 +267,6 @@
             {% if alert_summary.major %}{% if alert_summary.critical %} &middot; {% endif %}{{ alert_summary.major }} major{% endif %}
             {% if alert_summary.minor %}{% if alert_summary.critical or alert_summary.major %} &middot; {% endif %}{{ alert_summary.minor }} minor{% endif %}
         </p>
-    </div>
-    {% endif %}
-    {% if health_notes %}
-    <div class="card">
-        <p class="section-label mb-3">Offline Device Health</p>
-        <ul class="space-y-2 text-sm">
-            {% for note in health_notes %}
-            <li class="flex items-center justify-between gap-3">
-                <a href="/devices/{{ note.serial }}" class="text-slate-300 hover:text-brand-400 truncate">{{ note.name }}</a>
-                <span class="text-xs text-amber-400 flex-shrink-0">{{ note.label }}</span>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-</div>
-{% endif %}
-
-{% if tenant_cards or anomalies %}
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-    {% if tenant_cards %}
-    <div class="card">
-        <p class="section-label mb-3">Tenant Health</p>
-        <div class="grid grid-cols-2 gap-2">
-            {% for t in tenant_cards %}
-            <div class="p-3 rounded-lg border bg-surface-900/50
-                {% if t.tone == 'ok' %}border-green-500/25{% elif t.tone == 'warn' %}border-amber-500/25{% elif t.tone == 'critical' %}border-red-500/25{% else %}border-surface-700{% endif %}">
-                <p class="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">{{ t.label }}</p>
-                <p class="text-sm font-semibold truncate
-                    {% if t.tone == 'ok' %}text-green-400{% elif t.tone == 'warn' %}text-amber-400{% elif t.tone == 'critical' %}text-red-400{% else %}text-slate-200{% endif %}">{{ t.value }}</p>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% elif tenant_health %}
-    <div class="card">
-        <p class="section-label mb-3">Tenant Health</p>
-        <p class="text-sm text-slate-400">Health data available but not structured.</p>
-    </div>
-    {% endif %}
-    {% if anomalies %}
-    <div class="card">
-        <p class="section-label mb-3">Anomaly Detection</p>
-        <ul class="space-y-2 text-sm">
-            {% for a in anomalies %}
-            <li class="flex items-center justify-between gap-3">
-                <a href="/devices/{{ a.serial }}" class="text-slate-300 hover:text-brand-400 truncate">{{ a.device }}</a>
-                <span class="text-xs text-amber-400 flex-shrink-0">{{ a.type | replace('_', ' ') }}: {{ a.summary }}</span>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-</div>
-{% endif %}
-
-{% if site_health_cards %}
-<div class="card mb-6">
-    <div class="flex items-center justify-between mb-4">
-        <p class="section-label">Site Health</p>
-        <a href="/sites/" class="text-xs text-brand-500 hover:text-brand-400 transition-colors">All sites &rarr;</a>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {% for s in site_health_cards %}
-        <a href="/sites/{{ s.id }}" class="group rounded-lg border bg-surface-900/60 p-3 hover:border-brand-500/40 transition-all no-underline
-            {% if s.tone == 'critical' %}border-red-500/30{% elif s.tone == 'warn' %}border-amber-500/20{% else %}border-surface-700{% endif %}">
-            <div class="flex items-start gap-3">
-                <div class="relative w-11 h-11 flex-shrink-0">
-                    <svg viewBox="0 0 36 36" class="w-full h-full" aria-hidden="true">
-                        <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#1e2535" stroke-width="3"></circle>
-                        {% if s.device_total %}
-                        <circle class="site-gauge-ring" cx="18" cy="18" r="15.9155" fill="none"
-                                stroke="{{ s.ring_color }}" stroke-width="3" stroke-linecap="round"
-                                stroke-dasharray="{{ s.ring_dash }}" stroke-dashoffset="25"></circle>
-                        {% endif %}
-                    </svg>
-                    <span class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-300">
-                        {% if s.device_total %}{{ s.device_pct }}%{% else %}—{% endif %}
-                    </span>
-                </div>
-                <div class="min-w-0 flex-1">
-                    <p class="text-sm font-medium text-slate-200 truncate group-hover:text-brand-400 transition-colors">{{ s.name }}</p>
-                    <p class="text-xs text-slate-500 mt-0.5">{{ s.label }}</p>
-                    {% if s.device_total %}
-                    <p class="text-[10px] text-slate-600 mt-1">
-                        {% if s.devices_url %}<a href="{{ s.devices_url }}" class="hover:text-brand-400" onclick="event.stopPropagation();">{% endif %}
-                        {{ s.device_online }}/{{ s.device_total }} devices online
-                        {% if s.devices_url %}</a>{% endif %}
-                    </p>
-                    {% endif %}
-                </div>
-            </div>
-        </a>
-        {% endfor %}
     </div>
 </div>
 {% endif %}
@@ -450,7 +355,11 @@
                     </td>
                     <td>{{ device.model | default('—', true) }}</td>
                     <td class="font-mono text-xs text-slate-400">{{ device.ip | default('—', true) }}</td>
-                    <td>{{ device.site | default('—', true) }}</td>
+                    <td onclick="event.stopPropagation();">
+                        {% if device.site %}
+                        <a href="/devices/?site={{ device.site | urlencode }}" class="text-xs text-brand-400 hover:text-brand-300 no-underline">{{ device.site }}</a>
+                        {% else %}—{% endif %}
+                    </td>
                     <td>
                         {% if device.status == 'online' %}
                         <span class="status-badge-online">
@@ -475,39 +384,133 @@
         </div>
         {% endif %}
     </div>
-
-    <!-- Recent events feed -->
-    <div class="card" style="padding:0;overflow:hidden;">
-        <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
-            <p class="text-sm font-semibold text-white">Recent Events</p>
-            <span class="text-[10px] text-slate-600 uppercase tracking-wider">last 24h</span>
-        </div>
-        {% if events %}
-        <ul class="divide-y divide-surface-700/60">
-            {% for ev in events %}
-            <li class="px-5 py-3 flex items-start gap-3">
-                <span class="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 {% if ev.category == 'Client' %}bg-blue-400{% else %}bg-brand-500{% endif %}" aria-hidden="true"></span>
-                <div class="flex-1 min-w-0">
-                    <p class="text-[0.8rem] text-slate-200 leading-snug">{{ ev.text }}</p>
-                    {% if ev.detail %}<p class="text-[0.7rem] text-slate-500 mt-0.5 truncate">{{ ev.detail }}</p>{% endif %}
-                    <p class="text-[0.68rem] text-slate-600 mt-1">
-                        <a href="/devices/{{ ev.device_serial }}" class="text-brand-500/90 hover:text-brand-400 transition-colors">{{ ev.device_name }}</a>{% if ev.ago %} &middot; {{ ev.ago }}{% endif %}{% if ev.category %} &middot; <span class="uppercase tracking-wider text-[0.6rem]">{{ ev.category }}</span>{% endif %}
-                    </p>
-                </div>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <div class="empty-state">
-            <svg aria-hidden="true" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-            <p>No recent events</p>
-            <p class="text-xs text-slate-600">Device events from the last 24 hours will appear here.</p>
-        </div>
-        {% endif %}
-    </div>
 </div>
 
 {% endblock %}
+</div>
+
+<!-- Slow widgets: outside HTMX poll so lite refresh does not wipe them -->
+{% if health_notes %}
+<div class="card mb-6">
+    <p class="section-label mb-3">Offline Device Health</p>
+    <ul class="space-y-2 text-sm">
+        {% for note in health_notes %}
+        <li class="flex items-center justify-between gap-3">
+            <a href="/devices/{{ note.serial }}" class="text-slate-300 hover:text-brand-400 truncate">{{ note.name }}</a>
+            <span class="text-xs text-amber-400 flex-shrink-0">{{ note.label }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if tenant_cards or anomalies %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    {% if tenant_cards %}
+    <div class="card">
+        <p class="section-label mb-3">Tenant Health</p>
+        <div class="grid grid-cols-2 gap-2">
+            {% for t in tenant_cards %}
+            <div class="p-3 rounded-lg border bg-surface-900/50
+                {% if t.tone == 'ok' %}border-green-500/25{% elif t.tone == 'warn' %}border-amber-500/25{% elif t.tone == 'critical' %}border-red-500/25{% else %}border-surface-700{% endif %}">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">{{ t.label }}</p>
+                <p class="text-sm font-semibold truncate
+                    {% if t.tone == 'ok' %}text-green-400{% elif t.tone == 'warn' %}text-amber-400{% elif t.tone == 'critical' %}text-red-400{% else %}text-slate-200{% endif %}">{{ t.value }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif tenant_health %}
+    <div class="card">
+        <p class="section-label mb-3">Tenant Health</p>
+        <p class="text-sm text-slate-400">Health data available but not structured.</p>
+    </div>
+    {% endif %}
+    {% if anomalies %}
+    <div class="card">
+        <p class="section-label mb-3">Anomaly Detection</p>
+        <ul class="space-y-2 text-sm">
+            {% for a in anomalies %}
+            <li class="flex items-center justify-between gap-3">
+                <a href="/devices/{{ a.serial }}" class="text-slate-300 hover:text-brand-400 truncate">{{ a.device }}</a>
+                <span class="text-xs text-amber-400 flex-shrink-0">{{ a.type | replace('_', ' ') }}: {{ a.summary }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if site_health_cards %}
+<div class="card mb-6">
+    <div class="flex items-center justify-between mb-4">
+        <p class="section-label">Site Health</p>
+        <a href="/sites/" class="text-xs text-brand-500 hover:text-brand-400 transition-colors">All sites &rarr;</a>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {% for s in site_health_cards %}
+        <a href="/sites/{{ s.id }}" class="group rounded-lg border bg-surface-900/60 p-3 hover:border-brand-500/40 transition-all no-underline
+            {% if s.tone == 'critical' %}border-red-500/30{% elif s.tone == 'warn' %}border-amber-500/20{% else %}border-surface-700{% endif %}">
+            <div class="flex items-start gap-3">
+                <div class="relative w-11 h-11 flex-shrink-0">
+                    <svg viewBox="0 0 36 36" class="w-full h-full" aria-hidden="true">
+                        <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#1e2535" stroke-width="3"></circle>
+                        {% if s.device_total %}
+                        <circle class="site-gauge-ring" cx="18" cy="18" r="15.9155" fill="none"
+                                stroke="{{ s.ring_color }}" stroke-width="3" stroke-linecap="round"
+                                stroke-dasharray="{{ s.ring_dash }}" stroke-dashoffset="25"></circle>
+                        {% endif %}
+                    </svg>
+                    <span class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-300">
+                        {% if s.device_total %}{{ s.device_pct }}%{% else %}—{% endif %}
+                    </span>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium text-slate-200 truncate group-hover:text-brand-400 transition-colors">{{ s.name }}</p>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ s.label }}</p>
+                    {% if s.device_total %}
+                    <p class="text-[10px] text-slate-600 mt-1">
+                        {% if s.devices_url %}<a href="{{ s.devices_url }}" class="hover:text-brand-400" onclick="event.stopPropagation();">{% endif %}
+                        {{ s.device_online }}/{{ s.device_total }} devices online
+                        {% if s.devices_url %}</a>{% endif %}
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="card mb-6" style="padding:0;overflow:hidden;">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
+        <p class="text-sm font-semibold text-white">Recent Events</p>
+        <span class="text-[10px] text-slate-600 uppercase tracking-wider">last 24h</span>
+    </div>
+    {% if events %}
+    <ul class="divide-y divide-surface-700/60">
+        {% for ev in events %}
+        <li class="px-5 py-3 flex items-start gap-3">
+            <span class="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 {% if ev.category == 'Client' %}bg-blue-400{% else %}bg-brand-500{% endif %}" aria-hidden="true"></span>
+            <div class="flex-1 min-w-0">
+                <p class="text-[0.8rem] text-slate-200 leading-snug">{{ ev.text }}</p>
+                {% if ev.detail %}<p class="text-[0.7rem] text-slate-500 mt-0.5 truncate">{{ ev.detail }}</p>{% endif %}
+                <p class="text-[0.68rem] text-slate-600 mt-1">
+                    <a href="/devices/{{ ev.device_serial }}" class="text-brand-500/90 hover:text-brand-400 transition-colors">{{ ev.device_name }}</a>{% if ev.ago %} &middot; {{ ev.ago }}{% endif %}{% if ev.category %} &middot; <span class="uppercase tracking-wider text-[0.6rem]">{{ ev.category }}</span>{% endif %}
+                </p>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state">
+        <svg aria-hidden="true" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <p>No recent events</p>
+        <p class="text-xs text-slate-600">Device events from the last 24 hours will appear here.</p>
+    </div>
+    {% endif %}
 </div>
 
 <script>

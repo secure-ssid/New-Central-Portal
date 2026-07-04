@@ -164,7 +164,16 @@ document.addEventListener('alpine:init', () => {
                         </td>
                         <td class="font-mono text-xs" x-text="client.ip || '—'"></td>
                         <td class="text-slate-500" x-text="client.vlan || '—'"></td>
-                        <td x-text="client.connected_to || '—'"></td>
+                        <td @click.stop>
+                            <template x-if="client.connected_device_serial">
+                                <a :href="'/devices/' + client.connected_device_serial"
+                                   class="text-xs text-brand-400 hover:text-brand-300 no-underline"
+                                   x-text="client.connected_to || client.connected_device_serial"></a>
+                            </template>
+                            <template x-if="!client.connected_device_serial">
+                                <span x-text="client.connected_to || '—'"></span>
+                            </template>
+                        </td>
                         <td @click.stop>
                             <template x-if="client.site">
                                 <a :href="'/clients/?site=' + encodeURIComponent(client.site)"

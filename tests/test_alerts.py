@@ -73,3 +73,10 @@ def test_alerts_pagination(client, mock_central, stub_db, monkeypatch):
     assert r.status_code == 200
     assert "Page 1 of 3" in r.text
     assert "Rows" in r.text
+
+
+def test_alerts_search_form_outside_live_region(client, mock_central, stub_db):
+    html = client.get("/alerts/").text
+    assert html.index('aria-label="Search alerts"') < html.index('id="alerts-live"')
+    partial = client.get("/alerts/?partial=1").text
+    assert 'aria-label="Search alerts"' not in partial
