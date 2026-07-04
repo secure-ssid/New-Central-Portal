@@ -318,6 +318,14 @@
                           aria-hidden="true"></span>
                     <span class="conn-pill truncate" x-text="$store.portal.pillLabel" :title="$store.portal.status.label || ''"></span>
                 </div>
+                <button type="button"
+                        @click="$store.ui && $store.ui.toggleNoc()"
+                        class="hidden md:inline-flex p-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-700/60 flex-shrink-0"
+                        :class="$store.ui && $store.ui.nocMode && 'text-brand-400'"
+                        aria-label="Toggle NOC wallboard mode"
+                        title="Wallboard (W)">
+                    <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+                </button>
                 <button type="button" data-notif-bell
                         @click="sidebarOpen = false; window.dispatchEvent(new CustomEvent('toggle-notifications'))"
                         class="relative p-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-700/60 flex-shrink-0"
@@ -454,6 +462,8 @@
             <div class="shortcut-row"><span>Go Clients</span><span><kbd class="kbd-hint">G</kbd> <kbd class="kbd-hint">C</kbd></span></div>
             <div class="shortcut-row"><span>Go Topology</span><span><kbd class="kbd-hint">G</kbd> <kbd class="kbd-hint">T</kbd></span></div>
             <div class="shortcut-row"><span>Go Alerts</span><span><kbd class="kbd-hint">G</kbd> <kbd class="kbd-hint">A</kbd></span></div>
+            <div class="shortcut-row"><span>Go Sites</span><span><kbd class="kbd-hint">G</kbd> <kbd class="kbd-hint">S</kbd></span></div>
+            <div class="shortcut-row"><span>Go WLANs</span><span><kbd class="kbd-hint">G</kbd> <kbd class="kbd-hint">W</kbd></span></div>
         </div>
     </div>
 </div>
@@ -878,7 +888,7 @@
         if (this._goChord) {
           this._goChord = false;
           clearTimeout(this._goTimer);
-          var routes = { h: '/', d: '/devices/', c: '/clients/', t: '/topology/', a: '/alerts/', s: '/sites/', l: '/lab/' };
+          var routes = { h: '/', d: '/devices/', c: '/clients/', t: '/topology/', a: '/alerts/', s: '/sites/', w: '/wlans/', l: '/lab/' };
           if (routes[e.key.toLowerCase()]) {
             e.preventDefault();
             window.location.href = routes[e.key.toLowerCase()];
