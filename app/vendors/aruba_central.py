@@ -10,6 +10,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Tracks whether the last successful read came from centralmcp ("live") or mock fallback.
+_data_source: str = "unknown"
+
+
+def get_data_source() -> str:
+    """Return ``live`` or ``mock`` based on the most recent aruba client fetch."""
+    return _data_source
+
 
 def _norm_device(d: dict) -> dict:
     """Normalise centralmcp device fields to the names templates expect."""
@@ -96,32 +104,63 @@ def _norm_client(c: dict) -> dict:
 
 
 class ArubaCentralClient:
-    async def get_devices(self) -> list[dict]:
+    async def get_devices(
+        self,
+        site_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        global _data_source
         try:
-            from vendors.central_bridge import get_all_devices
-            raw = await get_all_devices()
+            if site_id or limit is not None:
+                from vendors.central_bridge import get_devices as _get_devices
+                raw = await _get_devices(
+                    site_id=str(site_id) if site_id else None,
+                    limit=limit if limit is not None else 200,
+                )
+            else:
+                from vendors.central_bridge import get_all_devices
+                raw = await get_all_devices()
+            _data_source = "live"
             return [_norm_device(d) for d in raw if isinstance(d, dict)]
         except Exception as exc:
             logger.warning("central_bridge unavailable, using mock data: %s", exc)
+            _data_source = "mock"
             return _mock_devices()
 
     async def get_device(self, serial: str) -> dict | None:
+        global _data_source
         try:
             from vendors.central_bridge import get_device
             raw = await get_device(serial)
+            _data_source = "live"
             return _norm_device(raw) if isinstance(raw, dict) and raw else None
         except Exception as exc:
             logger.warning("central_bridge unavailable, using mock data: %s", exc)
+            _data_source = "mock"
             devices = _mock_devices()
             return next((d for d in devices if d["serial"] == serial), None)
 
-    async def get_clients(self) -> list[dict]:
+    async def get_clients(
+        self,
+        site_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        global _data_source
         try:
-            from vendors.central_bridge import get_all_clients
-            raw = await get_all_clients()
+            if site_id or limit is not None:
+                from vendors.central_bridge import get_clients as _get_clients
+                raw = await _get_clients(
+                    site_id=str(site_id) if site_id else None,
+                    limit=limit if limit is not None else 200,
+                )
+            else:
+                from vendors.central_bridge import get_all_clients
+                raw = await get_all_clients()
+            _data_source = "live"
             return [_norm_client(c) for c in raw if isinstance(c, dict)]
         except Exception as exc:
             logger.warning("central_bridge unavailable, using mock data: %s", exc)
+            _data_source = "mock"
             return _mock_clients()
 
 

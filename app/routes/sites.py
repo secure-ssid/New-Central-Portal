@@ -11,6 +11,26 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _health_fields(summary: dict | None) -> list[dict]:
+    """Turn a site health summary dict into label/value rows for the template."""
+    if not isinstance(summary, dict):
+        return []
+    skip = {"status", "healthStatus", "summary", "siteId", "siteName", "site_id", "site_name"}
+    rows: list[dict] = []
+    for key, val in summary.items():
+        if key in skip or val in (None, "", [], {}):
+            continue
+        label = key.replace("_", " ").replace("Id", " ID")
+        if isinstance(val, (dict, list)):
+            continue
+        rows.append({"label": label, "value": str(val)})
+    for key in ("status", "healthStatus", "summary"):
+        if summary.get(key) not in (None, ""):
+            rows.insert(0, {"label": "Overall", "value": str(summary[key])})
+            break
+    return rows[:8]
+
+
 def _norm_site(raw: dict) -> dict:
     return {
         "id": raw.get("id") or raw.get("siteId") or raw.get("site_id") or "",
@@ -56,8 +76,9 @@ async def site_detail(request: Request, site_id: str):
     site_name = site.get("name") or ""
     site_location = ", ".join(p for p in (site.get("city"), site.get("state")) if p)
 
-    devices_task = aruba.get_devices()
-    clients_task = aruba.get_clients()
+    site_id_str = str(site.get("id")) if site.get("id") else None
+    devices_task = aruba.get_devices(site_id=site_id_str)
+    clients_task = aruba.get_clients(site_id=site_id_str)
     health_task = None
     try:
         from vendors.central_bridge import get_site_health_summary
@@ -79,8 +100,11 @@ async def site_detail(request: Request, site_id: str):
     if health_task is not None and len(results) > 2 and not isinstance(results[2], Exception):
         health_summary = results[2]
 
-    devices = [d for d in devices_raw if isinstance(d, dict) and (d.get("site") or "").lower() == site_name.lower()]
-    clients = [c for c in clients_raw if isinstance(c, dict) and (c.get("site") or "").lower() == site_name.lower()]
+    devices = [d for d in devices_raw if isinstance(d, dict)]
+    clients = [c for c in clients_raw if isinstance(c, dict)]
+    if site_id_str is None and site_name:
+        devices = [d for d in devices if (d.get("site") or "").lower() == site_name.lower()]
+        clients = [c for c in clients if (c.get("site") or "").lower() == site_name.lower()]
     online_count = sum(1 for d in devices if d.get("status") == "online")
 
     health_label = None
@@ -104,6 +128,7 @@ async def site_detail(request: Request, site_id: str):
             "online_count": online_count,
             "health_summary": health_summary if isinstance(health_summary, dict) else None,
             "health_label": health_label,
+            "health_fields": _health_fields(health_summary if isinstance(health_summary, dict) else None),
             "active": "sites",
         },
     )

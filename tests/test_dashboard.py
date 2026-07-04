@@ -130,6 +130,12 @@ class TestDashboardRender:
         for marker in ("Total Devices", "Online", "Clients"):
             assert marker in fragment and marker in full
 
+    def test_lite_partial_skips_expensive_widgets(self, client, mock_central, stub_db):
+        """Lite partial refresh should still render core stats."""
+        r = client.get("/?partial=1&lite=1")
+        assert r.status_code == 200
+        assert "Total Devices" in r.text
+
     def test_dashboard_survives_total_backend_failure(self, client, monkeypatch,
                                                       stub_db):
         from vendors.aruba_central import aruba

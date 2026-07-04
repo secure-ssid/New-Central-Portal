@@ -647,11 +647,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
                 <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">Traceroute</p>
                 <p class="text-[0.7rem] text-gray-500">Path trace (up to 60s)</p>
             </button>
-            <button @click="showLldp=!showLldp;showConfig=false;showPing=false"
-                hx-post="/devices/{{ device.serial }}/lldp"
-                hx-target="#ops-output"
-                hx-indicator="#ops-spinner"
-                class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors">
+            <button @click="showLldp=!showLldp;showConfig=false;showPing=false;showTrace=false"
+                class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors"
+                :class="showLldp && 'border-brand-500/60'">
                 <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">LLDP Neighbors</p>
                 <p class="text-[0.7rem] text-gray-500">Structured neighbor table</p>
             </button>
@@ -700,6 +698,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
                 hx-target="#ops-output"
                 hx-indicator="#ops-spinner">
                 <input type="hidden" name="destination" value="">
+            </form>
+        </div>
+
+        <!-- LLDP neighbors panel -->
+        <div x-show="showLldp" x-cloak class="mb-3 px-4 py-3 rounded-lg border border-surface-700 bg-surface-900">
+            <p class="text-[11px] text-slate-500 mb-2">Fetch structured LLDP neighbor table from this switch.</p>
+            <form hx-post="/devices/{{ device.serial }}/lldp" hx-target="#ops-output" hx-indicator="#ops-spinner">
+                <button type="submit" class="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-md text-white text-[0.8rem] font-semibold">Fetch LLDP</button>
             </form>
         </div>
 

@@ -41,7 +41,18 @@
 {% if health_summary %}
 <div class="card mb-6">
     <p class="section-label mb-3">Site Health Summary</p>
-    <pre class="text-xs text-slate-400 whitespace-pre-wrap font-mono">{{ health_summary | tojson(indent=2) }}</pre>
+    {% if health_fields %}
+    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {% for row in health_fields %}
+        <div class="p-3 rounded-lg bg-surface-900/60 border border-surface-700">
+            <dt class="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">{{ row.label }}</dt>
+            <dd class="text-sm font-medium text-slate-200">{{ row.value }}</dd>
+        </div>
+        {% endfor %}
+    </dl>
+    {% else %}
+    <p class="text-sm text-slate-400">{{ health_label or 'No structured health data' }}</p>
+    {% endif %}
 </div>
 {% endif %}
 

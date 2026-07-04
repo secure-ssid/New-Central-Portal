@@ -31,7 +31,7 @@
 <!-- Live region: HTMX re-fetches this fragment every 30s while the tab is visible.
      The wrapper (with the polling attributes) is never swapped — only its contents. -->
 <div id="dashboard-live"
-     hx-get="/?partial=1"
+     hx-get="/?partial=1&lite=1"
      hx-trigger="every 30s [document.visibilityState=='visible']"
      hx-swap="innerHTML">
 {% block dashboard_live %}

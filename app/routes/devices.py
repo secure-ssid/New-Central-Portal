@@ -185,7 +185,7 @@ async def device_detail(request: Request, serial: str):
         raise HTTPException(404, "Device not found")
 
     health_task = get_device_health(serial)
-    all_clients_task = aruba.get_clients()
+    clients_task = aruba.get_clients(limit=200)
     events_task = get_device_events(serial, hours=48, limit=20)
     health_label = None
     wireless_metrics = None
@@ -196,7 +196,7 @@ async def device_detail(request: Request, serial: str):
     if device.get("type") == "switch":
         ports_task = get_switch_ports(serial)
         all_clients, events, raw_ports, health = await asyncio.gather(
-            all_clients_task, events_task, ports_task, health_task, return_exceptions=True
+            clients_task, events_task, ports_task, health_task, return_exceptions=True
         )
         if isinstance(raw_ports, Exception):
             logger.error("Failed to fetch switch ports for %s: %s", serial, raw_ports)
@@ -212,19 +212,19 @@ async def device_detail(request: Request, serial: str):
         try:
             from vendors.central_bridge import get_ap_radios, get_channel_utilization, get_wireless_metrics
             all_clients, events, health, wireless_metrics, ap_radios, channel_util = await asyncio.gather(
-                all_clients_task, events_task, health_task,
+                clients_task, events_task, health_task,
                 get_wireless_metrics(serial), get_ap_radios(serial), get_channel_utilization(serial),
                 return_exceptions=True,
             )
         except Exception:
             all_clients, events, health = await asyncio.gather(
-                all_clients_task, events_task, health_task, return_exceptions=True
+                clients_task, events_task, health_task, return_exceptions=True
             )
             wireless_metrics = ap_radios = channel_util = None
         raw_ports = []
     else:
         all_clients, events, health = await asyncio.gather(
-            all_clients_task, events_task, health_task, return_exceptions=True
+            clients_task, events_task, health_task, return_exceptions=True
         )
         raw_ports = []
 
@@ -253,7 +253,8 @@ async def device_detail(request: Request, serial: str):
 
     device_name = device.get("name", "")
     connected_clients = [
-        c for c in all_clients if c.get("connected_to") == device_name
+        c for c in all_clients
+        if c.get("connected_device_serial") == serial or c.get("connected_to") == device_name
     ]
 
     # Serialized for the template's JS (3D faceplate). Escape "</" so the

@@ -12,28 +12,32 @@ router = APIRouter()
 async def probe_status() -> dict:
     """Probe DB and centralmcp bridge; never raises."""
     import db
+    from vendors.aruba_central import aruba, get_data_source
 
     db_ok = db.ping()
     central = "unavailable"
     data_mode = "mock"
 
     try:
-        from vendors.central_bridge import get_devices
-        devices = await get_devices(limit=1)
+        await aruba.get_devices(limit=1)
         central = "connected"
-        data_mode = "live" if devices else "live"
+        data_mode = get_data_source()
     except ImportError:
         central = "unavailable"
         data_mode = "mock"
     except Exception as exc:
         logger.debug("Central probe failed: %s", exc)
         central = "error"
-        data_mode = "mock"
+        data_mode = get_data_source() if get_data_source() != "unknown" else "mock"
 
-    if db_ok and central == "connected":
+    if db_ok and central == "connected" and data_mode == "live":
         mode = "live"
         label = "Live data from Aruba Central"
         severity = "ok"
+    elif central == "connected" and data_mode == "mock":
+        mode = "mock"
+        label = "Demo data — Central API unavailable; showing sample fleet"
+        severity = "warn"
     elif central in ("connected", "error") and not db_ok:
         mode = "partial"
         label = "Partial — database unavailable; alerts and settings may not persist"
