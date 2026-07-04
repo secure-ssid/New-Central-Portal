@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 import html
 
 from bridge_errors import BRIDGE_UNAVAILABLE
-from pagination import filter_items
+from pagination import filter_items, paginate as _paginate
 from vendors.aruba_central import aruba
 
 from templates_shared import templates
@@ -102,11 +102,24 @@ async def nac_manager(request: Request):
         error = BRIDGE_UNAVAILABLE
 
     registrations = filter_items(registrations, q, "mac", "description", "status", "role")
+    pg = _paginate(request, registrations)
 
     return templates.TemplateResponse(
         request,
         "platform/nac.html",
-        {"registrations": registrations, "error": error, "q": q, "active": "nac"},
+        {
+            "registrations": pg["items"],
+            "error": error,
+            "q": q,
+            "active": "nac",
+            "page": pg["page"],
+            "per_page": pg["per_page"],
+            "total": pg["total"],
+            "total_pages": pg["total_pages"],
+            "has_prev": pg["has_prev"],
+            "has_next": pg["has_next"],
+            "base_qs": pg["base_qs"],
+        },
     )
 
 
@@ -123,12 +136,19 @@ async def config_viewer(request: Request):
         logger.warning("Firmware compliance unavailable: %s", exc)
         compliance_error = BRIDGE_UNAVAILABLE
 
+    compliance_preview_limit = 50
+    compliance_rows = compliance.get("rows", []) if compliance else []
+    compliance_total = len(compliance_rows)
+
     return templates.TemplateResponse(
         request,
         "platform/config.html",
         {
             "devices": devices[:100],
             "compliance": compliance,
+            "compliance_rows": compliance_rows[:compliance_preview_limit],
+            "compliance_total": compliance_total,
+            "compliance_preview_limit": compliance_preview_limit,
             "compliance_error": compliance_error,
             "active": "config",
         },

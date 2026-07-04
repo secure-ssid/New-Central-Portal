@@ -235,27 +235,64 @@ def build_results(query: str, raw_devices: list, raw_clients: list,
     return deduped[:OVERALL_CAP + 3]
 
 
+def count_total_matches(query: str, raw_devices: list, raw_clients: list,
+                        raw_sites: list, raw_alerts: list | None = None,
+                        raw_wlans: list | None = None) -> int:
+    """Count all palette matches before overall cap."""
+    alerts = raw_alerts or []
+    wlans = raw_wlans or []
+    total = 0
+    for fn, raw in (
+        (search_devices, raw_devices),
+        (search_clients, raw_clients),
+        (search_sites, raw_sites),
+        (search_alerts, alerts),
+        (search_wlans, wlans),
+    ):
+        try:
+            total += len(fn(query, raw, cap=None))
+        except Exception:
+            logger.exception("[search] %s count failed for query %r", fn.__name__, query)
+    return total
+
+
 @router.get("/api")
-async def search_api(q: str = Query("", max_length=200)):
+async def search_api(
+    q: str = Query("", max_length=200),
+    type: str = Query("", max_length=20),
+    limit: int = Query(OVERALL_CAP, ge=1, le=50),
+):
     """Search devices, clients, and sites; degrades to partial results."""
     query = q.strip().lower()
+    type_filter = type.strip().lower()
     if not query:
-        return JSONResponse({"results": []})
+        return JSONResponse({"results": [], "total_matched": 0, "has_more": False})
     if len(query) < MIN_QUERY_LEN:
-        return JSONResponse({"results": []})
+        return JSONResponse({"results": [], "total_matched": 0, "has_more": False})
 
     try:
         inv = await get_search_inventory()
-        results = build_results(
-            query,
-            inv.get("devices", []),
-            inv.get("clients", []),
-            inv.get("sites", []),
-            inv.get("alerts", []),
-            inv.get("wlans", []),
+        devices = inv.get("devices", [])
+        clients = inv.get("clients", [])
+        sites = inv.get("sites", [])
+        alerts = inv.get("alerts", [])
+        wlans = inv.get("wlans", [])
+        total_matched = count_total_matches(
+            query, devices, clients, sites, alerts, wlans,
         )
+        results = build_results(query, devices, clients, sites, alerts, wlans)
+        if type_filter:
+            results = [r for r in results if r.get("type") == type_filter]
+        trimmed = results[:limit]
+        has_more = len(results) > len(trimmed) or total_matched > len(trimmed)
     except Exception:
         logger.exception("[search] result build failed for query %r", query)
-        results = []
+        trimmed = []
+        total_matched = 0
+        has_more = False
 
-    return JSONResponse({"results": results})
+    return JSONResponse({
+        "results": trimmed,
+        "total_matched": total_matched,
+        "has_more": has_more,
+    })

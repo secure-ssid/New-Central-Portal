@@ -450,7 +450,9 @@ async def device_show(request: Request, serial: str, command: str = Form("show v
                 f'<p style="font-size:.65rem;color:#f97316;font-weight:700;margin-bottom:4px;">{cmd_label}</p>'
                 f'<pre style="font-size:.72rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-bottom:14px;">{out_text}</pre>'
             )
-        return HTMLResponse("".join(html_parts) or "<p style='color:#6b7280;'>No output.</p>")
+        if html_parts:
+            return HTMLResponse("".join(html_parts))
+        return format_ops_response(result)
     except Exception as e:
         logger.exception("show command failed for %s", serial)
         return _ops_error(f"Error: {e}")

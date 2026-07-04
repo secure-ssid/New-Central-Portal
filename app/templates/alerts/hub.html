@@ -173,8 +173,20 @@
                             {% if item.source == 'central' %}bg-indigo-500/15 text-indigo-300{% else %}bg-surface-700 text-slate-400{% endif %}">{{ item.source }}</span>
                         {% if item.severity %}<span class="text-[10px] uppercase text-slate-600">{{ item.severity }}</span>{% endif %}
                     </div>
-                    <p class="text-sm text-slate-200 mt-1">{{ item.title }}</p>
+                    <p class="text-sm text-slate-200 mt-1">
+                        {% if item.device_serial %}
+                        <a href="/devices/{{ item.device_serial }}" class="hover:text-brand-300">{{ item.title }}</a>
+                        {% else %}{{ item.title }}{% endif %}
+                    </p>
                     {% if item.body %}<p class="text-xs text-slate-500 mt-0.5">{{ item.body }}</p>{% endif %}
+                    {% if item.device_serial or item.site %}
+                    <p class="text-[10px] text-slate-600 mt-1">
+                        {% if item.device_serial %}
+                        <a href="/devices/{{ item.device_serial }}" class="text-brand-400 hover:text-brand-300 font-mono">{{ item.device or item.device_serial }}</a>
+                        {% endif %}
+                        {% if item.site %}{% if item.device_serial %} · {% endif %}<a href="/devices/?site={{ item.site | urlencode }}" class="text-brand-400 hover:text-brand-300">{{ item.site }}</a>{% endif %}
+                    </p>
+                    {% endif %}
                 </div>
                 <span class="text-[10px] text-slate-600 flex-shrink-0 whitespace-nowrap">{{ item.time_ago or '—' }}</span>
             </div>

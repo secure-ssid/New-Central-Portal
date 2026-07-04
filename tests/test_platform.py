@@ -88,3 +88,18 @@ def test_nac_search_filter(client, mock_central, stub_db, monkeypatch):
     assert r.status_code == 200
     assert "lab-printer" in r.text
     assert "corp-laptop" not in r.text
+
+
+def test_nac_pagination(client, mock_central, stub_db, monkeypatch):
+    from vendors import central_bridge as cb
+
+    async def regs(**_kw):
+        return [
+            {"macAddress": f"aa:bb:cc:dd:ee:{i:02d}", "description": f"dev-{i}", "role": "guest"}
+            for i in range(5)
+        ]
+
+    monkeypatch.setattr(cb, "list_mac_registrations", regs)
+    r = client.get("/platform/nac?per_page=2")
+    assert r.status_code == 200
+    assert "Page 1 of 3" in r.text
