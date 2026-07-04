@@ -12,3 +12,10 @@ def test_devices_status_online_filter(client, mock_central, stub_db):
     r = client.get("/devices/?status=online")
     assert r.status_code == 200
     assert "Showing 3 online" in r.text
+
+
+def test_devices_site_filter(client, mock_central, stub_db):
+    r = client.get("/devices/?site=HQ")
+    assert r.status_code == 200
+    assert "Showing 3 devices at HQ" in r.text
+    assert "branch-gw-1" not in r.text

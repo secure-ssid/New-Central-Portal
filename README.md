@@ -6,9 +6,11 @@ A modern, self-hosted operations portal for HPE Aruba Networking Central. It put
 
 - **Dashboard** — fleet-wide stats with SVG donut and mix charts (online/offline, device types, wired/wireless clients), a merged recent-events feed from your busiest devices, tenant/site health widgets, and an HTMX partial that auto-refreshes the live section every 30 seconds (lite mode skips expensive widgets on poll).
 - **Devices** — searchable inventory with bulk group and site assignment (Classic Central), plus a drill-down detail page featuring an interactive **3D switch faceplate** (Three.js + OrbitControls) that renders real port state: link, PoE, uplinks, speed, and LLDP neighbours. Run validated `show` commands, ping from the device, or reboot it — output streams into the page via HTMX.
-- **Clients** — wired and wireless client list with per-client detail, including the connection path (client → AP → uplink switch) resolved live from switch port data.
+- **Clients** — wired and wireless client list with server-side type tabs (`?type=wireless|wired`), search, pagination, and per-client detail including the connection path (client → AP → uplink switch) resolved live from switch port data.
 - **3D Topology** — force-directed 3D graph of your network (3d-force-graph/WebGL) built from live LLDP neighbour data. Status/type/site filters, shift+click focus mode to isolate a node's neighbourhood, link colors by wired speed tier, and one-click PNG export.
 - **Sites** — site grid with device and client counts pulled from Central.
+- **WLANs** — read-only SSID/WLAN inventory with search (`/wlans/`).
+- **Platform** — NAC MAC registration viewer and config/firmware tools: structured firmware compliance table plus read-only running-config fetch (`/platform/nac`, `/platform/config`).
 - **Notifications & Automation** — a background automation engine (APScheduler) with:
   - Device-down alert rules: per-site and per-device-type filters, configurable offline threshold and cooldown, evaluated every 60 s (tunable).
   - In-app notification bell with unread counts and mark-as-read.
@@ -59,6 +61,8 @@ New-Central-Portal/
 │   │   ├── clients.py        #   list/detail with uplink resolution
 │   │   ├── topology.py       #   3D graph data from LLDP neighbours
 │   │   ├── sites.py          #   site list + detail (site_id-scoped fetches)
+│   │   ├── wlans.py          #   WLAN/SSID inventory
+│   │   ├── platform.py       #   NAC + firmware compliance + running config
 │   │   ├── alerts.py         #   unified Central + portal alerts hub
 │   │   ├── status.py         #   /api/status connectivity probe
 │   │   ├── notifications.py  #   rules, recipients, reports, in-app bell API
@@ -120,6 +124,26 @@ uvicorn main:app --reload --port 8000
 ```
 
 Run uvicorn from inside `app/` — template and static paths are relative. The Docker dev setup bind-mounts `./app` and runs uvicorn with `--reload`, so code changes restart the server automatically and template edits only need a browser refresh.
+
+### Unit tests
+
+From the repo root (pytest changes cwd to `app/` automatically):
+
+```bash
+python3 -m pytest -q
+cd app && python3 -m ruff check .
+```
+
+### Tailwind CSS
+
+Development uses the Tailwind Play CDN script (no build step). For production, pre-build CSS:
+
+```bash
+./scripts/build-tailwind.sh
+export USE_BUILT_TAILWIND=1
+```
+
+The Docker image builds `static/dist/tailwind.css` during `docker compose build` and sets `USE_BUILT_TAILWIND=1` automatically. When bind-mounting `./app` for local dev, either keep the CDN default or rebuild Tailwind on the host after template/CSS changes.
 
 ## Configuration
 

@@ -10,12 +10,66 @@
 
 {% if compliance_error %}
 <div class="card mb-4 border-amber-500/30 bg-amber-500/5">
-    <p class="text-sm text-amber-400">Firmware compliance unavailable: {{ compliance_error }}</p>
+    <p class="text-sm text-amber-400">{{ compliance_error }}</p>
+</div>
+{% elif compliance and compliance.rows %}
+<div class="card mb-6">
+    <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+        <p class="section-label">Firmware Compliance</p>
+        <div class="flex flex-wrap gap-2 text-xs">
+            <span class="px-2.5 py-1 rounded-full bg-surface-800 text-slate-300">{{ compliance.summary.total }} devices</span>
+            <span class="px-2.5 py-1 rounded-full bg-green-500/10 text-green-400">{{ compliance.summary.compliant }} compliant</span>
+            {% if compliance.summary.non_compliant %}
+            <span class="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400">{{ compliance.summary.non_compliant }} need attention</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="tbl" style="min-width:720px;">
+            <thead>
+                <tr>
+                    <th>Device</th>
+                    <th>Serial</th>
+                    <th>Model</th>
+                    <th>Current</th>
+                    <th>Target</th>
+                    <th>Site</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in compliance.rows %}
+                <tr class="tbl-row">
+                    <td class="text-slate-200">
+                        {% if row.serial %}
+                        <a href="/devices/{{ row.serial }}" class="text-brand-400 hover:text-brand-300">{{ row.name or row.serial }}</a>
+                        {% else %}{{ row.name or '—' }}{% endif %}
+                    </td>
+                    <td class="font-mono text-xs text-slate-400">{{ row.serial or '—' }}</td>
+                    <td class="text-xs">{{ row.model or '—' }}</td>
+                    <td class="font-mono text-xs">{{ row.current or '—' }}</td>
+                    <td class="font-mono text-xs">{{ row.target or '—' }}</td>
+                    <td class="text-xs text-slate-500">{{ row.site or '—' }}</td>
+                    <td>
+                        {% set st = row.status | lower %}
+                        {% if st in ['compliant', 'ok', 'up to date', 'uptodate', 'current', 'yes', 'true', 'up-to-date'] %}
+                        <span class="status-badge-online">{{ row.status or 'compliant' }}</span>
+                        {% elif row.status %}
+                        <span class="status-badge-offline">{{ row.status }}</span>
+                        {% else %}
+                        <span class="text-xs text-slate-500">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% elif compliance %}
 <div class="card mb-6">
-    <p class="section-label mb-3">Firmware Compliance</p>
-    <pre class="text-xs text-slate-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ compliance | tojson(indent=2) }}</pre>
+    <p class="section-label mb-2">Firmware Compliance</p>
+    <p class="text-sm text-slate-500">No compliance records returned.</p>
 </div>
 {% endif %}
 
