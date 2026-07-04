@@ -11,6 +11,28 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _dict_fields(data: dict | None, *priority: str, limit: int = 8) -> list[dict]:
+    """Extract label/value rows from a dict for template cards."""
+    if not isinstance(data, dict):
+        return []
+    rows: list[dict] = []
+    seen: set[str] = set()
+    for key in priority:
+        val = data.get(key)
+        if val not in (None, "", [], {}):
+            rows.append({"label": key.replace("_", " "), "value": str(val)})
+            seen.add(key)
+    for key, val in data.items():
+        if key in seen or val in (None, "", [], {}):
+            continue
+        if isinstance(val, (dict, list)):
+            continue
+        rows.append({"label": key.replace("_", " "), "value": str(val)})
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 async def _resolve_uplinks(serials: list[str]) -> dict[str, dict | None]:
     """Resolve AP/device uplink switches concurrently, memoized per serial.
 
@@ -126,6 +148,10 @@ async def client_detail(request: Request, mac: str):
             "uplink": uplink,
             "client_details": client_details if isinstance(client_details, dict) else None,
             "locate": locate if isinstance(locate, dict) else None,
+            "locate_fields": _dict_fields(
+                locate if isinstance(locate, dict) else None,
+                "apName", "deviceName", "siteName", "site", "floor", "building", "zone",
+            ),
             "roaming": roaming if isinstance(roaming, dict) else None,
             "active": "clients",
         },

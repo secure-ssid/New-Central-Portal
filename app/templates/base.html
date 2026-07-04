@@ -372,6 +372,14 @@
                     aria-haspopup="dialog">
                 <svg aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
             </button>
+            <button type="button"
+                    @click="$store.ui && $store.ui.toggleNoc()"
+                    class="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-surface-700/60"
+                    :class="$store.ui && $store.ui.nocMode && 'text-brand-400'"
+                    aria-label="Toggle NOC wallboard mode"
+                    title="Wallboard (W)">
+                <svg aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
+            </button>
         </header>
 
         <!-- Main -->
@@ -822,8 +830,6 @@
       }
     });
 
-    });
-
     /* ── UI chrome: wallboard, shortcuts, keyboard nav ─────────────── */
     Alpine.store('ui', {
       nocMode: typeof localStorage !== 'undefined' && localStorage.getItem('nocMode') === '1',
@@ -874,6 +880,7 @@
     });
 
     var QUICK_ACTIONS = [
+      { type: 'action', label: 'Offline devices', sublabel: 'Filter inventory to down devices', url: '/devices/?status=offline', status: '' },
       { type: 'action', label: 'Alerts hub', sublabel: 'Active Central alerts', url: '/alerts/', status: '' },
       { type: 'action', label: '3D Topology', sublabel: 'Interactive network graph', url: '/topology/', status: '' },
       { type: 'action', label: 'Device inventory', sublabel: 'Full fleet list', url: '/devices/', status: '' },
