@@ -28,13 +28,13 @@
         <table class="tbl" style="min-width:720px;">
             <thead>
                 <tr>
-                    <th>Device</th>
-                    <th>Serial</th>
-                    <th>Model</th>
-                    <th>Current</th>
-                    <th>Target</th>
-                    <th>Site</th>
-                    <th>Status</th>
+                    <th scope="col">Device</th>
+                    <th scope="col">Serial</th>
+                    <th scope="col">Model</th>
+                    <th scope="col">Current</th>
+                    <th scope="col">Target</th>
+                    <th scope="col">Site</th>
+                    <th scope="col">Status</th>
                 </tr>
             </thead>
             <tbody>
@@ -49,7 +49,11 @@
                     <td class="text-xs">{{ row.model or '—' }}</td>
                     <td class="font-mono text-xs">{{ row.current or '—' }}</td>
                     <td class="font-mono text-xs">{{ row.target or '—' }}</td>
-                    <td class="text-xs text-slate-500">{{ row.site or '—' }}</td>
+                    <td class="text-xs text-slate-500">
+                        {% if row.site %}
+                        <a href="/devices/?site={{ row.site | urlencode }}" class="text-brand-400 hover:text-brand-300 no-underline">{{ row.site }}</a>
+                        {% else %}—{% endif %}
+                    </td>
                     <td>
                         {% set st = row.status | lower %}
                         {% if st in ['compliant', 'ok', 'up to date', 'uptodate', 'current', 'yes', 'true', 'up-to-date'] %}
@@ -82,7 +86,8 @@
           hx-post="/platform/config/running"
           hx-target="#config-output"
           hx-indicator="#config-spinner">
-        <select name="serial" class="select max-w-xs" required>
+        <select name="serial" id="config-device-select" class="select max-w-xs" required
+                aria-label="Select device for running config">
             <option value="">Select device…</option>
             {% for d in devices %}
             <option value="{{ d.serial }}">{{ d.name }} ({{ d.serial }})</option>

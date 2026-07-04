@@ -31,3 +31,11 @@ def test_clients_type_tabs_show_fleet_totals(client, mock_central, stub_db):
     # All-tab badge shows fleet total (2), not just the filtered page size (1).
     assert ">2<" in r.text
     assert "Wireless" in r.text
+
+
+def test_clients_connected_to_device_links(client, mock_central, stub_db):
+    r = client.get("/clients/")
+    assert r.status_code == 200
+    assert "AP1SERIAL" in r.text
+    assert "SW1SERIAL" in r.text
+    assert "client.connected_device_serial" in r.text
