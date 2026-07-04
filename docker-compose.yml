@@ -25,8 +25,7 @@ services:
       - PYTHONPATH=/centralmcp
       - CREDS_PATH=/centralmcp/config/credentials.yaml
       - CENTRALMCP_GLP_V2BETA1_WRITES=${CENTRALMCP_GLP_V2BETA1_WRITES:-1}
-      # RAG backends (run on the Docker host by default)
-      - QDRANT_URL=${QDRANT_URL:-http://host.docker.internal:6333}
+      # RAG backends (optional Redis Stack + Ollama on the Docker host)
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
       # Alerting engine tuning
       - DEVICE_CHECK_INTERVAL_SECONDS=${DEVICE_CHECK_INTERVAL_SECONDS:-60}
@@ -39,7 +38,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./app:/app
-      - "${CENTRALMCP_PATH:-/Users/stephenchoate/Documents/Claude Projects/Active/MCP/centralmcp}:/centralmcp:ro"
+      - "${CENTRALMCP_PATH:-./centralmcp}:/centralmcp:ro"
     ports:
       - "8000:8000"
     healthcheck:

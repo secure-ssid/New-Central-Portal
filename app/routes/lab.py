@@ -207,7 +207,7 @@ async def chat_submit(request: Request, message: str = Form(...)):
     rag_context = ""
     logger.info("[RAG] starting search for: %s", message[:50])
     try:
-        docs = search_docs(message, top_k=8)
+        docs = await search_docs(message, top_k=8)
         logger.info("[RAG] returned %s docs, first: %s", len(docs) if docs else 0, docs[0] if docs else 'none')
         if docs and "error" not in docs[0]:
             # Filter to only reasonably relevant results (score > 0.60)
@@ -360,17 +360,17 @@ async def rag_page(request: Request):
 
 @router.post("/rag")
 async def rag_search(request: Request, query: str = Form(...)):
-    """Search Aruba docs via Qdrant + Ollama (centralmcp RAG pipeline)."""
+    """Search Aruba docs via centralmcp RAG (LanceDB by default)."""
     from vendors.central_bridge import search_docs
 
     import re
     error = None
     try:
-        raw = search_docs(query, top_k=8)
+        raw = await search_docs(query, top_k=8)
     except Exception as exc:
         logger.exception("[RAG] search failed for %r: %s", query, exc)
         raw = []
-        error = "Doc search is unavailable right now (Qdrant / Ollama may be down). Please try again later."
+        error = "Doc search is unavailable right now (centralmcp RAG index may be missing). Please try again later."
 
     if raw and "error" in raw[0]:
         logger.error("[RAG] search returned error: %s", raw[0]["error"])
