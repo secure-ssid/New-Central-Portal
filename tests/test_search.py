@@ -6,7 +6,9 @@ from routes.search import (
     PER_TYPE_CAP,
     _client_status,
     build_results,
+    search_alerts,
     search_devices,
+    search_wlans,
 )
 
 
@@ -128,7 +130,10 @@ class TestApi:
         async def boom(*a, **k):
             raise RuntimeError("everything down")
 
-        for fn in ("get_all_devices", "get_all_clients", "get_central_sites"):
+        for fn in (
+            "get_all_devices", "get_all_clients", "get_central_sites",
+            "list_active_alerts", "list_wlans",
+        ):
             monkeypatch.setattr(cb, fn, boom)
         r = client.get("/search/api?q=anything")
         assert r.status_code == 200
@@ -136,3 +141,18 @@ class TestApi:
 
     def test_overlong_query_rejected_by_validation(self, client, mock_central):
         assert client.get("/search/api?q=" + "a" * 201).status_code == 422
+
+
+class TestAlertsAndWlans:
+    def test_search_alerts_by_title(self):
+        alerts = [{"alertName": "AP Down", "severity": "critical", "deviceName": "lobby-ap"}]
+        rows = search_alerts("down", alerts)
+        assert len(rows) == 1
+        assert rows[0]["type"] == "alert"
+
+    def test_search_wlans_by_ssid(self):
+        wlans = [{"ssid": "corp-wifi", "security": "WPA3"}]
+        rows = search_wlans("corp", wlans)
+        assert len(rows) == 1
+        assert rows[0]["type"] == "wlan"
+        assert rows[0]["url"] == "/wlans/"

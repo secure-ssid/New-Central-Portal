@@ -514,24 +514,40 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 <!-- Wireless (AP devices) -->
 <div class="card mb-6">
     <h2 class="text-lg font-semibold text-white mb-4">Wireless</h2>
-    {% if wireless_metrics or ap_radios or channel_util %}
+    {% if wireless_cards.radios or wireless_cards.metrics or wireless_cards.channel_util_pct %}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {% if wireless_metrics %}
+        {% if wireless_cards.metrics %}
         <div class="rounded-lg border border-surface-700 bg-surface-900 p-3">
             <p class="section-label mb-2">Metrics</p>
-            <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">{{ wireless_metrics | tojson(indent=2) }}</pre>
+            <dl class="space-y-1.5">
+                {% for m in wireless_cards.metrics %}
+                <div class="flex justify-between gap-2 text-[11px]">
+                    <dt class="text-slate-500">{{ m.label }}</dt>
+                    <dd class="text-slate-300 font-mono">{{ m.value }}</dd>
+                </div>
+                {% endfor %}
+            </dl>
         </div>
         {% endif %}
-        {% if ap_radios %}
-        <div class="rounded-lg border border-surface-700 bg-surface-900 p-3">
+        {% if wireless_cards.radios %}
+        <div class="rounded-lg border border-surface-700 bg-surface-900 p-3 md:col-span-2">
             <p class="section-label mb-2">Radios</p>
-            <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">{{ ap_radios | tojson(indent=2) }}</pre>
+            <div class="overflow-x-auto">
+                <table class="tbl text-[11px]">
+                    <thead><tr><th>Band</th><th>Channel</th><th>Power</th><th>Clients</th><th>Util</th></tr></thead>
+                    <tbody>
+                        {% for r in wireless_cards.radios %}
+                        <tr><td>{{ r.band }}</td><td>{{ r.channel }}</td><td>{{ r.power }}</td><td>{{ r.clients }}</td><td>{{ r.util }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
         {% endif %}
-        {% if channel_util %}
+        {% if wireless_cards.channel_util_pct %}
         <div class="rounded-lg border border-surface-700 bg-surface-900 p-3">
             <p class="section-label mb-2">Channel Utilization</p>
-            <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">{{ channel_util | tojson(indent=2) }}</pre>
+            <p class="text-2xl font-bold text-cyan-400">{{ wireless_cards.channel_util_pct }}%</p>
         </div>
         {% endif %}
     </div>

@@ -1,7 +1,8 @@
-"""_paginate clamping/slicing/param-preservation (devices & clients copies)."""
+"""paginate() clamping/slicing/param-preservation."""
 import pytest
 from starlette.requests import Request
 
+import pagination as pagination_mod
 from routes import clients as clients_mod
 from routes import devices as devices_mod
 
@@ -17,10 +18,10 @@ def make_request(query_string=""):
 ITEMS = list(range(1, 121))  # 120 items
 
 
-@pytest.fixture(params=[devices_mod, clients_mod],
-                ids=["devices._paginate", "clients._paginate"])
+@pytest.fixture(params=[pagination_mod.paginate, devices_mod._paginate, clients_mod._paginate],
+                ids=["pagination.paginate", "devices._paginate", "clients._paginate"])
 def paginate(request):
-    return request.param._paginate
+    return request.param
 
 
 class TestDefaults:
@@ -39,7 +40,7 @@ class TestDefaults:
         pg = paginate(make_request(""), [])
         assert pg["items"] == []
         assert pg["total"] == 0
-        assert pg["total_pages"] == 1  # never zero pages
+        assert pg["total_pages"] == 1
         assert pg["page"] == 1
         assert pg["has_prev"] is False and pg["has_next"] is False
 
@@ -75,15 +76,14 @@ class TestClamping:
     def test_per_page_capped_at_max(self, paginate):
         pg = paginate(make_request("per_page=9999"), ITEMS)
         assert pg["per_page"] == 200
-        assert pg["items"] == ITEMS  # all 120 fit on one page
+        assert pg["items"] == ITEMS
 
     def test_per_page_floor_is_one(self, paginate):
         pg = paginate(make_request("per_page=0"), ITEMS)
         assert pg["per_page"] == 1
         assert pg["total_pages"] == 120
 
-    @pytest.mark.parametrize("qs", ["page=abc", "per_page=abc",
-                                    "page=abc&per_page=xyz"])
+    @pytest.mark.parametrize("qs", ["page=abc", "per_page=abc", "page=abc&per_page=xyz"])
     def test_non_numeric_falls_back_to_defaults(self, paginate, qs):
         pg = paginate(make_request(qs), ITEMS)
         assert pg["page"] == 1
@@ -107,15 +107,13 @@ class TestParamPreservation:
         assert pg["base_qs"] == ""
 
 
-def test_both_implementations_agree():
-    """devices.py and clients.py carry copies — they must behave identically."""
-    for qs in ("", "page=2&per_page=7", "page=-1", "per_page=100000",
-               "page=zzz&site=hq"):
-        a = devices_mod._paginate(make_request(qs), ITEMS)
-        b = clients_mod._paginate(make_request(qs), ITEMS)
-        assert a == b, f"divergence for {qs!r}"
+def test_route_wrappers_match_shared_module():
+    for qs in ("", "page=2&per_page=7", "page=-1", "per_page=100000", "page=zzz&site=hq"):
+        expected = pagination_mod.paginate(make_request(qs), ITEMS)
+        assert devices_mod._paginate(make_request(qs), ITEMS) == expected
+        assert clients_mod._paginate(make_request(qs), ITEMS) == expected
 
 
 def test_constants_match():
-    assert devices_mod.DEFAULT_PER_PAGE == clients_mod.DEFAULT_PER_PAGE == 50
-    assert devices_mod.MAX_PER_PAGE == clients_mod.MAX_PER_PAGE == 200
+    assert pagination_mod.DEFAULT_PER_PAGE == 50
+    assert pagination_mod.MAX_PER_PAGE == 200
