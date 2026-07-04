@@ -147,6 +147,11 @@ async def client_detail(request: Request, mac: str):
             "client": client,
             "uplink": uplink,
             "client_details": client_details if isinstance(client_details, dict) else None,
+            "detail_fields": _dict_fields(
+                client_details if isinstance(client_details, dict) else None,
+                "hostName", "userName", "status", "vlanId", "role", "authType",
+                "connectedTo", "siteName", "wlanName",
+            ),
             "locate": locate if isinstance(locate, dict) else None,
             "locate_fields": _dict_fields(
                 locate if isinstance(locate, dict) else None,

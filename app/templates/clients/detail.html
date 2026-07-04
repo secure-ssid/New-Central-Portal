@@ -325,7 +325,18 @@
     {% if client_details %}
     <div class="card">
         <p class="section-label mb-3">Extended Details</p>
-        <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ client_details | tojson(indent=2) }}</pre>
+        {% if detail_fields %}
+        <dl class="space-y-2">
+            {% for row in detail_fields %}
+            <div class="flex justify-between gap-2 text-xs">
+                <dt class="text-slate-500">{{ row.label }}</dt>
+                <dd class="text-slate-200 font-medium text-right">{{ row.value }}</dd>
+            </div>
+            {% endfor %}
+        </dl>
+        {% else %}
+        <p class="text-sm text-slate-500">No extended details available.</p>
+        {% endif %}
     </div>
     {% endif %}
     {% if locate %}
