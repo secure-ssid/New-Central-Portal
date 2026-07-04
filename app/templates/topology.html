@@ -1071,11 +1071,15 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
             if (n.virtual) return;
             var st = (n.status || '').toLowerCase();
             var stColor = st === 'online' ? '#4ade80' : '#f87171';
+            var siteCell = escHtml(n.site || '—');
+            if (n.site && n.site_url) {
+                siteCell = '<a href="' + escHtml(n.site_url) + '" style="color:#fb923c;text-decoration:none;" onclick="event.stopPropagation();">' + escHtml(n.site) + '</a>';
+            }
             rows.push(
                 '<tr class="tbl-row" style="cursor:pointer" data-url="' + escHtml(n.url) + '">' +
                 '<td style="color:#e2e8f0;">' + escHtml(n.label) + '</td>' +
                 '<td style="font-size:.72rem;text-transform:capitalize;">' + escHtml(n.group) + '</td>' +
-                '<td style="font-size:.72rem;">' + escHtml(n.site || '—') + '</td>' +
+                '<td style="font-size:.72rem;">' + siteCell + '</td>' +
                 '<td style="font-family:monospace;font-size:.68rem;">' + escHtml(n.ip || '—') + '</td>' +
                 '<td style="font-size:.72rem;color:' + stColor + ';">' + escHtml(n.status || '—') + '</td></tr>'
             );

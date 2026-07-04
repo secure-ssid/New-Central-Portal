@@ -20,6 +20,12 @@ def test_site_detail_renders(client, mock_central, stub_db):
     assert "/clients/?site=HQ" in r.text
 
 
+def test_ap_detail_site_link(client, mock_central, stub_db):
+    r = client.get("/devices/AP1SERIAL")
+    assert r.status_code == 200
+    assert '/devices/?site=HQ' in r.text
+
+
 def test_site_detail_not_found(client, mock_central, stub_db):
     r = client.get("/sites/nonexistent-site-id")
     assert r.status_code == 404
