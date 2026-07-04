@@ -206,6 +206,24 @@ class TestApi:
         data = client.get("/search/api?q=hq&type=site").json()
         assert all(r["type"] == "site" for r in data["results"])
 
+    def test_search_api_includes_alerts_and_wlans(self, client, mock_central, monkeypatch):
+        import search_inventory_cache as cache_mod
+        from vendors import central_bridge as cb
+
+        async def alerts(**_kw):
+            return [{"alertName": "AP Down", "severity": "critical", "deviceName": "lobby-ap"}]
+
+        async def wlans(**_kw):
+            return [{"ssid": "corp-wifi", "security": "WPA3"}]
+
+        monkeypatch.setattr(cb, "list_active_alerts", alerts)
+        monkeypatch.setattr(cb, "list_wlans", wlans)
+        cache_mod.clear_search_inventory_cache()
+        data = client.get("/search/api?q=down").json()
+        assert any(r["type"] == "alert" for r in data["results"])
+        data2 = client.get("/search/api?q=corp").json()
+        assert any(r["type"] == "wlan" and r["url"] == "/wlans/?q=corp" for r in data2["results"])
+
     def test_overlong_query_rejected_by_validation(self, client, mock_central):
         assert client.get("/search/api?q=" + "a" * 201).status_code == 422
 

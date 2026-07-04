@@ -37,3 +37,10 @@ def test_topology_site_filter_case_insensitive(client, mock_central):
     assert r.status_code == 200
     g = _graph(r.text)
     assert all(n.get("site") == "HQ" for n in g["nodes"])
+
+
+def test_topology_site_dropdown(client, mock_central):
+    r = client.get("/topology/")
+    assert r.status_code == 200
+    assert 'id="topo-site-filter"' in r.text
+    assert "All sites" in r.text

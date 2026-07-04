@@ -57,3 +57,19 @@ def test_alerts_search_filter(client, mock_central, stub_db, monkeypatch):
     assert r.status_code == 200
     assert "High CPU" in r.text
     assert "AP Down" not in r.text
+
+
+def test_alerts_pagination(client, mock_central, stub_db, monkeypatch):
+    from vendors import central_bridge as cb
+
+    async def alerts(limit=100):
+        return [
+            {"alertName": f"Alert {i}", "severity": "minor", "deviceName": f"dev-{i}"}
+            for i in range(5)
+        ]
+
+    monkeypatch.setattr(cb, "list_active_alerts", alerts)
+    r = client.get("/alerts/?per_page=2")
+    assert r.status_code == 200
+    assert "Page 1 of 3" in r.text
+    assert "Rows" in r.text
