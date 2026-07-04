@@ -877,7 +877,8 @@
           window.location.href = r.url;
         },
         typeLabel: function (t) {
-          return t === 'device' ? 'Devices' : (t === 'client' ? 'Clients' : 'Sites');
+          var labels = { device: 'Devices', client: 'Clients', site: 'Sites', alert: 'Alerts', wlan: 'WLANs' };
+          return labels[t] || t;
         }
       };
     });

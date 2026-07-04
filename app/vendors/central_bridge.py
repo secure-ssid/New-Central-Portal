@@ -205,6 +205,25 @@ async def get_switch_ports(serial: str) -> list[dict]:
 # tables for a short window makes repeated uplink lookups cheap.
 _PORTS_CACHE_TTL_SECONDS = 60.0
 _ports_cache: dict[str, tuple[float, list[dict]]] = {}
+_switches_cache: tuple[float, list[dict]] | None = None
+_SWITCHES_CACHE_TTL_SECONDS = 60.0
+
+
+async def _get_switches_cached() -> list[dict]:
+    """List switch devices with a short TTL cache (uplink resolution only)."""
+    global _switches_cache
+    now = time.monotonic()
+    if _switches_cache is not None and (now - _switches_cache[0]) < _SWITCHES_CACHE_TTL_SECONDS:
+        return _switches_cache[1]
+    from mcp_servers.monitoring import list_devices
+    all_devices = _unwrap(await _run(list_devices, limit=200))
+    switches = [
+        d for d in all_devices
+        if isinstance(d, dict)
+        and (d.get("deviceType") or "").upper() in ("SWITCH", "AOS_S", "AOS-S", "CX", "AOS_CX")
+    ]
+    _switches_cache = (time.monotonic(), switches)
+    return switches
 
 
 async def _get_switch_ports_cached(serial: str) -> list[dict]:
@@ -225,13 +244,7 @@ async def _get_switch_ports_cached(serial: str) -> list[dict]:
 
 async def find_device_uplink(device_serial: str) -> dict | None:
     """Return the switch + port that an AP/device uplinks through."""
-    from mcp_servers.monitoring import list_devices
-    all_devices = _unwrap(await _run(list_devices, limit=200))
-    switches = [
-        d for d in all_devices
-        if isinstance(d, dict)
-        and (d.get("deviceType") or "").upper() in ("SWITCH", "AOS_S", "AOS-S", "CX", "AOS_CX")
-    ]
+    switches = await _get_switches_cached()
     for sw in switches:
         sw_serial = sw.get("serialNumber") or sw.get("serial") or ""
         if not sw_serial:

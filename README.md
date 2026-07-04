@@ -4,7 +4,7 @@ A modern, self-hosted operations portal for HPE Aruba Networking Central. It put
 
 ## Features
 
-- **Dashboard** — fleet-wide stats with SVG donut and mix charts (online/offline, device types, wired/wireless clients), a merged recent-events feed from your busiest devices, and an HTMX partial that auto-refreshes the live section every 30 seconds while the tab is visible.
+- **Dashboard** — fleet-wide stats with SVG donut and mix charts (online/offline, device types, wired/wireless clients), a merged recent-events feed from your busiest devices, tenant/site health widgets, and an HTMX partial that auto-refreshes the live section every 30 seconds (lite mode skips expensive widgets on poll).
 - **Devices** — searchable inventory with bulk group and site assignment (Classic Central), plus a drill-down detail page featuring an interactive **3D switch faceplate** (Three.js + OrbitControls) that renders real port state: link, PoE, uplinks, speed, and LLDP neighbours. Run validated `show` commands, ping from the device, or reboot it — output streams into the page via HTMX.
 - **Clients** — wired and wireless client list with per-client detail, including the connection path (client → AP → uplink switch) resolved live from switch port data.
 - **3D Topology** — force-directed 3D graph of your network (3d-force-graph/WebGL) built from live LLDP neighbour data. Status/type/site filters, shift+click focus mode to isolate a node's neighbourhood, link colors by wired speed tier, and one-click PNG export.
@@ -14,7 +14,7 @@ A modern, self-hosted operations portal for HPE Aruba Networking Central. It put
   - In-app notification bell with unread counts and mark-as-read.
   - Email alerts and scheduled daily/weekly summary reports over SMTP (configured in the UI, test-send included).
   - License/subscription expiry checks against GreenLake (daily) and SSL certificate expiry monitoring for hosts you list.
-- **AI Assistant** — a chat drawer available on every page, grounded with a just-fetched snapshot of your devices and clients, so it answers questions about *your* network. A global command palette (Ctrl+K / Cmd+K) searches devices, clients, and sites instantly.
+- **AI Assistant** — a chat drawer available on every page, grounded with a just-fetched snapshot of your devices and clients, so it answers questions about *your* network. A global command palette (Ctrl+K / Cmd+K) searches devices, clients, sites, alerts, and WLANs instantly.
 - **Lab** — a sandbox of self-contained experiments: network chatbot with RAG (centralmcp LanceDB index) and MCP tool calling, semantic doc search, MCP tool tester, self-healing simulator (dry-run), AI health report, config viewer, ping tester, alert dashboard, client fingerprints, and a GreenLake Platform explorer.
 - **Platform** — optional session login (`PORTAL_PASSWORD`), `/healthz` liveness + DB check for orchestration, responsive mobile layout with slide-in sidebar, accessibility-minded markup (ARIA labels, keyboard navigation, focus management), and defensive error handling throughout: API failures log and degrade, they don't 500.
 
@@ -36,10 +36,11 @@ Until those files exist, the links below will 404 in GitHub's preview — that i
 Browser ──► Caddy (:80/:443) ──► FastAPI app (:8000)
             zstd/gzip,            ├─ Jinja2 + HTMX + Alpine.js + Tailwind (server-rendered UI)
             security headers      ├─ APScheduler — device-down checks, expiry checks, summary reports
-                                  ├─ vendors/aruba_central ───► New Central REST API (mock fallback)
-                                  ├─ vendors/central_bridge ──► Classic Central (OAuth2 w/ auto-refresh)
-                                  │                          ──► centralmcp tools + GreenLake (GLP)
+                                  ├─ vendors/aruba_central ───► central_bridge (normalization + mock fallback)
+                                  ├─ vendors/central_bridge ──► centralmcp monitoring/ops/config/nac/glp
+                                  │                          ──► Classic Central OAuth2 (groups, sites)
                                   │                          ──► centralmcp RAG (LanceDB; optional Redis + Ollama)
+                                  ├─ GET /api/status ─────────► DB + data-source probe (live vs demo banner)
                                   └─ PostgreSQL 16 + pgvector — settings, alert rules, notification
                                      history, device status snapshots, report schedule
 ```
@@ -50,13 +51,16 @@ New-Central-Portal/
 │   ├── main.py               # FastAPI entry point, lifespan, scheduler wiring
 │   ├── config.py             # Settings (pydantic-settings) + startup validation
 │   ├── db.py                 # PostgreSQL pool, schema bootstrap, queries
+│   ├── pagination.py         # Shared list pagination helper
 │   ├── notifications.py      # Alert engine, expiry checks, email + reports
 │   ├── routes/               # One module per section
-│   │   ├── home.py           #   dashboard (+ 30s HTMX live fragment)
+│   │   ├── home.py           #   dashboard (+ 30s HTMX live fragment, lite poll)
 │   │   ├── devices.py        #   list/detail, show/ping/reboot, group & site ops
 │   │   ├── clients.py        #   list/detail with uplink resolution
 │   │   ├── topology.py       #   3D graph data from LLDP neighbours
-│   │   ├── sites.py
+│   │   ├── sites.py          #   site list + detail (site_id-scoped fetches)
+│   │   ├── alerts.py         #   unified Central + portal alerts hub
+│   │   ├── status.py         #   /api/status connectivity probe
 │   │   ├── notifications.py  #   rules, recipients, reports, in-app bell API
 │   │   ├── search.py         #   Ctrl+K command palette API
 │   │   ├── assistant.py      #   AI assistant chat backend

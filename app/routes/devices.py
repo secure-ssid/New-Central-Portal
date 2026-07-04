@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
+from pagination import paginate as _paginate
 from vendors.aruba_central import aruba
 import asyncio
 import html
@@ -14,52 +15,49 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ── Server-side pagination ────────────────────────────────────────────────────
+def _wireless_cards(
+    wireless_metrics: dict | None,
+    ap_radios: dict | None,
+    channel_util: dict | None,
+) -> dict:
+    """Normalize AP wireless payloads into template-friendly cards."""
+    radios: list[dict] = []
+    if isinstance(ap_radios, dict):
+        items = ap_radios.get("radios") or ap_radios.get("items") or ap_radios.get("data") or []
+        if isinstance(items, list):
+            for raw in items:
+                if not isinstance(raw, dict):
+                    continue
+                radios.append({
+                    "band": str(raw.get("band") or raw.get("radioBand") or raw.get("wirelessBand") or "—"),
+                    "channel": str(raw.get("channel") or raw.get("wirelessChannel") or "—"),
+                    "power": str(raw.get("txPower") or raw.get("power") or raw.get("eirp") or "—"),
+                    "clients": str(raw.get("numClients") or raw.get("clientCount") or raw.get("clients") or "—"),
+                    "util": str(raw.get("utilization") or raw.get("channelUtilization") or "—"),
+                })
 
-DEFAULT_PER_PAGE = 50
-MAX_PER_PAGE = 200
+    metrics: list[dict] = []
+    if isinstance(wireless_metrics, dict):
+        for key in (
+            "noiseFloor", "clientCount", "cpu", "memory", "txBytes", "rxBytes",
+            "txRate", "rxRate", "uptime", "status",
+        ):
+            val = wireless_metrics.get(key)
+            if val not in (None, ""):
+                label = key.replace("_", " ")
+                metrics.append({"label": label, "value": str(val)})
 
+    util_pct = None
+    if isinstance(channel_util, dict):
+        util_pct = (
+            channel_util.get("utilization")
+            or channel_util.get("channelUtilization")
+            or channel_util.get("avgUtilization")
+        )
+        if util_pct is not None:
+            util_pct = str(util_pct)
 
-def _paginate(request: Request, items: list) -> dict:
-    """Slice ``items`` for the current request's ``page``/``per_page`` params.
-
-    ``page`` is 1-based (default 1, clamped into range); ``per_page`` defaults
-    to 50 and is clamped to 1..200. Invalid/non-numeric values fall back to
-    the defaults instead of erroring. Returns the page slice plus
-    template-ready metadata, including ``base_qs`` — the current query string
-    minus ``page`` — so pagination links preserve every other parameter.
-    """
-    from urllib.parse import urlencode
-
-    try:
-        per_page = int(request.query_params.get("per_page", DEFAULT_PER_PAGE))
-    except (TypeError, ValueError):
-        per_page = DEFAULT_PER_PAGE
-    per_page = max(1, min(MAX_PER_PAGE, per_page))
-
-    try:
-        page = int(request.query_params.get("page", 1))
-    except (TypeError, ValueError):
-        page = 1
-
-    total = len(items)
-    total_pages = max(1, -(-total // per_page))  # ceil div, min 1
-    page = max(1, min(page, total_pages))
-    start = (page - 1) * per_page
-
-    base_qs = urlencode(
-        [(k, v) for k, v in request.query_params.multi_items() if k != "page"]
-    )
-    return {
-        "items": items[start:start + per_page],
-        "page": page,
-        "per_page": per_page,
-        "total": total,
-        "total_pages": total_pages,
-        "has_prev": page > 1,
-        "has_next": page < total_pages,
-        "base_qs": base_qs,
-    }
+    return {"radios": radios, "metrics": metrics[:8], "channel_util_pct": util_pct}
 
 
 def _normalize_ports(raw_ports) -> list[dict]:
@@ -275,6 +273,11 @@ async def device_detail(request: Request, serial: str):
             "wireless_metrics": wireless_metrics if isinstance(wireless_metrics, dict) else None,
             "ap_radios": ap_radios if isinstance(ap_radios, dict) else None,
             "channel_util": channel_util if isinstance(channel_util, dict) else None,
+            "wireless_cards": _wireless_cards(
+                wireless_metrics if isinstance(wireless_metrics, dict) else None,
+                ap_radios if isinstance(ap_radios, dict) else None,
+                channel_util if isinstance(channel_util, dict) else None,
+            ),
             "active": "devices",
         },
     )
