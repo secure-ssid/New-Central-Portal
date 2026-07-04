@@ -80,7 +80,21 @@ class TestCaps:
         results = build_results("match", devices, clients, sites)
         assert len(results) >= OVERALL_CAP
         assert len(results) <= OVERALL_CAP + 3
-        assert sum(1 for r in results if r["type"] == "device") == PER_TYPE_CAP
+        content = [r for r in results if r["type"] != "action"]
+        assert len(content) == OVERALL_CAP
+        assert sum(1 for r in content if r["type"] == "device") == 5
+        assert sum(1 for r in content if r["type"] == "client") == 5
+        assert sum(1 for r in content if r["type"] == "site") == 5
+
+    def test_offset_returns_next_page(self):
+        devices = [raw_device(i, name=f"match-sw-{i}") for i in range(30)]
+        page0 = build_results("match", devices, [], [], offset=0, limit=15)
+        page1 = build_results("match", devices, [], [], offset=15, limit=15)
+        labels0 = {r["label"] for r in page0 if r["type"] == "device"}
+        labels1 = {r["label"] for r in page1 if r["type"] == "device"}
+        assert len(labels0) == 15
+        assert len(labels1) == 15
+        assert labels0.isdisjoint(labels1)
 
     def test_one_source_crashing_keeps_other_results(self, monkeypatch):
         import routes.search as search_mod
@@ -116,15 +130,15 @@ class TestApi:
 
     def test_empty_query_returns_empty(self, client, mock_central):
         assert client.get("/search/api?q=").json() == {
-            "results": [], "total_matched": 0, "has_more": False,
+            "results": [], "total_matched": 0, "has_more": False, "offset": 0,
         }
         assert client.get("/search/api?q=%20%20").json() == {
-            "results": [], "total_matched": 0, "has_more": False,
+            "results": [], "total_matched": 0, "has_more": False, "offset": 0,
         }
 
     def test_short_query_returns_empty(self, client, mock_central):
         assert client.get("/search/api?q=a").json() == {
-            "results": [], "total_matched": 0, "has_more": False,
+            "results": [], "total_matched": 0, "has_more": False, "offset": 0,
         }
 
     def test_search_uses_inventory_cache(self, client, mock_central, monkeypatch):
@@ -170,12 +184,23 @@ class TestApi:
             monkeypatch.setattr(cb, fn, boom)
         r = client.get("/search/api?q=anything")
         assert r.status_code == 200
-        assert r.json() == {"results": [], "total_matched": 0, "has_more": False}
+        assert r.json() == {"results": [], "total_matched": 0, "has_more": False, "offset": 0}
 
     def test_search_returns_total_matched(self, client, mock_central):
         data = client.get("/search/api?q=hq").json()
         assert data["total_matched"] >= 1
         assert "has_more" in data
+        assert data["offset"] == 0
+
+    def test_search_offset_pagination(self, client, mock_central):
+        first = client.get("/search/api?q=sw&limit=5&offset=0").json()
+        second = client.get("/search/api?q=sw&limit=5&offset=5").json()
+        assert first["offset"] == 0
+        assert second["offset"] == 5
+        if first["has_more"]:
+            urls0 = {r["url"] for r in first["results"] if r.get("type") != "action"}
+            urls1 = {r["url"] for r in second["results"] if r.get("type") != "action"}
+            assert urls0.isdisjoint(urls1)
 
     def test_search_type_filter(self, client, mock_central):
         data = client.get("/search/api?q=hq&type=site").json()
