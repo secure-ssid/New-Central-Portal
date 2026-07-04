@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 import html
 
 from bridge_errors import BRIDGE_UNAVAILABLE
+from pagination import filter_items
 from vendors.aruba_central import aruba
 
 from templates_shared import templates
@@ -83,6 +84,7 @@ def _normalize_firmware_compliance(raw) -> dict:
 async def nac_manager(request: Request):
     registrations: list[dict] = []
     error = None
+    q = request.query_params.get("q", "").strip()
     try:
         from vendors.central_bridge import list_mac_registrations
         raw = await list_mac_registrations(limit=200)
@@ -99,10 +101,12 @@ async def nac_manager(request: Request):
         logger.warning("NAC registrations unavailable: %s", exc)
         error = BRIDGE_UNAVAILABLE
 
+    registrations = filter_items(registrations, q, "mac", "description", "status", "role")
+
     return templates.TemplateResponse(
         request,
         "platform/nac.html",
-        {"registrations": registrations, "error": error, "active": "nac"},
+        {"registrations": registrations, "error": error, "q": q, "active": "nac"},
     )
 
 

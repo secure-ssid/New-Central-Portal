@@ -109,6 +109,7 @@ async def site_detail(request: Request, site_id: str):
         devices = [d for d in devices if (d.get("site") or "").lower() == site_name.lower()]
         clients = [c for c in clients if (c.get("site") or "").lower() == site_name.lower()]
     online_count = sum(1 for d in devices if d.get("status") == "online")
+    preview_limit = 25
 
     health_label = None
     if isinstance(health_summary, dict):
@@ -126,8 +127,11 @@ async def site_detail(request: Request, site_id: str):
         {
             "site": site,
             "site_location": site_location,
-            "devices": devices,
-            "clients": clients,
+            "devices": devices[:preview_limit],
+            "clients": clients[:preview_limit],
+            "device_total": len(devices),
+            "client_total": len(clients),
+            "preview_limit": preview_limit,
             "online_count": online_count,
             "health_summary": health_summary if isinstance(health_summary, dict) else None,
             "health_label": health_label,

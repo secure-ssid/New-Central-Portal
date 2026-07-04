@@ -79,10 +79,15 @@ async def list_clients(request: Request):
     clients = await aruba.get_clients()
     q = request.query_params.get("q", "").strip()
     type_filter = request.query_params.get("type", "").strip().lower()
+    site_filter = request.query_params.get("site", "").strip()
     clients = filter_items(
         clients, q,
         "mac", "ip", "hostname", "username", "connected_to", "site", "ssid", "os", "type",
     )
+    site_names = sorted({c.get("site") for c in clients if c.get("site")}, key=str.lower)
+    if site_filter:
+        site_key = site_filter.lower()
+        clients = [c for c in clients if (c.get("site") or "").lower() == site_key]
     wireless_total = sum(1 for c in clients if c.get("type") == "wireless")
     wired_total = sum(1 for c in clients if c.get("type") != "wireless")
     if type_filter in ("wireless", "wired"):
@@ -98,6 +103,8 @@ async def list_clients(request: Request):
             "clients": pg["items"],
             "q": q,
             "type_filter": type_filter,
+            "site_filter": site_filter,
+            "site_names": site_names,
             "wireless_total": wireless_total,
             "wired_total": wired_total,
             "session_total": wireless_total + wired_total,

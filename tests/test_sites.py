@@ -16,6 +16,8 @@ def test_site_detail_renders(client, mock_central, stub_db):
     assert r.status_code == 200
     assert "HQ" in r.text
     assert "Devices" in r.text
+    assert "/devices/?site=HQ" in r.text
+    assert "/clients/?site=HQ" in r.text
 
 
 def test_site_detail_not_found(client, mock_central, stub_db):
