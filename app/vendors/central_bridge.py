@@ -269,6 +269,132 @@ async def get_lldp_neighbors(serial: str) -> dict:
     return await _run(_lldp, serial)
 
 
+async def get_site_health_summary(site_id: str | None = None, site_name: str | None = None) -> dict:
+    from mcp_servers.monitoring import get_site_health_summary as _summary
+    kwargs: dict = {}
+    if site_id:
+        kwargs["site_id"] = site_id
+    if site_name:
+        kwargs["site_name"] = site_name
+    return await _run(_summary, **kwargs)
+
+
+async def get_tenant_health() -> dict:
+    from mcp_servers.monitoring import get_tenant_health as _health
+    return await _run(_health)
+
+
+async def get_client_details(mac_address: str) -> dict:
+    from mcp_servers.monitoring import get_client_details
+    return await _run(get_client_details, mac_address=mac_address)
+
+
+async def locate_client(mac_address: str) -> dict:
+    from mcp_servers.monitoring import locate_client as _locate
+    return await _run(_locate, mac_address=mac_address)
+
+
+async def get_client_roaming_history(mac_address: str, hours: int = 24) -> dict:
+    from mcp_servers.monitoring import get_client_roaming_history as _roam
+    return await _run(_roam, mac_address=mac_address, hours=hours)
+
+
+async def list_active_alerts(limit: int = 50) -> list[dict]:
+    from mcp_servers.monitoring import list_active_alerts
+    result = await _run(list_active_alerts, limit=limit)
+    if isinstance(result, dict):
+        return result.get("items", result.get("alerts", [])) or []
+    return result if isinstance(result, list) else []
+
+
+async def run_traceroute(serial: str, device_type: str, destination: str) -> dict:
+    dtype = _resolve_troubleshoot_type(serial, device_type)
+    if dtype == "cx":
+        from mcp_servers.ops import cx_traceroute
+        return await _run(cx_traceroute, serial, destination)
+    if dtype == "aos-s":
+        from mcp_servers.ops import aos_s_traceroute
+        return await _run(aos_s_traceroute, serial, destination)
+    return _ops_error(f"Traceroute is not supported for this device type on {serial}.")
+
+
+async def get_switch_port_errors(serial: str, interface: str | None = None) -> dict:
+    from mcp_servers.ops import get_switch_port_errors as _fn
+    return await _run(_fn, serial, interface=interface)
+
+
+async def find_mac_on_switch(serial: str, mac_address: str) -> dict:
+    from mcp_servers.ops import find_mac_on_switch as _fn
+    return await _run(_fn, serial, mac_address)
+
+
+async def get_cx_mac_table(serial: str, interface: str | None = None) -> dict:
+    from mcp_servers.ops import get_cx_mac_table as _fn
+    return await _run(_fn, serial, interface=interface)
+
+
+async def get_wireless_metrics(serial: str) -> dict:
+    from mcp_servers.monitoring import get_wireless_metrics as _fn
+    return await _run(_fn, serial)
+
+
+async def get_ap_radios(serial: str) -> dict:
+    from mcp_servers.monitoring import get_ap_radios as _fn
+    return await _run(_fn, serial)
+
+
+async def get_channel_utilization(serial: str) -> dict:
+    from mcp_servers.monitoring import get_channel_utilization as _fn
+    return await _run(_fn, serial)
+
+
+async def detect_client_flapping(serial: str, hours: int = 24) -> dict:
+    from mcp_servers.monitoring import detect_client_flapping as _fn
+    return await _run(_fn, serial, hours=hours)
+
+
+async def detect_ssh_brute_force(serial: str, hours: int = 24) -> dict:
+    from mcp_servers.monitoring import detect_ssh_brute_force as _fn
+    return await _run(_fn, serial, hours=hours)
+
+
+async def list_wlans(limit: int = 50) -> list[dict]:
+    from mcp_servers.config import list_ssids
+    result = await _run(list_ssids, limit=limit)
+    return _unwrap(result) if not isinstance(result, list) else result
+
+
+async def get_firmware_compliance(limit: int = 50) -> dict:
+    from mcp_servers.config import get_firmware_compliance as _fn
+    return await _run(_fn, limit=limit)
+
+
+async def get_device_running_config(serial: str) -> dict:
+    from mcp_servers.config import get_device_running_config as _fn
+    return await _run(_fn, serial)
+
+
+async def list_mac_registrations(limit: int = 50, offset: int = 0) -> list[dict]:
+    from mcp_servers.nac import list_mac_registrations as _fn
+    result = await _run(_fn, limit=limit, offset=offset)
+    return _unwrap(result) if isinstance(result, dict) else (result if isinstance(result, list) else [])
+
+
+async def list_glp_service_offers(limit: int = 50) -> list[dict]:
+    from mcp_servers.glp import list_glp_service_offers
+    result = await _run(list_glp_service_offers, limit=limit)
+    return result.get("items", []) if isinstance(result, dict) else []
+
+
+async def invoke_tool_router(tool_name: str, params: dict) -> dict:
+    """Fallback dispatch via centralmcp tool_router when not in _TOOL_MAP."""
+    try:
+        from mcp_servers.tool_router import invoke_read_tool
+        return await _run(invoke_read_tool, tool_name=tool_name, params=params)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 # ── Clients ──────────────────────────────────────────────────────────────────
 
 async def get_clients(
@@ -743,12 +869,15 @@ async def run_tool(tool_name: str, params_json: str) -> dict:
         }
 
     if tool_name not in _TOOL_MAP:
+        output = await invoke_tool_router(tool_name, params)
+        if "error" not in output:
+            return {"tool": tool_name, "params": params, "output": output, "status": "success", "error": None}
         return {
             "tool": tool_name,
             "params": params,
             "output": None,
             "status": "error",
-            "error": f"Unknown tool: {tool_name}",
+            "error": output.get("error") or f"Unknown tool: {tool_name}",
         }
 
     module_path, fn_name = _TOOL_MAP[tool_name]

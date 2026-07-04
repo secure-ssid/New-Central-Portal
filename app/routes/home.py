@@ -4,12 +4,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
 from vendors.aruba_central import aruba
 
+from templates_shared import templates
+
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
 logger = logging.getLogger(__name__)
 
 # Recent-events feed tuning: cap the fan-out so the dashboard stays cheap
@@ -190,6 +190,99 @@ async def _alert_summary() -> dict:
         return {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
 
 
+async def _tenant_health() -> dict | None:
+    try:
+        from vendors.central_bridge import get_tenant_health
+        result = await get_tenant_health()
+        return result if isinstance(result, dict) else None
+    except Exception as exc:
+        logger.debug("Tenant health unavailable: %s", exc)
+        return None
+
+
+async def _anomaly_widgets(devices: list[dict]) -> list[dict]:
+    """Run lightweight anomaly detectors on a few online devices."""
+    try:
+        from vendors.central_bridge import detect_client_flapping, detect_ssh_brute_force
+    except Exception:
+        return []
+
+    candidates = [
+        d for d in devices
+        if isinstance(d, dict) and d.get("status") == "online" and d.get("serial")
+    ][:3]
+    if not candidates:
+        return []
+
+    widgets: list[dict] = []
+    for dev in candidates:
+        serial = dev["serial"]
+        flap, ssh = await asyncio.gather(
+            detect_client_flapping(serial, hours=24),
+            detect_ssh_brute_force(serial, hours=24),
+            return_exceptions=True,
+        )
+        if isinstance(flap, dict) and (flap.get("flapping") or flap.get("count")):
+            widgets.append({
+                "type": "client_flapping",
+                "device": dev.get("name") or serial,
+                "serial": serial,
+                "summary": str(flap.get("count") or flap.get("flapping") or "detected"),
+            })
+        if isinstance(ssh, dict) and (ssh.get("detected") or ssh.get("attempts")):
+            widgets.append({
+                "type": "ssh_brute_force",
+                "device": dev.get("name") or serial,
+                "serial": serial,
+                "summary": str(ssh.get("attempts") or ssh.get("detected") or "detected"),
+            })
+    return widgets[:5]
+
+
+async def _site_health_cards(limit: int = 4) -> list[dict]:
+    """Fetch health summaries for a handful of sites (dashboard widgets)."""
+    try:
+        from vendors.central_bridge import get_site_health_summary, get_sites
+        raw_sites = await get_sites(limit=limit)
+    except Exception as exc:
+        logger.debug("Site list unavailable for health cards: %s", exc)
+        return []
+
+    cards: list[dict] = []
+    picks = [s for s in raw_sites if isinstance(s, dict)][:limit]
+    if not picks:
+        return []
+
+    async def _one(site: dict) -> dict | None:
+        name = site.get("siteName") or site.get("site_name") or site.get("name") or ""
+        site_id = site.get("id") or site.get("siteId") or site.get("site_id")
+        try:
+            summary = await get_site_health_summary(
+                site_id=str(site_id) if site_id else None,
+                site_name=name or None,
+            )
+        except Exception:
+            return None
+        label = None
+        if isinstance(summary, dict):
+            label = (
+                summary.get("status")
+                or summary.get("healthStatus")
+                or summary.get("summary")
+            )
+        return {
+            "id": site_id,
+            "name": name or "Unnamed site",
+            "label": str(label) if label else "—",
+        }
+
+    results = await asyncio.gather(*(_one(s) for s in picks), return_exceptions=True)
+    for r in results:
+        if isinstance(r, dict):
+            cards.append(r)
+    return cards
+
+
 async def _offline_health_notes(devices: list[dict]) -> list[dict]:
     """Fetch config/monitoring health hints for a few offline devices."""
     try:
@@ -331,6 +424,9 @@ async def home(request: Request, partial: int = 0):
     events = await _recent_events(devices)
     alert_summary = await _alert_summary()
     health_notes = await _offline_health_notes(devices)
+    tenant_health = await _tenant_health()
+    anomalies = await _anomaly_widgets(devices)
+    site_health_cards = await _site_health_cards()
 
     updated = datetime.now(timezone.utc).strftime("%I:%M %p UTC")
 
@@ -345,6 +441,9 @@ async def home(request: Request, partial: int = 0):
         "events": events,
         "alert_summary": alert_summary,
         "health_notes": health_notes,
+        "tenant_health": tenant_health,
+        "anomalies": anomalies,
+        "site_health_cards": site_health_cards,
         "is_partial": bool(partial),
     }
 

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}WLANs - New Central Portal{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Network</p>
+    <h1 class="text-2xl font-semibold text-white tracking-tight">WLAN Inventory</h1>
+    <p class="text-sm text-slate-500 mt-0.5">Read-only SSID / WLAN list from Aruba Central</p>
+</div>
+
+{% if error %}
+<div class="card mb-4 border-amber-500/30 bg-amber-500/5">
+    <p class="text-sm text-amber-400">WLAN data unavailable: {{ error }}</p>
+</div>
+{% endif %}
+
+{% if wlans %}
+<div class="card overflow-x-auto">
+    <table class="tbl">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>ESSID</th>
+                <th>Type</th>
+                <th>Security</th>
+                <th>VLAN</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for w in wlans %}
+            <tr class="tbl-row">
+                <td class="text-slate-200">{{ w.name or '—' }}</td>
+                <td class="font-mono text-xs">{{ w.essid or '—' }}</td>
+                <td class="text-xs">{{ w.type or '—' }}</td>
+                <td class="text-xs">{{ w.security or '—' }}</td>
+                <td class="text-xs">{{ w.vlan or '—' }}</td>
+                <td><span class="{% if w.enabled %}status-badge-online{% else %}status-badge-offline{% endif %}">{{ 'enabled' if w.enabled else 'disabled' }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <p>No WLANs found</p>
+        <p class="text-xs text-slate-600">Requires centralmcp with config read access.</p>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

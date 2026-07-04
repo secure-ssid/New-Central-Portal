@@ -90,6 +90,7 @@
         <button id="btn-fit" class="topo-btn" type="button">Fit view</button>
         <button id="btn-layout" class="topo-btn active" type="button" aria-label="Toggle between hierarchy and free 3D layout">Layout: Hierarchy</button>
         <button id="btn-dim" class="topo-btn" type="button">View: 3D</button>
+        <button id="btn-list" class="topo-btn md:hidden" type="button" aria-label="Toggle list view">View: List</button>
         <button id="btn-orbit" class="topo-btn active" type="button">Orbit: on</button>
         <button id="btn-export" class="topo-btn" type="button" aria-label="Export topology view as PNG image">Export PNG</button>
     </div>
@@ -174,8 +175,23 @@
     <div id="topo-fallback" class="topo-overlay" style="inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#060a14;z-index:40;padding:24px;text-align:center;">
         <svg width="34" height="34" fill="none" stroke="#fbbf24" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
         <p style="font-size:.92rem;font-weight:700;color:#f1f5f9;">3D view unavailable</p>
-        <p style="font-size:.74rem;color:#6b7280;max-width:420px;">Your browser does not support WebGL (or the 3D graph library failed to load from the CDN). The interactive topology map needs WebGL to render. Try a modern browser with hardware acceleration enabled.</p>
-        <a href="/devices/" style="margin-top:6px;padding:7px 16px;background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.5);border-radius:8px;color:#f97316;font-size:.74rem;font-weight:600;text-decoration:none;">Browse devices instead</a>
+        <p style="font-size:.74rem;color:#6b7280;max-width:420px;">Your browser does not support WebGL (or the 3D graph library failed to load). Use the list view below or browse devices directly.</p>
+        <button id="btn-fallback-list" type="button" class="topo-btn" style="margin-top:6px;">Show list view</button>
+        <a href="/devices/" style="margin-top:6px;padding:7px 16px;background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.5);border-radius:8px;color:#f97316;font-size:.74rem;font-weight:600;text-decoration:none;">Browse devices</a>
+    </div>
+
+    <!-- Mobile / accessibility list fallback (same data as the 3D graph) -->
+    <div id="topo-list-panel" class="topo-overlay" style="inset:0;display:none;z-index:35;background:#060a14;overflow:auto;padding:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
+            <p style="font-size:.82rem;font-weight:700;color:#f1f5f9;">Device list</p>
+            <button id="btn-list-close" type="button" class="topo-btn">Back to graph</button>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="tbl" id="topo-list-table">
+                <thead><tr><th>Name</th><th>Type</th><th>Site</th><th>IP</th><th>Status</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -982,6 +998,14 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     filterState.sites = {};
     siteKeys.forEach(function (k) { filterState.sites[k] = true; });
 
+    // Deep-link: /topology/?site=HQ pre-selects one site filter.
+    var preSite = {{ initial_site | tojson }};
+    if (preSite) {
+        Object.keys(filterState.sites).forEach(function (k) {
+            filterState.sites[k] = (k === preSite);
+        });
+    }
+
     // Build site checkboxes with DOM APIs (site names are user-controlled).
     if (!siteKeys.length) {
         var none = document.createElement('div');
@@ -994,7 +1018,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         lab.className = 'topo-check';
         var cb = document.createElement('input');
         cb.type = 'checkbox';
-        cb.checked = true;
+        cb.checked = filterState.sites[k];
         cb.setAttribute('aria-label', 'Filter site ' + siteLabels[k]);
         cb.addEventListener('change', function () {
             filterState.sites[k] = cb.checked;
@@ -1007,6 +1031,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         lab.appendChild(txt);
         sitesBox.appendChild(lab);
     });
+    if (preSite) applyFilters();
 
     function filtersDirty() {
         if (filterState.status !== 'all') return true;
@@ -1024,6 +1049,63 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         countEl.textContent = 'Showing ' + visible + ' of ' + RAW.nodes.length + ' devices';
     }
     updateCount();
+
+    var listPanel = document.getElementById('topo-list-panel');
+    var listTableBody = document.querySelector('#topo-list-table tbody');
+    var graphEl = document.getElementById('graph-3d');
+    var listOpen = false;
+
+    function escHtml(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function refreshListPanel() {
+        if (!listTableBody) return;
+        var rows = [];
+        nodes.forEach(function (n) {
+            if (n.virtual) return;
+            var st = (n.status || '').toLowerCase();
+            var stColor = st === 'online' ? '#4ade80' : '#f87171';
+            rows.push(
+                '<tr class="tbl-row" style="cursor:pointer" data-url="' + escHtml(n.url) + '">' +
+                '<td style="color:#e2e8f0;">' + escHtml(n.label) + '</td>' +
+                '<td style="font-size:.72rem;text-transform:capitalize;">' + escHtml(n.group) + '</td>' +
+                '<td style="font-size:.72rem;">' + escHtml(n.site || '—') + '</td>' +
+                '<td style="font-family:monospace;font-size:.68rem;">' + escHtml(n.ip || '—') + '</td>' +
+                '<td style="font-size:.72rem;color:' + stColor + ';">' + escHtml(n.status || '—') + '</td></tr>'
+            );
+        });
+        listTableBody.innerHTML = rows.join('') ||
+            '<tr><td colspan="5" style="padding:24px;text-align:center;color:#64748b;">No devices match filters</td></tr>';
+    }
+
+    function setListView(on) {
+        listOpen = !!on;
+        if (listPanel) listPanel.style.display = listOpen ? 'block' : 'none';
+        if (graphEl) graphEl.style.visibility = listOpen ? 'hidden' : 'visible';
+        var listBtn = document.getElementById('btn-list');
+        if (listBtn) {
+            listBtn.classList.toggle('active', listOpen);
+            listBtn.textContent = listOpen ? 'View: Graph' : 'View: List';
+        }
+        if (listOpen) refreshListPanel();
+    }
+
+    var listBtn = document.getElementById('btn-list');
+    if (listBtn) listBtn.addEventListener('click', function () { setListView(!listOpen); });
+    var listClose = document.getElementById('btn-list-close');
+    if (listClose) listClose.addEventListener('click', function () { setListView(false); });
+    var fbList = document.getElementById('btn-fallback-list');
+    if (fbList) fbList.addEventListener('click', function () {
+        if (fallbackEl) fallbackEl.style.display = 'none';
+        setListView(true);
+    });
+    if (listTableBody) {
+        listTableBody.addEventListener('click', function (ev) {
+            var row = ev.target && ev.target.closest ? ev.target.closest('tr[data-url]') : null;
+            if (row && row.getAttribute('data-url')) window.location.href = row.getAttribute('data-url');
+        });
+    }
 
     var refitTimer = null;
     function applyFilters() {
@@ -1045,6 +1127,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         if (refitTimer) clearTimeout(refitTimer);
         refitTimer = setTimeout(function () { Graph.zoomToFit(700, fitPadding()); }, 650);
         refresh();
+        if (listOpen) refreshListPanel();
     }
 
     function setFiltersOpen(open) {

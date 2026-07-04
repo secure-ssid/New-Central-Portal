@@ -14,6 +14,11 @@ import pytest
     ("/clients/", ["laptop-1", "printer-1"]),
     ("/clients/AA:11:22:33:44:55", ["laptop-1"]),
     ("/sites/", ["HQ", "Branch"]),
+    ("/sites/101", ["HQ"]),
+    ("/alerts/", ["Central Active Alerts"]),
+    ("/wlans/", ["WLAN Inventory"]),
+    ("/platform/nac", ["NAC MAC Manager"]),
+    ("/platform/config", ["Running Config"]),
     ("/topology/", ["var RAW = {", "SW1SERIAL"]),
     ("/notifications/", ["ops@example.com"]),
     ("/lab/", ["Network Chatbot", "MCP Tool Tester"]),
@@ -61,6 +66,15 @@ def test_healthz_db_down_still_200(client, dead_db):
 
 def test_health_liveness(client):
     assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_api_status(client, mock_central, stub_db):
+    r = client.get("/api/status")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["central"] == "connected"
+    assert data["db"] == "ok"
+    assert "label" in data
 
 
 def test_unknown_device_renders_themed_404(client, mock_central):

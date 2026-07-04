@@ -3,18 +3,17 @@ from html import escape
 
 from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 import httpx
 import json
 from config import settings
 import db
 import security
 from routes import assistant as assistant_routes
+from templates_shared import templates
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
 
 
 @router.get("/")
@@ -23,52 +22,52 @@ async def lab_menu(request: Request):
     experiments = [
         {"slug": "chat", "name": "Network Chatbot",
          "desc": "Ask Claude about your network. Uses MCP + RAG.",
-         "status": "active", "color": "green"},
+         "status": "active", "color": "green", "badge": "live"},
         {"slug": "rag", "name": "Doc Search",
          "desc": "Hybrid search across network docs (LanceDB). No AI.",
-         "status": "active", "color": "blue"},
+         "status": "active", "color": "blue", "badge": "live"},
         {"slug": "doc-api", "name": "API Lookup",
          "desc": "Exact OpenAPI schema, field, and enum lookup.",
-         "status": "new", "color": "indigo"},
+         "status": "new", "color": "indigo", "badge": "live"},
         {"slug": "doc-ask", "name": "Doc Q&A",
          "desc": "Compact cited answers from local docs and API indexes.",
-         "status": "new", "color": "sky"},
+         "status": "new", "color": "sky", "badge": "live"},
         {"slug": "mcp-tester", "name": "MCP Tool Tester",
          "desc": "Poke at MCP tools to see what they return.",
-         "status": "active", "color": "purple"},
+         "status": "active", "color": "purple", "badge": "live"},
         {"slug": "self-heal", "name": "Self-Healing Sim",
          "desc": "Auto-remediation in dry-run mode.",
-         "status": "active", "color": "amber"},
+         "status": "active", "color": "amber", "badge": "demo"},
         {"slug": "juniper", "name": "Juniper Corner",
          "desc": "Notes and experiments as I learn Junos.",
-         "status": "active", "color": "teal"},
+         "status": "active", "color": "teal", "badge": "demo"},
         {"slug": "health-report", "name": "Network Health Report",
          "desc": "AI-generated summary of device/alert/client health using live data.",
-         "status": "new", "color": "green"},
+         "status": "new", "color": "green", "badge": "requires-token"},
         {"slug": "config", "name": "Config Viewer",
          "desc": "Run show commands on any device and inspect output.",
-         "status": "new", "color": "blue"},
+         "status": "new", "color": "blue", "badge": "live"},
         {"slug": "ping", "name": "Ping Tester",
          "desc": "Test reachability from any online device to any destination.",
-         "status": "new", "color": "purple"},
-        {"slug": "alerts", "name": "Alert Dashboard",
+         "status": "new", "color": "purple", "badge": "live"},
+        {"slug": "alerts", "name": "Central Alerts",
          "desc": "Live alerts with severity breakdown and device/site grouping.",
-         "status": "new", "color": "amber"},
+         "status": "new", "color": "amber", "badge": "live"},
         {"slug": "fingerprints", "name": "Client Fingerprints",
          "desc": "Browse client devices grouped by category, vendor, and OS.",
-         "status": "new", "color": "teal"},
+         "status": "new", "color": "teal", "badge": "live"},
         {"slug": "greenlake", "name": "GreenLake Platform",
          "desc": "GLP inventory, subscriptions, users, and audit log from the HPE GreenLake workspace.",
-         "status": "new", "color": "green"},
+         "status": "new", "color": "green", "badge": "requires-token"},
         {"slug": "assistant", "name": "AI Assistant",
          "desc": "Choose the AI backend (Claude subscription or GitHub Models), pick a model, and test it.",
-         "status": "new", "color": "purple"},
+         "status": "new", "color": "purple", "badge": "requires-token"},
         {"slug": "securessid", "name": "Vendor CLI Translator",
          "desc": "Side-by-side equivalent CLI commands across Aruba AOS-CX/AOS-S, Juniper, Cisco, Ruckus, and Mist.",
-         "status": "new", "color": "teal"},
+         "status": "new", "color": "teal", "badge": "demo"},
         {"slug": "password", "name": "Change Password",
          "desc": "Update the portal login password (stored hashed in the database).",
-         "status": "new", "color": "amber"},
+         "status": "new", "color": "amber", "badge": "live"},
     ]
     return templates.TemplateResponse(
         request,
@@ -849,11 +848,19 @@ async def greenlake_page(request: Request):
     import asyncio
     from vendors.central_bridge import get_glp_devices, get_glp_subscriptions, get_glp_users, get_glp_audit_logs
 
-    devices, subscriptions, users, audit_logs = await asyncio.gather(
+    async def _fetch_service_offers():
+        try:
+            from vendors.central_bridge import list_glp_service_offers
+            return await list_glp_service_offers(limit=100)
+        except Exception:
+            return []
+
+    devices, subscriptions, users, audit_logs, service_offers = await asyncio.gather(
         get_glp_devices(limit=200),
         get_glp_subscriptions(limit=200),
         get_glp_users(limit=300),
         get_glp_audit_logs(limit=50),
+        _fetch_service_offers(),
         return_exceptions=True,
     )
     if isinstance(devices, Exception):
@@ -868,6 +875,9 @@ async def greenlake_page(request: Request):
     if isinstance(audit_logs, Exception):
         logger.error("[greenlake] audit log fetch failed: %s", audit_logs)
         audit_logs = []
+    if isinstance(service_offers, Exception):
+        logger.error("[greenlake] service offers fetch failed: %s", service_offers)
+        service_offers = []
 
     # Flatten nested subscription list into device-level fields for the template.
     # GLP device.subscription is a list of {id, key, startTime, endTime, tier, ...}
@@ -885,6 +895,7 @@ async def greenlake_page(request: Request):
         "subscriptions": subscriptions,
         "users": users,
         "audit_logs": audit_logs,
+        "service_offers": service_offers if isinstance(service_offers, list) else [],
         "active": "greenlake",
     })
 

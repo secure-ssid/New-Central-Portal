@@ -511,10 +511,33 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 </div>
 {% endif %}
 {% else %}
-<!-- Radios (non-switch devices) -->
+<!-- Wireless (AP devices) -->
 <div class="card mb-6">
-    <h2 class="text-lg font-semibold text-white mb-4">Radios</h2>
-    <p class="text-gray-500 text-sm">Radio info goes here.</p>
+    <h2 class="text-lg font-semibold text-white mb-4">Wireless</h2>
+    {% if wireless_metrics or ap_radios or channel_util %}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {% if wireless_metrics %}
+        <div class="rounded-lg border border-surface-700 bg-surface-900 p-3">
+            <p class="section-label mb-2">Metrics</p>
+            <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">{{ wireless_metrics | tojson(indent=2) }}</pre>
+        </div>
+        {% endif %}
+        {% if ap_radios %}
+        <div class="rounded-lg border border-surface-700 bg-surface-900 p-3">
+            <p class="section-label mb-2">Radios</p>
+            <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">{{ ap_radios | tojson(indent=2) }}</pre>
+        </div>
+        {% endif %}
+        {% if channel_util %}
+        <div class="rounded-lg border border-surface-700 bg-surface-900 p-3">
+            <p class="section-label mb-2">Channel Utilization</p>
+            <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">{{ channel_util | tojson(indent=2) }}</pre>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <p class="text-gray-500 text-sm">Wireless metrics unavailable for this AP.</p>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -586,13 +609,21 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     <div id="quick-ops" class="card lg:col-span-2" x-data="{
         showConfig: false,
         showPing: false,
+        showTrace: false,
+        showLldp: false,
+        showPortErr: false,
+        showFindMac: false,
+        showMacTable: false,
         pingDest: '',
+        traceDest: '',
+        findMac: '',
+        portIface: '',
         showCommand: 'show version',
         confirmReboot: false
     }">
         <h2 class="text-lg font-semibold text-white mb-4">Quick Actions</h2>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-4">
             <!-- Show Config -->
             <button @click="showConfig=!showConfig;showPing=false"
                 class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors"
@@ -602,12 +633,47 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
             </button>
 
             <!-- Ping -->
-            <button @click="showPing=!showPing;showConfig=false"
+            <button @click="showPing=!showPing;showConfig=false;showTrace=false"
                 class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors"
                 :class="showPing && 'border-brand-500/60'">
                 <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">Ping from Device</p>
                 <p class="text-[0.7rem] text-gray-500">Reachability test</p>
             </button>
+
+            {% if device.type == 'switch' %}
+            <button @click="showTrace=!showTrace;showConfig=false;showPing=false"
+                class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors"
+                :class="showTrace && 'border-brand-500/60'">
+                <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">Traceroute</p>
+                <p class="text-[0.7rem] text-gray-500">Path trace (up to 60s)</p>
+            </button>
+            <button @click="showLldp=!showLldp;showConfig=false;showPing=false"
+                hx-post="/devices/{{ device.serial }}/lldp"
+                hx-target="#ops-output"
+                hx-indicator="#ops-spinner"
+                class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors">
+                <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">LLDP Neighbors</p>
+                <p class="text-[0.7rem] text-gray-500">Structured neighbor table</p>
+            </button>
+            <button @click="showPortErr=!showPortErr;showConfig=false;showPing=false"
+                class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors"
+                :class="showPortErr && 'border-brand-500/60'">
+                <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">Port Errors</p>
+                <p class="text-[0.7rem] text-gray-500">Interface error counts</p>
+            </button>
+            <button @click="showFindMac=!showFindMac;showConfig=false;showPing=false"
+                class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors"
+                :class="showFindMac && 'border-brand-500/60'">
+                <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">Find MAC</p>
+                <p class="text-[0.7rem] text-gray-500">Locate MAC on switch</p>
+            </button>
+            <button @click="showMacTable=!showMacTable;showConfig=false;showPing=false"
+                class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors"
+                :class="showMacTable && 'border-brand-500/60'">
+                <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">MAC Table</p>
+                <p class="text-[0.7rem] text-gray-500">CX MAC entries</p>
+            </button>
+            {% endif %}
 
             <!-- Reboot -->
             <button @click="confirmReboot=true"
@@ -615,6 +681,54 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
                 <p class="text-[0.8rem] font-semibold text-red-400 mb-0.5">Reboot Device</p>
                 <p class="text-[0.7rem] text-gray-500">Graceful restart</p>
             </button>
+        </div>
+
+        <!-- Traceroute panel -->
+        <div x-show="showTrace" x-cloak class="mb-3 px-4 py-3 rounded-lg border border-surface-700 bg-surface-900">
+            <p class="text-[11px] text-slate-500 mb-2">May take up to 60 seconds.</p>
+            <div class="flex gap-2 items-center">
+                <input x-model="traceDest" type="text" placeholder="8.8.8.8 or hostname"
+                    class="flex-1 px-2.5 py-1.5 bg-surface-950 border border-surface-700 rounded-md text-slate-200 text-[0.8rem] outline-none focus:border-brand-500/60 placeholder:text-gray-600">
+                <button
+                    @click="document.getElementById('trace-form-{{ device.serial }}').querySelector('[name=destination]').value=traceDest;htmx.trigger('#trace-form-{{ device.serial }}','submit')"
+                    class="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-md text-white text-[0.8rem] font-semibold cursor-pointer transition-colors">
+                    Trace
+                </button>
+            </div>
+            <form id="trace-form-{{ device.serial }}" style="display:none;"
+                hx-post="/devices/{{ device.serial }}/traceroute"
+                hx-target="#ops-output"
+                hx-indicator="#ops-spinner">
+                <input type="hidden" name="destination" value="">
+            </form>
+        </div>
+
+        <!-- Port errors panel -->
+        <div x-show="showPortErr" x-cloak class="mb-3 px-4 py-3 rounded-lg border border-surface-700 bg-surface-900">
+            <form hx-post="/devices/{{ device.serial }}/port-errors" hx-target="#ops-output" hx-indicator="#ops-spinner" class="flex gap-2">
+                <input x-model="portIface" name="interface" type="text" placeholder="Interface (optional)"
+                    class="flex-1 px-2.5 py-1.5 bg-surface-950 border border-surface-700 rounded-md text-slate-200 text-[0.8rem]">
+                <button type="submit" class="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-md text-white text-[0.8rem] font-semibold">Fetch</button>
+            </form>
+        </div>
+
+        <!-- Find MAC panel -->
+        <div x-show="showFindMac" x-cloak class="mb-3 px-4 py-3 rounded-lg border border-surface-700 bg-surface-900">
+            <form hx-post="/devices/{{ device.serial }}/find-mac" hx-target="#ops-output" hx-indicator="#ops-spinner" class="flex gap-2">
+                <input x-model="findMac" name="mac_address" type="text" placeholder="AA:BB:CC:DD:EE:FF"
+                    class="flex-1 px-2.5 py-1.5 bg-surface-950 border border-surface-700 rounded-md text-slate-200 text-[0.8rem] font-mono">
+                <button type="submit" class="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-md text-white text-[0.8rem] font-semibold">Find</button>
+            </form>
+        </div>
+
+        <!-- MAC table panel -->
+        <div x-show="showMacTable" x-cloak class="mb-3 px-4 py-3 rounded-lg border border-surface-700 bg-surface-900">
+            <p class="text-[11px] text-slate-500 mb-2">May take up to 60 seconds on large switches.</p>
+            <form hx-post="/devices/{{ device.serial }}/mac-table" hx-target="#ops-output" hx-indicator="#ops-spinner" class="flex gap-2">
+                <input x-model="portIface" name="interface" type="text" placeholder="Interface (optional)"
+                    class="flex-1 px-2.5 py-1.5 bg-surface-950 border border-surface-700 rounded-md text-slate-200 text-[0.8rem]">
+                <button type="submit" class="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-md text-white text-[0.8rem] font-semibold">Fetch</button>
+            </form>
         </div>
 
         <!-- Reboot confirm dialog -->
@@ -684,6 +798,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         </div>
 
         <!-- Output area -->
+        <div class="flex items-center gap-2 mb-1">
+            <span id="ops-spinner" class="htmx-indicator spinner" role="status" aria-label="Running operation"></span>
+            <span class="htmx-indicator text-[11px] text-slate-500">Operation in progress — may take up to 60s…</span>
+        </div>
         <div id="ops-output"
              class="bg-surface-950 rounded-lg p-3 font-mono text-[0.75rem] text-slate-400 overflow-y-auto"
              style="min-height:32px;max-height:400px;"></div>

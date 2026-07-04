@@ -13,7 +13,7 @@
 {% if sites %}
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for site in sites %}
-    <div class="card hover:border-brand-500/50 transition-colors">
+    <a href="/sites/{{ site.id }}" class="card hover:border-brand-500/50 transition-colors block no-underline">
         <div class="flex items-start gap-3 mb-4">
             <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(20,184,166,.12);">
                 <svg aria-hidden="true" width="16" height="16" fill="none" stroke="#2dd4bf" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
@@ -40,7 +40,7 @@
                 <span class="text-xs text-slate-500">clients</span>
             </div>
         </div>
-    </div>
+    </a>
     {% endfor %}
 </div>
 {% else %}

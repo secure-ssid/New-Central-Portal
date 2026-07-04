@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from templates_shared import templates
 
 import security
 from config import settings
@@ -16,7 +16,6 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
 
 # Constant delay on failed logins to slow down brute forcing.
 FAILED_LOGIN_DELAY_SECONDS = 0.5

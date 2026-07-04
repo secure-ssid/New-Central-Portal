@@ -20,7 +20,13 @@
                 {% elif exp.color == 'teal' %}bg-teal-500
                 {% else %}bg-slate-500{% endif %}"></div>
             <h3 class="text-base font-semibold text-white group-hover:text-brand-400 transition-colors">{{ exp.name }}</h3>
-            {% if exp.status == 'new' %}
+            {% if exp.badge == 'live' %}
+            <span class="lab-badge lab-badge-live ml-auto">live</span>
+            {% elif exp.badge == 'demo' %}
+            <span class="lab-badge lab-badge-demo ml-auto">demo</span>
+            {% elif exp.badge == 'requires-token' %}
+            <span class="lab-badge lab-badge-token ml-auto">token</span>
+            {% elif exp.status == 'new' %}
             <span class="ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-500/15 text-brand-400 flex-shrink-0">New</span>
             {% else %}
             <span class="ml-auto text-[10px] font-semibold uppercase tracking-wider text-slate-600 flex-shrink-0">{{ exp.status | default('') }}</span>

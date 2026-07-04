@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}NAC - New Central Portal{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Platform</p>
+    <h1 class="text-2xl font-semibold text-white tracking-tight">NAC MAC Manager</h1>
+    <p class="text-sm text-slate-500 mt-0.5">Read-only MAC registration inventory (writes deferred)</p>
+</div>
+
+{% if error %}
+<div class="card mb-4 border-amber-500/30 bg-amber-500/5">
+    <p class="text-sm text-amber-400">{{ error }}</p>
+</div>
+{% endif %}
+
+{% if registrations %}
+<div class="card overflow-x-auto">
+    <table class="tbl">
+        <thead><tr><th>MAC</th><th>Description</th><th>Role</th><th>Status</th></tr></thead>
+        <tbody>
+            {% for r in registrations %}
+            <tr class="tbl-row">
+                <td class="font-mono text-sm text-slate-200">{{ r.mac }}</td>
+                <td>{{ r.description or '—' }}</td>
+                <td class="text-xs">{{ r.role or '—' }}</td>
+                <td class="text-xs">{{ r.status or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card"><div class="empty-state"><p>No MAC registrations</p></div></div>
+{% endif %}
+
+{% endblock %}
