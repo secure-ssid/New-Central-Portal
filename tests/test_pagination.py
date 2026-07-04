@@ -117,3 +117,10 @@ def test_route_wrappers_match_shared_module():
 def test_constants_match():
     assert pagination_mod.DEFAULT_PER_PAGE == 50
     assert pagination_mod.MAX_PER_PAGE == 200
+
+
+def test_filter_items_substring():
+    items = [{"name": "core-sw", "serial": "ABC"}, {"name": "edge-ap", "serial": "DEF"}]
+    out = pagination_mod.filter_items(items, "core", "name", "serial")
+    assert len(out) == 1
+    assert out[0]["name"] == "core-sw"

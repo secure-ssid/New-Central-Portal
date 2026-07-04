@@ -7,6 +7,18 @@ DEFAULT_PER_PAGE = 50
 MAX_PER_PAGE = 200
 
 
+def filter_items(items: list, q: str, *fields: str) -> list:
+    """Case-insensitive substring filter across named dict keys."""
+    query = q.strip().lower()
+    if not query:
+        return items
+    return [
+        item for item in items
+        if isinstance(item, dict)
+        and any(item.get(f) and query in str(item[f]).lower() for f in fields)
+    ]
+
+
 def paginate(request: Request, items: list) -> dict:
     """Slice ``items`` for the current request's ``page``/``per_page`` params.
 

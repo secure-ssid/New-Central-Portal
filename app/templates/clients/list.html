@@ -6,19 +6,12 @@
 document.addEventListener('alpine:init', () => {
     Alpine.data('clientsTable', () => ({
         tab: 'all',
-        search: '',
         sortCol: '',
         sortDir: 1,
         clients: {{ clients | tojson }},
 
         get rows() {
-            let r = this.clients.filter(c => {
-                if (this.tab !== 'all' && c.type !== this.tab) return false;
-                if (!this.search) return true;
-                const s = this.search.toLowerCase();
-                return [c.mac, c.ip, c.hostname, c.connected_to, c.category, c.os, c.vendor]
-                    .some(v => v && String(v).toLowerCase().includes(s));
-            });
+            let r = this.clients.filter(c => this.tab === 'all' || c.type === this.tab);
             if (this.sortCol) {
                 const col = this.sortCol, dir = this.sortDir;
                 r = [...r].sort((a, b) => {
@@ -59,12 +52,13 @@ document.addEventListener('alpine:init', () => {
 
     <!-- Search + page-size -->
     <div class="flex flex-wrap items-center gap-2.5 mb-4">
-        <div class="relative flex-1 w-full sm:max-w-[400px]">
+        <form method="get" class="relative flex-1 w-full sm:max-w-[400px]">
+            {% if per_page %}<input type="hidden" name="per_page" value="{{ per_page }}">{% endif %}
             <svg aria-hidden="true" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
-            <input x-model="search" @input="page=1" type="text" placeholder="Search by MAC, IP, hostname, device type, OS…"
+            <input name="q" value="{{ q }}" type="search" placeholder="Search by MAC, IP, hostname, device type, OS…"
                    aria-label="Search clients"
                    class="input" style="padding-left:34px;">
-        </div>
+        </form>
         <div class="flex items-center gap-1.5 ml-auto">
             <span class="text-xs text-slate-500 whitespace-nowrap">Rows</span>
             <select class="select text-xs" style="width:auto;padding:5px 8px;" aria-label="Rows per page"
@@ -77,8 +71,10 @@ document.addEventListener('alpine:init', () => {
         </div>
     </div>
 
-    {% if total_pages and total_pages > 1 %}
-    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Search and tabs filter this page only ({{ clients|length }} of {{ total }} sessions shown) &mdash; use the pagination below the table to see the rest.</p>
+    {% if q %}
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} match{{ 'es' if total != 1 else '' }} for &ldquo;{{ q }}&rdquo;{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
+    {% elif total_pages and total_pages > 1 %}
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">{{ total }} sessions &mdash; page {{ page }} of {{ total_pages }}.</p>
     {% endif %}
 
     <!-- Tabs -->
