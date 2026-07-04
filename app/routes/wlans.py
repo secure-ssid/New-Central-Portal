@@ -3,8 +3,9 @@ import logging
 
 from fastapi import APIRouter, Request
 
-router = APIRouter()
 from templates_shared import templates
+
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 

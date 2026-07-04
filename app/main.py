@@ -193,9 +193,6 @@ from errors import register_error_handlers  # noqa: E402
 
 register_error_handlers(app)
 
-# Make templates available to routes
-from templates_shared import templates
-
 # Wire up the main sections
 app.include_router(auth_routes.router, tags=["auth"])
 app.include_router(home.router)

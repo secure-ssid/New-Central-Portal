@@ -3,11 +3,11 @@ import json
 import logging
 
 from topology_graph import build_topology_edges
+from templates_shared import templates
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-from templates_shared import templates
 
 
 @router.get("/")

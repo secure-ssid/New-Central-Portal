@@ -8,10 +8,11 @@ import json
 import logging
 import re
 
+from templates_shared import templates
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-from templates_shared import templates
 
 # ── Server-side pagination ────────────────────────────────────────────────────
 
