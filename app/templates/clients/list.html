@@ -5,13 +5,12 @@
 <script>
 document.addEventListener('alpine:init', () => {
     Alpine.data('clientsTable', () => ({
-        tab: 'all',
         sortCol: '',
         sortDir: 1,
         clients: {{ clients | tojson }},
 
         get rows() {
-            let r = this.clients.filter(c => this.tab === 'all' || c.type === this.tab);
+            let r = this.clients;
             if (this.sortCol) {
                 const col = this.sortCol, dir = this.sortDir;
                 r = [...r].sort((a, b) => {
@@ -22,10 +21,7 @@ document.addEventListener('alpine:init', () => {
             }
             return r;
         },
-        get wirelessCount() { return this.clients.filter(c => c.type === 'wireless').length; },
-        get wiredCount()    { return this.clients.filter(c => c.type === 'wired').length; },
 
-        setTab(t) { this.tab = t; },
         sortBy(col) {
             if (this.sortCol === col) this.sortDir *= -1;
             else { this.sortCol = col; this.sortDir = 1; }
@@ -38,6 +34,10 @@ document.addEventListener('alpine:init', () => {
 });
 </script>
 
+{% macro tab_href(qs) -%}
+?{{ qs }}
+{%- endmacro %}
+
 <div x-data="clientsTable" class="mb-4">
 
     <div class="page-header flex flex-wrap items-end justify-between gap-3" style="margin-bottom:1.25rem;">
@@ -45,7 +45,7 @@ document.addEventListener('alpine:init', () => {
             <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Monitoring</p>
             <h1 class="text-2xl font-semibold text-white tracking-tight">Clients</h1>
             <p class="text-sm text-slate-500 mt-0.5">
-                <span x-text="rows.length + ' of {{ clients|length }} sessions shown'">{{ clients|length }} connected sessions</span>{% if total_pages and total_pages > 1 %} <span class="text-slate-600">&middot; page {{ page }} of {{ total_pages }} &middot; {{ total }} total</span>{% endif %}
+                {% if type_filter %}{{ total }} {{ type_filter }} session{{ 's' if total != 1 else '' }}{% else %}{{ session_total }} connected sessions{% endif %}{% if total_pages and total_pages > 1 %} <span class="text-slate-600">&middot; page {{ page }} of {{ total_pages }}</span>{% endif %}
             </p>
         </div>
     </div>
@@ -54,6 +54,7 @@ document.addEventListener('alpine:init', () => {
     <div class="flex flex-wrap items-center gap-2.5 mb-4">
         <form method="get" class="relative flex-1 w-full sm:max-w-[400px]">
             {% if per_page %}<input type="hidden" name="per_page" value="{{ per_page }}">{% endif %}
+            {% if type_filter %}<input type="hidden" name="type" value="{{ type_filter }}">{% endif %}
             <svg aria-hidden="true" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
             <input name="q" value="{{ q }}" type="search" placeholder="Search by MAC, IP, hostname, device type, OS…"
                    aria-label="Search clients"
@@ -72,30 +73,29 @@ document.addEventListener('alpine:init', () => {
     </div>
 
     {% if q %}
-    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} match{{ 'es' if total != 1 else '' }} for &ldquo;{{ q }}&rdquo;{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} match{{ 'es' if total != 1 else '' }} for &ldquo;{{ q }}&rdquo;{% if type_filter %} ({{ type_filter }}){% endif %}{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
+    {% elif type_filter %}
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} {{ type_filter }} session{{ 's' if total != 1 else '' }}{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
     {% elif total_pages and total_pages > 1 %}
     <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">{{ total }} sessions &mdash; page {{ page }} of {{ total_pages }}.</p>
     {% endif %}
 
-    <!-- Tabs -->
+    <!-- Tabs (server-side type filter) -->
     <div class="tabs overflow-x-auto">
-        <button @click="setTab('all')" class="tab-btn" style="padding-right:24px;"
-            :style="tab==='all' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : ''">
+        <a href="{{ tab_href(tab_qs_all) }}" class="tab-btn no-underline" style="padding-right:24px;{% if not type_filter %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
             All
-            <span class="tab-count" :style="tab==='all' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="clients.length"></span>
-        </button>
+            <span class="tab-count" style="{% if not type_filter %}background:rgba(249,115,22,.18);color:#f97316;{% else %}background:#232b3b;color:#94a3b8;{% endif %}">{{ session_total }}</span>
+        </a>
         <div class="tab-sep"></div>
-        <button @click="setTab('wireless')" class="tab-btn"
-            :style="tab==='wireless' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : ''">
+        <a href="{{ tab_href(tab_qs_wireless) }}" class="tab-btn no-underline" style="{% if type_filter == 'wireless' %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
             Wireless
-            <span class="tab-count" :style="tab==='wireless' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="wirelessCount"></span>
-        </button>
+            <span class="tab-count" style="{% if type_filter == 'wireless' %}background:rgba(249,115,22,.18);color:#f97316;{% else %}background:#232b3b;color:#94a3b8;{% endif %}">{{ wireless_total }}</span>
+        </a>
         <div class="tab-sep"></div>
-        <button @click="setTab('wired')" class="tab-btn"
-            :style="tab==='wired' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : ''">
+        <a href="{{ tab_href(tab_qs_wired) }}" class="tab-btn no-underline" style="{% if type_filter == 'wired' %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
             Wired
-            <span class="tab-count" :style="tab==='wired' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="wiredCount"></span>
-        </button>
+            <span class="tab-count" style="{% if type_filter == 'wired' %}background:rgba(249,115,22,.18);color:#f97316;{% else %}background:#232b3b;color:#94a3b8;{% endif %}">{{ wired_total }}</span>
+        </a>
     </div>
 
     <!-- Table -->

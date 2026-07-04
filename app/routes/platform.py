@@ -5,12 +5,78 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse
 import html
 
+from bridge_errors import BRIDGE_UNAVAILABLE
 from vendors.aruba_central import aruba
 
 from templates_shared import templates
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_COMPLIANT_STATUSES = frozenset({
+    "compliant", "ok", "up to date", "uptodate", "current", "yes", "true", "up-to-date",
+})
+
+
+def _is_compliant_status(status: str) -> bool:
+    return (status or "").strip().lower() in _COMPLIANT_STATUSES
+
+
+def _normalize_firmware_compliance(raw) -> dict:
+    """Turn centralmcp firmware compliance payloads into summary + table rows."""
+    items: list = []
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, dict):
+        for key in ("items", "devices", "data", "compliance", "results", "records"):
+            candidate = raw.get(key)
+            if isinstance(candidate, list):
+                items = candidate
+                break
+
+    rows: list[dict] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        status = (
+            item.get("complianceStatus")
+            or item.get("compliance")
+            or item.get("status")
+            or ""
+        )
+        rows.append({
+            "serial": (
+                item.get("serialNumber") or item.get("serial") or item.get("deviceSerial") or ""
+            ),
+            "name": item.get("deviceName") or item.get("name") or "",
+            "model": item.get("model") or item.get("deviceModel") or "",
+            "current": (
+                item.get("firmwareVersion")
+                or item.get("currentVersion")
+                or item.get("installedVersion")
+                or item.get("version")
+                or ""
+            ),
+            "target": (
+                item.get("targetVersion")
+                or item.get("recommendedVersion")
+                or item.get("assignedVersion")
+                or item.get("requiredVersion")
+                or ""
+            ),
+            "status": str(status),
+            "site": item.get("siteName") or item.get("site") or "",
+        })
+
+    compliant = sum(1 for r in rows if _is_compliant_status(r["status"]))
+    return {
+        "summary": {
+            "total": len(rows),
+            "compliant": compliant,
+            "non_compliant": max(0, len(rows) - compliant),
+        },
+        "rows": rows,
+    }
 
 
 @router.get("/nac")
@@ -31,7 +97,7 @@ async def nac_manager(request: Request):
             })
     except Exception as exc:
         logger.warning("NAC registrations unavailable: %s", exc)
-        error = str(exc)
+        error = BRIDGE_UNAVAILABLE
 
     return templates.TemplateResponse(
         request,
@@ -47,10 +113,11 @@ async def config_viewer(request: Request):
     compliance_error = None
     try:
         from vendors.central_bridge import get_firmware_compliance
-        compliance = await get_firmware_compliance(limit=200)
+        raw = await get_firmware_compliance(limit=200)
+        compliance = _normalize_firmware_compliance(raw)
     except Exception as exc:
         logger.warning("Firmware compliance unavailable: %s", exc)
-        compliance_error = str(exc)
+        compliance_error = BRIDGE_UNAVAILABLE
 
     return templates.TemplateResponse(
         request,
@@ -83,6 +150,8 @@ async def running_config(request: Request, serial: str = Form(...)):
             f"<pre style='font-size:.72rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;'>"
             f"{html.escape(str(text))}</pre>"
         )
-    except Exception as exc:
+    except Exception:
         logger.exception("Running config fetch failed for %s", serial)
-        return HTMLResponse(f"<p style='color:#f87171;'>{html.escape(str(exc))}</p>")
+        return HTMLResponse(
+            f"<p style='color:#f87171;'>{html.escape(BRIDGE_UNAVAILABLE)}</p>"
+        )

@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Request
 
+from bridge_errors import BRIDGE_UNAVAILABLE
 from pagination import filter_items
 from templates_shared import templates
 
@@ -31,7 +32,7 @@ async def list_wlans_page(request: Request):
             })
     except Exception as exc:
         logger.warning("WLAN list unavailable: %s", exc)
-        error = str(exc)
+        error = BRIDGE_UNAVAILABLE
 
     wlans = filter_items(wlans, q, "name", "essid", "type", "security", "vlan")
 

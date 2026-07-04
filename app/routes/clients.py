@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request, HTTPException
 from pagination import filter_items, paginate as _paginate
@@ -31,6 +32,13 @@ def _dict_fields(data: dict | None, *priority: str, limit: int = 8) -> list[dict
         if len(rows) >= limit:
             break
     return rows
+
+
+def _client_tab_qs(request: Request, type_value: str | None) -> str:
+    pairs = [(k, v) for k, v in request.query_params.multi_items() if k not in ("page", "type")]
+    if type_value:
+        pairs.append(("type", type_value))
+    return urlencode(pairs)
 
 
 async def _resolve_uplinks(serials: list[str]) -> dict[str, dict | None]:
@@ -70,10 +78,18 @@ async def _resolve_uplinks(serials: list[str]) -> dict[str, dict | None]:
 async def list_clients(request: Request):
     clients = await aruba.get_clients()
     q = request.query_params.get("q", "").strip()
+    type_filter = request.query_params.get("type", "").strip().lower()
     clients = filter_items(
         clients, q,
         "mac", "ip", "hostname", "username", "connected_to", "site", "ssid", "os", "type",
     )
+    wireless_total = sum(1 for c in clients if c.get("type") == "wireless")
+    wired_total = sum(1 for c in clients if c.get("type") != "wireless")
+    if type_filter in ("wireless", "wired"):
+        if type_filter == "wireless":
+            clients = [c for c in clients if c.get("type") == "wireless"]
+        else:
+            clients = [c for c in clients if c.get("type") != "wireless"]
     pg = _paginate(request, clients)
     return templates.TemplateResponse(
         request,
@@ -81,6 +97,13 @@ async def list_clients(request: Request):
         {
             "clients": pg["items"],
             "q": q,
+            "type_filter": type_filter,
+            "wireless_total": wireless_total,
+            "wired_total": wired_total,
+            "session_total": wireless_total + wired_total,
+            "tab_qs_all": _client_tab_qs(request, None),
+            "tab_qs_wireless": _client_tab_qs(request, "wireless"),
+            "tab_qs_wired": _client_tab_qs(request, "wired"),
             "active": "clients",
             "page": pg["page"],
             "per_page": pg["per_page"],
@@ -158,6 +181,10 @@ async def client_detail(request: Request, mac: str):
                 "apName", "deviceName", "siteName", "site", "floor", "building", "zone",
             ),
             "roaming": roaming if isinstance(roaming, dict) else None,
+            "roaming_fields": _dict_fields(
+                roaming if isinstance(roaming, dict) else None,
+                "totalEvents", "eventCount", "roamCount", "status", "message",
+            ),
             "active": "clients",
         },
     )

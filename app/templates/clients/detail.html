@@ -378,7 +378,18 @@
             {% endfor %}
         </div>
         {% else %}
-        <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ roaming | tojson(indent=2) }}</pre>
+        {% if roaming_fields %}
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            {% for row in roaming_fields %}
+            <div class="flex justify-between gap-3 border-b border-surface-700/40 pb-2">
+                <dt class="text-slate-500 capitalize">{{ row.label }}</dt>
+                <dd class="text-slate-200 font-medium text-right">{{ row.value }}</dd>
+            </div>
+            {% endfor %}
+        </dl>
+        {% else %}
+        <p class="text-sm text-slate-500">No roaming events recorded in the last 24 hours.</p>
+        {% endif %}
         {% endif %}
     </div>
     {% endif %}
