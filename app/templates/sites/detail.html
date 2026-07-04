@@ -20,18 +20,18 @@
 </div>
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-    <div class="stat-card">
+    <a href="/devices/?site={{ site.name | urlencode }}" class="stat-card block no-underline hover:border-brand-500/30 transition-colors">
         <p class="section-label mb-1">Devices</p>
-        <p class="text-2xl font-bold text-brand-400">{{ devices | length }}</p>
-    </div>
-    <div class="stat-card">
+        <p class="text-2xl font-bold text-brand-400">{{ device_total }}</p>
+    </a>
+    <a href="/clients/?site={{ site.name | urlencode }}" class="stat-card block no-underline hover:border-brand-500/30 transition-colors">
         <p class="section-label mb-1">Clients</p>
-        <p class="text-2xl font-bold text-blue-400">{{ clients | length }}</p>
-    </div>
-    <div class="stat-card">
+        <p class="text-2xl font-bold text-blue-400">{{ client_total }}</p>
+    </a>
+    <a href="/devices/?site={{ site.name | urlencode }}&status=online" class="stat-card block no-underline hover:border-brand-500/30 transition-colors">
         <p class="section-label mb-1">Online</p>
         <p class="text-2xl font-bold text-green-400">{{ online_count }}</p>
-    </div>
+    </a>
     <div class="stat-card">
         <p class="section-label mb-1">Health</p>
         <p class="text-sm font-medium text-slate-300 mt-1">{{ health_label or '—' }}</p>
@@ -72,6 +72,12 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if device_total > preview_limit %}
+        <p class="text-xs text-slate-500 mt-3">
+            Showing {{ preview_limit }} of {{ device_total }}.
+            <a href="/devices/?site={{ site.name | urlencode }}" class="text-brand-400 hover:text-brand-300">View all devices &rarr;</a>
+        </p>
+        {% endif %}
         {% else %}
         <p class="text-sm text-slate-500">No devices at this site.</p>
         {% endif %}
@@ -91,6 +97,12 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if client_total > preview_limit %}
+        <p class="text-xs text-slate-500 mt-3">
+            Showing {{ preview_limit }} of {{ client_total }}.
+            <a href="/clients/?site={{ site.name | urlencode }}" class="text-brand-400 hover:text-brand-300">View all clients &rarr;</a>
+        </p>
+        {% endif %}
         {% else %}
         <p class="text-sm text-slate-500">No clients at this site.</p>
         {% endif %}

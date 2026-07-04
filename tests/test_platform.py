@@ -72,3 +72,19 @@ def test_platform_bridge_error_is_sanitized(client, mock_central, stub_db, monke
     assert r.status_code == 200
     assert "secret token leak" not in r.text
     assert "Central integration unavailable" in r.text
+
+
+def test_nac_search_filter(client, mock_central, stub_db, monkeypatch):
+    from vendors import central_bridge as cb
+
+    async def regs(**_kw):
+        return [
+            {"macAddress": "aa:bb:cc:dd:ee:01", "description": "lab-printer", "role": "guest"},
+            {"macAddress": "aa:bb:cc:dd:ee:02", "description": "corp-laptop", "role": "employee"},
+        ]
+
+    monkeypatch.setattr(cb, "list_mac_registrations", regs)
+    r = client.get("/platform/nac?q=printer")
+    assert r.status_code == 200
+    assert "lab-printer" in r.text
+    assert "corp-laptop" not in r.text
