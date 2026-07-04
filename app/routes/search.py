@@ -138,11 +138,11 @@ async def search_api(q: str = Query("", max_length=200)):
     clients: list = []
     sites: list = []
     try:
-        from vendors.central_bridge import get_central_sites, get_clients, get_devices
+        from vendors.central_bridge import get_all_clients, get_all_devices, get_central_sites
 
         fetched = await asyncio.gather(
-            get_devices(limit=200),
-            get_clients(limit=300),
+            get_all_devices(max_items=1000),
+            get_all_clients(max_items=1000),
             get_central_sites(),
             return_exceptions=True,
         )

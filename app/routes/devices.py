@@ -178,21 +178,22 @@ async def list_devices(request: Request):
 @router.get("/{serial}")
 async def device_detail(request: Request, serial: str):
     """Rich detail view for a single device - the drill-down target."""
-    from vendors.central_bridge import get_switch_ports, get_device_events
+    from vendors.central_bridge import get_device_events, get_device_health, get_switch_ports
 
     device = await aruba.get_device(serial)
     if not device:
         raise HTTPException(404, "Device not found")
 
-    # Fetch clients, ports, and events in parallel
+    health_task = get_device_health(serial)
     all_clients_task = aruba.get_clients()
     events_task = get_device_events(serial, hours=48, limit=20)
+    health_label = None
 
     ports_error = False
     if device.get("type") == "switch":
         ports_task = get_switch_ports(serial)
-        all_clients, events, raw_ports = await asyncio.gather(
-            all_clients_task, events_task, ports_task, return_exceptions=True
+        all_clients, events, raw_ports, health = await asyncio.gather(
+            all_clients_task, events_task, ports_task, health_task, return_exceptions=True
         )
         if isinstance(raw_ports, Exception):
             logger.error("Failed to fetch switch ports for %s: %s", serial, raw_ports)
@@ -205,8 +206,8 @@ async def device_detail(request: Request, serial: str):
             ports_error = True
             raw_ports = []
     else:
-        all_clients, events = await asyncio.gather(
-            all_clients_task, events_task, return_exceptions=True
+        all_clients, events, health = await asyncio.gather(
+            all_clients_task, events_task, health_task, return_exceptions=True
         )
         raw_ports = []
 
@@ -221,6 +222,11 @@ async def device_detail(request: Request, serial: str):
         all_clients = []
     if isinstance(events, Exception):
         events = []
+    if isinstance(health, Exception):
+        health = None
+    elif isinstance(health, dict):
+        from routes.home import _health_issue_label
+        health_label = _health_issue_label(health)
 
     device_name = device.get("name", "")
     connected_clients = [
@@ -241,6 +247,7 @@ async def device_detail(request: Request, serial: str):
             "ports_error": ports_error,
             "ports_json": ports_json,
             "events": events,
+            "health_label": health_label,
             "active": "devices",
         },
     )

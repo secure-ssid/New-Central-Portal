@@ -125,13 +125,19 @@ def mock_central(monkeypatch):
     in-memory data. Returns the raw dataset for assertions."""
     from vendors import central_bridge as cb
 
-    async def get_devices(device_type=None, site_id=None, limit=50):
+    async def get_devices(device_type=None, site_id=None, limit=50, offset=0, **_kw):
         return list(RAW_DEVICES)
 
     async def get_device(serial):
         return next((d for d in RAW_DEVICES if d["serialNumber"] == serial), None)
 
-    async def get_clients(site_id=None, limit=100):
+    async def get_clients(site_id=None, limit=100, offset=0, **_kw):
+        return list(RAW_CLIENTS)
+
+    async def get_all_devices(limit_per_page=200, max_items=1000, **_kw):
+        return list(RAW_DEVICES)
+
+    async def get_all_clients(limit_per_page=200, max_items=1000, **_kw):
         return list(RAW_CLIENTS)
 
     async def find_client(mac_or_ip):
@@ -145,8 +151,10 @@ def mock_central(monkeypatch):
         return list(RAW_EVENTS)
 
     monkeypatch.setattr(cb, "get_devices", get_devices)
+    monkeypatch.setattr(cb, "get_all_devices", get_all_devices)
     monkeypatch.setattr(cb, "get_device", get_device)
     monkeypatch.setattr(cb, "get_clients", get_clients)
+    monkeypatch.setattr(cb, "get_all_clients", get_all_clients)
     monkeypatch.setattr(cb, "find_client", find_client)
     monkeypatch.setattr(cb, "get_switch_ports", get_switch_ports)
     monkeypatch.setattr(cb, "get_device_events", get_device_events)
@@ -156,6 +164,8 @@ def mock_central(monkeypatch):
     monkeypatch.setattr(cb, "get_device_groups",
                         _async_return([{"groupName": "default"}, {"groupName": "lab"}]))
     monkeypatch.setattr(cb, "get_glp_subscriptions", _async_return([]))
+    monkeypatch.setattr(cb, "get_alerts", _async_return([]))
+    monkeypatch.setattr(cb, "get_device_health", _async_return({"health": None, "errors": []}))
     monkeypatch.setattr(cb, "find_device_uplink", _async_return(
         {"switch_serial": "SW1SERIAL", "switch_name": "core-sw-1", "port": "1/1/1"}))
     return {

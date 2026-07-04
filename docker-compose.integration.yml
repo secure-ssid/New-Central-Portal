@@ -1,0 +1,17 @@
+# Optional live integration against a mounted centralmcp checkout.
+# Usage:
+#   CENTRALMCP_PATH=../centralmcp docker compose \
+#     -f docker-compose.yml -f docker-compose.integration.yml run --rm integration-tests
+
+services:
+  integration-tests:
+    build: ./app
+    working_dir: /workspace
+    environment:
+      PYTHONPATH: /centralmcp
+      CREDS_PATH: /centralmcp/config/credentials.yaml
+      CENTRALMCP_INTEGRATION: "1"
+    volumes:
+      - .:/workspace
+      - "${CENTRALMCP_PATH:-./centralmcp}:/centralmcp:ro"
+    command: python -m pytest tests/integration/ -m integration -v --tb=short

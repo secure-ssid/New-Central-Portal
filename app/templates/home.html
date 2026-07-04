@@ -188,6 +188,39 @@
     </div>
 </div>
 
+<!-- Row 3b: alerts + offline health -->
+{% if alert_summary.total or health_notes %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    {% if alert_summary.total %}
+    <div class="card">
+        <div class="flex items-center justify-between mb-3">
+            <p class="section-label">Active Alerts</p>
+            <a href="/lab/alerts" class="text-xs text-brand-500 hover:text-brand-400 transition-colors">View all &rarr;</a>
+        </div>
+        <p class="text-3xl font-bold {% if alert_summary.critical %}text-red-400{% elif alert_summary.major %}text-amber-400{% else %}text-slate-200{% endif %}">{{ alert_summary.total }}</p>
+        <p class="text-xs text-slate-600 mt-1">
+            {% if alert_summary.critical %}{{ alert_summary.critical }} critical{% endif %}
+            {% if alert_summary.major %}{% if alert_summary.critical %} &middot; {% endif %}{{ alert_summary.major }} major{% endif %}
+            {% if alert_summary.minor %}{% if alert_summary.critical or alert_summary.major %} &middot; {% endif %}{{ alert_summary.minor }} minor{% endif %}
+        </p>
+    </div>
+    {% endif %}
+    {% if health_notes %}
+    <div class="card">
+        <p class="section-label mb-3">Offline Device Health</p>
+        <ul class="space-y-2 text-sm">
+            {% for note in health_notes %}
+            <li class="flex items-center justify-between gap-3">
+                <a href="/devices/{{ note.serial }}" class="text-slate-300 hover:text-brand-400 truncate">{{ note.name }}</a>
+                <span class="text-xs text-amber-400 flex-shrink-0">{{ note.label }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 <!-- Row 3: device type breakdown -->
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
     <div class="stat-card flex items-center gap-4">

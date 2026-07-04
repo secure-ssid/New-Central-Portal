@@ -34,7 +34,7 @@
                     {{ device.status|upper }}
                 </span>
             </div>
-            <p class="text-gray-400 uppercase tracking-wider text-xs">{{ device.type }} · {{ device.model }}</p>
+            <p class="text-gray-400 uppercase tracking-wider text-xs">{{ device.type }} · {{ device.model }}{% if health_label %} · <span class="text-amber-400">{{ health_label }}</span>{% endif %}</p>
         </div>
         <div class="flex gap-2 flex-shrink-0">
             <a href="#quick-ops"

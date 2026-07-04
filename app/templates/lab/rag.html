@@ -8,7 +8,7 @@
         <span class="text-slate-400">Doc Search</span>
     </div>
     <h1 class="text-2xl font-bold text-white">Documentation Search</h1>
-    <p class="text-sm text-slate-500 mt-0.5">Semantic search across New Central documentation using Qdrant + Ollama embeddings</p>
+    <p class="text-sm text-slate-500 mt-0.5">Hybrid search across New Central documentation using centralmcp LanceDB indexes</p>
 </div>
 
 <div class="max-w-4xl">
@@ -51,21 +51,21 @@
                 <span class="text-brand-400 font-bold">1</span>
             </div>
             <h3 class="text-sm font-semibold text-white mb-1">Embed Query</h3>
-            <p class="text-xs text-slate-400">Convert your search to a vector using Ollama (nomic-embed-text)</p>
+            <p class="text-xs text-slate-400">Embed your query with fastembed (LanceDB backend) or Ollama (Redis backend)</p>
         </div>
         <div class="card">
             <div class="w-8 h-8 rounded-lg bg-brand-500/10 flex items-center justify-center mb-3">
                 <span class="text-brand-400 font-bold">2</span>
             </div>
-            <h3 class="text-sm font-semibold text-white mb-1">Vector Search</h3>
-            <p class="text-xs text-slate-400">Find similar docs in Qdrant (51k+ New Central doc chunks)</p>
+            <h3 class="text-sm font-semibold text-white mb-1">Hybrid Search</h3>
+            <p class="text-xs text-slate-400">Vector + BM25 fusion over ingested Aruba Central docs and OpenAPI specs</p>
         </div>
         <div class="card">
             <div class="w-8 h-8 rounded-lg bg-brand-500/10 flex items-center justify-center mb-3">
                 <span class="text-brand-400 font-bold">3</span>
             </div>
             <h3 class="text-sm font-semibold text-white mb-1">Rank Results</h3>
-            <p class="text-xs text-slate-400">Return top matches with similarity scores</p>
+            <p class="text-xs text-slate-400">Return top matches with relevance scores</p>
         </div>
     </div>
 </div>

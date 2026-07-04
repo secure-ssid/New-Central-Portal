@@ -25,8 +25,14 @@ async def lab_menu(request: Request):
          "desc": "Ask Claude about your network. Uses MCP + RAG.",
          "status": "active", "color": "green"},
         {"slug": "rag", "name": "Doc Search",
-         "desc": "Semantic search across network docs. No AI.",
+         "desc": "Hybrid search across network docs (LanceDB). No AI.",
          "status": "active", "color": "blue"},
+        {"slug": "doc-api", "name": "API Lookup",
+         "desc": "Exact OpenAPI schema, field, and enum lookup.",
+         "status": "new", "color": "indigo"},
+        {"slug": "doc-ask", "name": "Doc Q&A",
+         "desc": "Compact cited answers from local docs and API indexes.",
+         "status": "new", "color": "sky"},
         {"slug": "mcp-tester", "name": "MCP Tool Tester",
          "desc": "Poke at MCP tools to see what they return.",
          "status": "active", "color": "purple"},
@@ -404,6 +410,82 @@ async def rag_search(request: Request, query: str = Form(...)):
         request,
         "lab/partials/rag_results.html",
         {"query": query, "results": results, "error": error},
+    )
+
+
+@router.get("/doc-api")
+async def doc_api_page(request: Request):
+    return templates.TemplateResponse(request, "lab/doc-api.html", {"active": "lab"})
+
+
+@router.post("/doc-api")
+async def doc_api_search(request: Request, query: str = Form(...)):
+    from vendors.central_bridge import lookup_api
+
+    error = None
+    try:
+        raw = await lookup_api(query, top_k=10)
+    except Exception as exc:
+        logger.exception("[API lookup] failed for %r: %s", query, exc)
+        raw = []
+        error = "API lookup is unavailable (centralmcp specs index may be missing)."
+
+    if raw and isinstance(raw[0], dict) and "error" in raw[0]:
+        error = raw[0]["error"]
+        results = []
+    else:
+        results = []
+        for r in raw:
+            if not isinstance(r, dict):
+                continue
+            text = str(r.get("text") or r.get("content") or r.get("summary") or "")
+            results.append({
+                "title": r.get("path") or r.get("operation_id") or r.get("method") or "API match",
+                "excerpt": text[:240] + ("..." if len(text) > 240 else ""),
+                "detail": text[:1200],
+                "score": r.get("score", 0),
+                "source": r.get("source") or "openapi_specs",
+                "file_path": r.get("file_path") or r.get("path") or "",
+            })
+
+    return templates.TemplateResponse(
+        request,
+        "lab/partials/rag_results.html",
+        {"query": query, "results": results, "error": error},
+    )
+
+
+@router.get("/doc-ask")
+async def doc_ask_page(request: Request):
+    return templates.TemplateResponse(request, "lab/doc-ask.html", {"active": "lab"})
+
+
+@router.post("/doc-ask")
+async def doc_ask_submit(request: Request, question: str = Form(...)):
+    from vendors.central_bridge import ask_docs
+
+    error = None
+    try:
+        payload = await ask_docs(question, top_k=3)
+    except Exception as exc:
+        logger.exception("[Doc Q&A] failed for %r: %s", question, exc)
+        payload = {"answer": "", "citations": [], "mode": "error"}
+        error = "Doc Q&A is unavailable right now."
+
+    answer = str(payload.get("answer") or "").strip()
+    if not error and not answer:
+        error = "No answer found in local documentation indexes."
+
+    return templates.TemplateResponse(
+        request,
+        "lab/partials/doc_ask_result.html",
+        {
+            "question": question,
+            "answer": answer,
+            "citations": payload.get("citations") or [],
+            "mode": payload.get("mode") or "",
+            "error": error,
+        },
     )
 
 

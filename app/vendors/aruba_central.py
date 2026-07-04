@@ -98,8 +98,8 @@ def _norm_client(c: dict) -> dict:
 class ArubaCentralClient:
     async def get_devices(self) -> list[dict]:
         try:
-            from vendors.central_bridge import get_devices
-            raw = await get_devices(limit=200)
+            from vendors.central_bridge import get_all_devices
+            raw = await get_all_devices()
             return [_norm_device(d) for d in raw if isinstance(d, dict)]
         except Exception as exc:
             logger.warning("central_bridge unavailable, using mock data: %s", exc)
@@ -117,8 +117,8 @@ class ArubaCentralClient:
 
     async def get_clients(self) -> list[dict]:
         try:
-            from vendors.central_bridge import get_clients
-            raw = await get_clients(limit=200)
+            from vendors.central_bridge import get_all_clients
+            raw = await get_all_clients()
             return [_norm_client(c) for c in raw if isinstance(c, dict)]
         except Exception as exc:
             logger.warning("central_bridge unavailable, using mock data: %s", exc)

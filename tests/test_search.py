@@ -114,7 +114,7 @@ class TestApi:
         async def boom(*a, **k):
             raise RuntimeError("clients backend down")
 
-        monkeypatch.setattr(cb, "get_clients", boom)
+        monkeypatch.setattr(cb, "get_all_clients", boom)
         r = client.get("/search/api?q=hq")
         assert r.status_code == 200
         results = r.json()["results"]
@@ -127,7 +127,7 @@ class TestApi:
         async def boom(*a, **k):
             raise RuntimeError("everything down")
 
-        for fn in ("get_devices", "get_clients", "get_central_sites"):
+        for fn in ("get_all_devices", "get_all_clients", "get_central_sites"):
             monkeypatch.setattr(cb, fn, boom)
         r = client.get("/search/api?q=anything")
         assert r.status_code == 200
