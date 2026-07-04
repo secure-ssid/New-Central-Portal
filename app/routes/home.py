@@ -239,6 +239,50 @@ async def _anomaly_widgets(devices: list[dict]) -> list[dict]:
     return widgets[:5]
 
 
+async def _site_health_cards(limit: int = 4) -> list[dict]:
+    """Fetch health summaries for a handful of sites (dashboard widgets)."""
+    try:
+        from vendors.central_bridge import get_site_health_summary, get_sites
+        raw_sites = await get_sites(limit=limit)
+    except Exception as exc:
+        logger.debug("Site list unavailable for health cards: %s", exc)
+        return []
+
+    cards: list[dict] = []
+    picks = [s for s in raw_sites if isinstance(s, dict)][:limit]
+    if not picks:
+        return []
+
+    async def _one(site: dict) -> dict | None:
+        name = site.get("siteName") or site.get("site_name") or site.get("name") or ""
+        site_id = site.get("id") or site.get("siteId") or site.get("site_id")
+        try:
+            summary = await get_site_health_summary(
+                site_id=str(site_id) if site_id else None,
+                site_name=name or None,
+            )
+        except Exception:
+            return None
+        label = None
+        if isinstance(summary, dict):
+            label = (
+                summary.get("status")
+                or summary.get("healthStatus")
+                or summary.get("summary")
+            )
+        return {
+            "id": site_id,
+            "name": name or "Unnamed site",
+            "label": str(label) if label else "—",
+        }
+
+    results = await asyncio.gather(*(_one(s) for s in picks), return_exceptions=True)
+    for r in results:
+        if isinstance(r, dict):
+            cards.append(r)
+    return cards
+
+
 async def _offline_health_notes(devices: list[dict]) -> list[dict]:
     """Fetch config/monitoring health hints for a few offline devices."""
     try:
@@ -382,6 +426,7 @@ async def home(request: Request, partial: int = 0):
     health_notes = await _offline_health_notes(devices)
     tenant_health = await _tenant_health()
     anomalies = await _anomaly_widgets(devices)
+    site_health_cards = await _site_health_cards()
 
     updated = datetime.now(timezone.utc).strftime("%I:%M %p UTC")
 
@@ -398,6 +443,7 @@ async def home(request: Request, partial: int = 0):
         "health_notes": health_notes,
         "tenant_health": tenant_health,
         "anomalies": anomalies,
+        "site_health_cards": site_health_cards,
         "is_partial": bool(partial),
     }
 
