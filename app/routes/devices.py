@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
-from pagination import paginate as _paginate
+from pagination import filter_items, paginate as _paginate
 from vendors.aruba_central import aruba
 import asyncio
 import html
@@ -153,7 +153,13 @@ async def list_devices(request: Request):
     if isinstance(devices, Exception): devices = []
     if isinstance(groups, Exception): groups = []
     if isinstance(sites, Exception): sites = []
-    pg = _paginate(request, devices)  # slice after fetch/filter logic
+    q = request.query_params.get("q", "").strip()
+    devices = filter_items(
+        devices, q,
+        "name", "serial", "model", "mac", "type", "site", "ip",
+        "persona", "deployment", "device_function",
+    )
+    pg = _paginate(request, devices)
     return templates.TemplateResponse(
         request,
         "devices/list.html",
@@ -161,6 +167,7 @@ async def list_devices(request: Request):
             "devices": pg["items"],
             "groups": groups,
             "sites": sites,
+            "q": q,
             "active": "devices",
             "page": pg["page"],
             "per_page": pg["per_page"],

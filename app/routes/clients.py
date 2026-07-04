@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Request, HTTPException
-from pagination import paginate as _paginate
+from pagination import filter_items, paginate as _paginate
 from vendors.aruba_central import aruba
 
 from templates_shared import templates
@@ -47,12 +47,18 @@ async def _resolve_uplinks(serials: list[str]) -> dict[str, dict | None]:
 @router.get("/")
 async def list_clients(request: Request):
     clients = await aruba.get_clients()
-    pg = _paginate(request, clients)  # slice after fetch/filter logic
+    q = request.query_params.get("q", "").strip()
+    clients = filter_items(
+        clients, q,
+        "mac", "ip", "hostname", "username", "connected_to", "site", "ssid", "os", "type",
+    )
+    pg = _paginate(request, clients)
     return templates.TemplateResponse(
         request,
         "clients/list.html",
         {
             "clients": pg["items"],
+            "q": q,
             "active": "clients",
             "page": pg["page"],
             "per_page": pg["per_page"],

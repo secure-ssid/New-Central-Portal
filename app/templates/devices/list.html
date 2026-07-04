@@ -6,7 +6,6 @@
 document.addEventListener('alpine:init', () => {
     Alpine.data('devicesTable', () => ({
         tab: 'all',
-        search: '',
         sortCol: '',
         sortDir: 1,
         devices: [],
@@ -34,11 +33,6 @@ document.addEventListener('alpine:init', () => {
         get rows() {
             let r = this.devices;
             if (this.tab !== 'all') r = r.filter(d => d.type === this.tab);
-            if (this.search) {
-                const s = this.search.toLowerCase();
-                r = r.filter(d => [d.name, d.serial, d.model, d.mac, d.type, d.site, d.persona, d.deployment, d.device_function, d.ip]
-                    .some(v => v && String(v).toLowerCase().includes(s)));
-            }
             if (this.sortCol) {
                 const col = this.sortCol, dir = this.sortDir;
                 r = [...r].sort((a, b) => {
@@ -176,16 +170,19 @@ document.addEventListener('alpine:init', () => {
     </div>
 
     <div class="flex flex-wrap items-center gap-3 mb-4">
-        <div class="relative flex-1 w-full sm:max-w-[380px]">
+        <form method="get" class="relative flex-1 w-full sm:max-w-[380px]">
+            {% if per_page %}<input type="hidden" name="per_page" value="{{ per_page }}">{% endif %}
             <svg aria-hidden="true" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
-            <input x-model="search" type="text" placeholder="Search by name, serial, model, MAC, type, site, persona…"
+            <input name="q" value="{{ q }}" type="search" placeholder="Search by name, serial, model, MAC, type, site, persona…"
                    aria-label="Search devices"
                    class="input" style="padding-left:34px;">
-        </div>
+        </form>
     </div>
 
-    {% if total_pages and total_pages > 1 %}
-    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Search and tabs filter this page only ({{ devices|length }} of {{ total }} devices shown) &mdash; use the pagination below the table to see the rest.</p>
+    {% if q %}
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} match{{ 'es' if total != 1 else '' }} for &ldquo;{{ q }}&rdquo;{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
+    {% elif total_pages and total_pages > 1 %}
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">{{ total }} devices &mdash; page {{ page }} of {{ total_pages }}.</p>
     {% endif %}
 
     <!-- Tabs -->
