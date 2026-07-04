@@ -198,77 +198,104 @@ def _view_all_actions(query: str, raw_devices: list, raw_clients: list,
     return actions
 
 
-def build_results(query: str, raw_devices: list, raw_clients: list,
-                  raw_sites: list, raw_alerts: list | None = None,
-                  raw_wlans: list | None = None) -> list[dict]:
-    """Combine per-type matches (devices, clients, sites, alerts, wlans) with caps applied."""
-    alerts = raw_alerts or []
-    wlans = raw_wlans or []
-    results: list[dict] = []
-    sources = (
+def _match_sources(raw_devices: list, raw_clients: list, raw_sites: list,
+                   raw_alerts: list, raw_wlans: list):
+    return (
         (search_devices, raw_devices),
         (search_clients, raw_clients),
         (search_sites, raw_sites),
-        (search_alerts, alerts),
-        (search_wlans, wlans),
+        (search_alerts, raw_alerts),
+        (search_wlans, raw_wlans),
     )
-    for fn, raw in sources:
+
+
+def gather_all_matches(query: str, raw_devices: list, raw_clients: list,
+                       raw_sites: list, raw_alerts: list | None = None,
+                       raw_wlans: list | None = None) -> list[dict]:
+    """Round-robin interleave of all match types for balanced palette pages."""
+    alerts = raw_alerts or []
+    wlans = raw_wlans or []
+    buckets: list[list[dict]] = []
+    for fn, raw in _match_sources(raw_devices, raw_clients, raw_sites, alerts, wlans):
         try:
-            results.extend(fn(query, raw))
+            buckets.append(fn(query, raw, cap=None))
         except Exception:
             logger.exception("[search] %s failed for query %r", fn.__name__, query)
-    trimmed = results[:OVERALL_CAP]
-    if len(results) >= OVERALL_CAP:
-        trimmed.extend(_view_all_actions(query, raw_devices, raw_clients, raw_sites, alerts, wlans)[:2])
-    else:
-        trimmed.extend(_view_all_actions(query, raw_devices, raw_clients, raw_sites, alerts, wlans))
-    # Dedupe action URLs while preserving order
+            buckets.append([])
+    if not buckets:
+        return []
+    max_len = max(len(b) for b in buckets)
+    out: list[dict] = []
+    for i in range(max_len):
+        for bucket in buckets:
+            if i < len(bucket):
+                out.append(bucket[i])
+    return out
+
+
+def _append_view_all_actions(page: list[dict], query: str, raw_devices: list,
+                             raw_clients: list, raw_sites: list,
+                             raw_alerts: list, raw_wlans: list,
+                             *, total_matched: int, limit: int) -> list[dict]:
+    """Attach view-all rows on the first page when matches exceed caps."""
+    actions = _view_all_actions(
+        query, raw_devices, raw_clients, raw_sites, raw_alerts, raw_wlans,
+    )
+    if total_matched >= limit:
+        actions = actions[:2]
     seen_urls: set[str] = set()
-    deduped: list[dict] = []
-    for row in trimmed:
-        if row.get("type") == "action":
-            url = row.get("url") or ""
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
+    deduped = list(page)
+    for row in actions:
+        url = row.get("url") or ""
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
         deduped.append(row)
-    return deduped[:OVERALL_CAP + 3]
+    return deduped[:limit + 3]
+
+
+def build_results(query: str, raw_devices: list, raw_clients: list,
+                  raw_sites: list, raw_alerts: list | None = None,
+                  raw_wlans: list | None = None, *,
+                  offset: int = 0, limit: int = OVERALL_CAP) -> list[dict]:
+    """Paginated palette rows; view-all actions only on the first page."""
+    alerts = raw_alerts or []
+    wlans = raw_wlans or []
+    all_matches = gather_all_matches(
+        query, raw_devices, raw_clients, raw_sites, alerts, wlans,
+    )
+    page = all_matches[offset:offset + limit]
+    if offset == 0:
+        return _append_view_all_actions(
+            page, query, raw_devices, raw_clients, raw_sites, alerts, wlans,
+            total_matched=len(all_matches), limit=limit,
+        )
+    return page
 
 
 def count_total_matches(query: str, raw_devices: list, raw_clients: list,
                         raw_sites: list, raw_alerts: list | None = None,
                         raw_wlans: list | None = None) -> int:
-    """Count all palette matches before overall cap."""
-    alerts = raw_alerts or []
-    wlans = raw_wlans or []
-    total = 0
-    for fn, raw in (
-        (search_devices, raw_devices),
-        (search_clients, raw_clients),
-        (search_sites, raw_sites),
-        (search_alerts, alerts),
-        (search_wlans, wlans),
-    ):
-        try:
-            total += len(fn(query, raw, cap=None))
-        except Exception:
-            logger.exception("[search] %s count failed for query %r", fn.__name__, query)
-    return total
+    """Count all palette matches (round-robin list length)."""
+    return len(gather_all_matches(
+        query, raw_devices, raw_clients, raw_sites, raw_alerts, raw_wlans,
+    ))
 
 
 @router.get("/api")
 async def search_api(
     q: str = Query("", max_length=200),
     type: str = Query("", max_length=20),
+    offset: int = Query(0, ge=0, le=5000),
     limit: int = Query(OVERALL_CAP, ge=1, le=50),
 ):
     """Search devices, clients, and sites; degrades to partial results."""
     query = q.strip().lower()
     type_filter = type.strip().lower()
     if not query:
-        return JSONResponse({"results": [], "total_matched": 0, "has_more": False})
+        return JSONResponse({"results": [], "total_matched": 0, "has_more": False, "offset": 0})
     if len(query) < MIN_QUERY_LEN:
-        return JSONResponse({"results": [], "total_matched": 0, "has_more": False})
+        return JSONResponse({"results": [], "total_matched": 0, "has_more": False, "offset": 0})
 
     try:
         inv = await get_search_inventory()
@@ -277,14 +304,25 @@ async def search_api(
         sites = inv.get("sites", [])
         alerts = inv.get("alerts", [])
         wlans = inv.get("wlans", [])
-        total_matched = count_total_matches(
-            query, devices, clients, sites, alerts, wlans,
-        )
-        results = build_results(query, devices, clients, sites, alerts, wlans)
         if type_filter:
-            results = [r for r in results if r.get("type") == type_filter]
-        trimmed = results[:limit]
-        has_more = len(results) > len(trimmed) or total_matched > len(trimmed)
+            all_matches = gather_all_matches(
+                query, devices, clients, sites, alerts, wlans,
+            )
+            all_matches = [r for r in all_matches if r.get("type") == type_filter]
+            total_matched = len(all_matches)
+            page = all_matches[offset:offset + limit]
+            has_more = total_matched > offset + len(page)
+            trimmed = page
+        else:
+            total_matched = count_total_matches(
+                query, devices, clients, sites, alerts, wlans,
+            )
+            trimmed = build_results(
+                query, devices, clients, sites, alerts, wlans,
+                offset=offset, limit=limit,
+            )
+            content_rows = [r for r in trimmed if r.get("type") != "action"]
+            has_more = total_matched > offset + len(content_rows)
     except Exception:
         logger.exception("[search] result build failed for query %r", query)
         trimmed = []
@@ -295,4 +333,5 @@ async def search_api(
         "results": trimmed,
         "total_matched": total_matched,
         "has_more": has_more,
+        "offset": offset,
     })

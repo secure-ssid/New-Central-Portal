@@ -550,8 +550,15 @@
                 <span class="flex items-center gap-1.5"><kbd class="kbd-hint" aria-hidden="true">&crarr;</kbd> open</span>
                 <span class="flex items-center gap-1.5"><kbd class="kbd-hint" aria-hidden="true">esc</kbd> close</span>
                 </div>
+                <div class="flex items-center gap-3">
+                <button type="button" x-show="searched && hasMore && !loadingMore"
+                        @click="loadMore()"
+                        class="text-brand-400 hover:text-brand-300 font-medium whitespace-nowrap"
+                        aria-label="Load more search results">Load more</button>
+                <span x-show="loadingMore" class="spinner" role="status" aria-label="Loading more"></span>
                 <span x-show="searched && totalMatched > 0" class="text-slate-600 whitespace-nowrap"
-                      x-text="hasMore ? (totalMatched + ' matches — open a view-all row for more') : (totalMatched + ' match' + (totalMatched === 1 ? '' : 'es'))"></span>
+                      x-text="hasMore ? (totalMatched + ' matches') : (totalMatched + ' match' + (totalMatched === 1 ? '' : 'es'))"></span>
+                </div>
             </div>
         </div>
     </div>
@@ -908,11 +915,15 @@
         open: false,
         q: '',
         results: [],
+        apiResults: [],
         sel: 0,
         loading: false,
         searched: false,
         totalMatched: 0,
         hasMore: false,
+        loadingMore: false,
+        apiOffset: 0,
+        apiLimit: 15,
         _seq: 0,
         _prevFocus: null,
 
@@ -920,10 +931,13 @@
           if (this.open) return;
           this._prevFocus = document.activeElement;
           this.open = true;
+          this.apiResults = [];
           this.results = filterQuickActions('');
           this.searched = false;
           this.totalMatched = 0;
           this.hasMore = false;
+          this.apiOffset = 0;
+          this.loadingMore = false;
           this.$nextTick(() => { if (this.$refs.input) this.$refs.input.focus(); });
         },
         close: function () {
@@ -976,15 +990,72 @@
             if (el) el.scrollIntoView({ block: 'nearest' });
           });
         },
+        mergeResults: function () {
+          var query = this.q.trim();
+          var qa = (query.charAt(0) === '>' || query.length < 2)
+            ? filterQuickActions(query)
+            : filterQuickActions(query).slice(0, 3);
+          this.results = this.apiResults.concat(qa);
+        },
+        fetchSearch: function (query, offset, append) {
+          var seq = ++this._seq;
+          if (append) this.loadingMore = true;
+          else this.loading = true;
+          var url = '/search/api?q=' + encodeURIComponent(query)
+            + '&offset=' + encodeURIComponent(offset)
+            + '&limit=' + encodeURIComponent(this.apiLimit);
+          fetch(url)
+            .then((r) => (r.ok ? r.json() : { results: [] }))
+            .then((data) => {
+              if (seq !== this._seq) return;
+              var batch = (data && data.results) || [];
+              this.totalMatched = (data && data.total_matched) || batch.length;
+              this.hasMore = !!(data && data.has_more);
+              this.apiOffset = (data && data.offset) || offset;
+              if (append) {
+                this.apiResults = this.apiResults.concat(batch);
+              } else {
+                this.apiResults = batch;
+              }
+              this.mergeResults();
+              if (!append) this.sel = 0;
+              this.searched = true;
+              this.loading = false;
+              this.loadingMore = false;
+            })
+            .catch(() => {
+              if (seq !== this._seq) return;
+              if (!append) {
+                this.apiResults = [];
+                this.mergeResults();
+                this.totalMatched = 0;
+                this.hasMore = false;
+              }
+              this.searched = true;
+              this.loading = false;
+              this.loadingMore = false;
+            });
+        },
+        loadMore: function () {
+          var query = this.q.trim();
+          if (!query || query.length < 2 || this.loadingMore || !this.hasMore) return;
+          var nextOffset = this.apiResults.filter(function (r) {
+            return r.type !== 'action';
+          }).length;
+          this.fetchSearch(query, nextOffset, true);
+        },
         search: function () {
           var query = this.q.trim();
           if (!query) {
+            this.apiResults = [];
             this.results = filterQuickActions('');
             this.searched = false;
             this.loading = false;
+            this.apiOffset = 0;
             return;
           }
           if (query.charAt(0) === '>') {
+            this.apiResults = [];
             this.results = filterQuickActions(query.slice(1).trim());
             this.searched = true;
             this.loading = false;
@@ -992,34 +1063,15 @@
             return;
           }
           if (query.length < 2) {
+            this.apiResults = [];
             this.results = filterQuickActions(query);
             this.searched = false;
             this.loading = false;
             this.sel = 0;
             return;
           }
-          var seq = ++this._seq;
-          this.loading = true;
-          fetch('/search/api?q=' + encodeURIComponent(query))
-            .then((r) => (r.ok ? r.json() : { results: [] }))
-            .then((data) => {
-              if (seq !== this._seq) return;
-              var api = (data && data.results) || [];
-              this.totalMatched = (data && data.total_matched) || api.length;
-              this.hasMore = !!(data && data.has_more);
-              this.results = api.concat(filterQuickActions(query).slice(0, 3));
-              this.sel = 0;
-              this.searched = true;
-              this.loading = false;
-            })
-            .catch(() => {
-              if (seq !== this._seq) return;
-              this.results = filterQuickActions(query);
-              this.totalMatched = 0;
-              this.hasMore = false;
-              this.searched = true;
-              this.loading = false;
-            });
+          this.apiOffset = 0;
+          this.fetchSearch(query, 0, false);
         },
         go: function (r) {
           if (!r) return;

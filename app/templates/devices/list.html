@@ -243,6 +243,7 @@ document.addEventListener('alpine:init', () => {
                     <th scope="col" class="sortable" @click="sortBy('mac')">MAC <span aria-hidden="true" x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
                     <th scope="col" class="sortable" @click="sortBy('status')">Status <span aria-hidden="true" x-text="sortIcon('status')" style="opacity:.45;font-size:.6rem;"></span></th>
                     <th scope="col" class="sortable" @click="sortBy('ip')">IP <span aria-hidden="true" x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th scope="col" class="sortable" @click="sortBy('site')">Site <span aria-hidden="true" x-text="sortIcon('site')" style="opacity:.45;font-size:.6rem;"></span></th>
                     <th scope="col" style="width:40px;"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
@@ -270,6 +271,16 @@ document.addEventListener('alpine:init', () => {
                             </template>
                         </td>
                         <td class="font-mono text-xs" x-text="d.ip"></td>
+                        <td @click.stop>
+                            <template x-if="d.site">
+                                <a :href="'/devices/?site=' + encodeURIComponent(d.site)"
+                                   class="text-xs text-brand-400 hover:text-brand-300 no-underline"
+                                   x-text="d.site"></a>
+                            </template>
+                            <template x-if="!d.site">
+                                <span class="text-slate-600 text-xs">&mdash;</span>
+                            </template>
+                        </td>
                         <td style="padding:11px 8px;text-align:center;">
                             <button @click.stop="openManageModal(d)" class="btn-secondary" style="padding:5px 6px;line-height:0;" title="Manage group &amp; site" aria-label="Manage group and site">
                                 <svg aria-hidden="true" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
@@ -279,7 +290,7 @@ document.addEventListener('alpine:init', () => {
                 </template>
                 <template x-if="rows.length === 0">
                     <tr>
-                        <td colspan="7">
+                        <td colspan="8">
                             <div class="empty-state">
                                 <svg aria-hidden="true" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
                                 <p>No devices found</p>
