@@ -17,6 +17,12 @@
     {% if per_page %}<input type="hidden" name="per_page" value="{{ per_page }}">{% endif %}
     <input name="q" value="{{ q }}" type="search" placeholder="Search sites by name, city, state…"
            class="input flex-1" aria-label="Search sites">
+    <select class="select text-xs" style="width:auto;" aria-label="Sites per page"
+            onchange="var u = new URL(window.location); u.searchParams.set('per_page', this.value); u.searchParams.delete('page'); window.location = u;">
+        {% for n in [12, 24, 48] %}
+        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} / page</option>
+        {% endfor %}
+    </select>
 </form>
 {% endif %}
 

@@ -1,7 +1,21 @@
 """Topology site filter tests."""
-
 import json
 import re
+
+from routes.topology import _resolve_site_query
+
+
+def test_resolve_site_query_by_name():
+    site_map = {"hq": "101", "branch": "102"}
+    name, sid = _resolve_site_query("HQ", site_map)
+    assert sid == "101"
+    assert name == "HQ"
+
+
+def test_resolve_site_query_by_id():
+    site_map = {"hq": "101"}
+    name, sid = _resolve_site_query("101", site_map)
+    assert sid == "101"
 
 
 def _graph(html: str) -> dict:
