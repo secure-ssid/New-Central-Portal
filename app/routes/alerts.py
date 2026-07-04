@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from pagination import filter_items
+from pagination import filter_items, paginate as _paginate
 
 import db
 from templates_shared import templates
@@ -100,10 +100,16 @@ def _normalize_portal_alert(raw: dict) -> dict:
     }
 
 
-async def _load_alerts_context(severity_filter: str | None = None, q: str = "") -> dict:
+async def _load_alerts_context(
+    severity_filter: str | None = None,
+    q: str = "",
+    request: Request | None = None,
+) -> dict:
     central_alerts: list[dict] = []
     portal_history: list[dict] = []
     summary = {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
+    filtered: list[dict] = []
+    pg = None
 
     try:
         from vendors.central_bridge import list_active_alerts
@@ -121,7 +127,8 @@ async def _load_alerts_context(severity_filter: str | None = None, q: str = "") 
             filtered = [a for a in filtered if a.get("severity") == severity_filter]
         if q:
             filtered = filter_items(filtered, q, "title", "body", "device", "device_serial", "site")
-        central_alerts = filtered
+        pg = _paginate(request, filtered) if request is not None else None
+        central_alerts = pg["items"] if pg else filtered
     except Exception as exc:
         logger.warning("Central alerts unavailable: %s", exc)
 
@@ -137,12 +144,12 @@ async def _load_alerts_context(severity_filter: str | None = None, q: str = "") 
         logger.warning("Portal notification history unavailable: %s", exc)
 
     timeline = sorted(
-        central_alerts + ([] if severity_filter else portal_history),
+        filtered + ([] if severity_filter else portal_history),
         key=lambda a: _parse_time(a.get("time")) or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )[:30]
 
-    return {
+    ctx = {
         "central_alerts": central_alerts,
         "portal_history": portal_history if not severity_filter else [],
         "timeline": timeline,
@@ -150,6 +157,17 @@ async def _load_alerts_context(severity_filter: str | None = None, q: str = "") 
         "severity_filter": severity_filter or "",
         "q": q,
     }
+    if pg:
+        ctx.update({
+            "page": pg["page"],
+            "per_page": pg["per_page"],
+            "total": pg["total"],
+            "total_pages": pg["total_pages"],
+            "has_prev": pg["has_prev"],
+            "has_next": pg["has_next"],
+            "base_qs": pg["base_qs"],
+        })
+    return ctx
 
 
 def _render_alerts_fragment(request: Request, context: dict) -> HTMLResponse:
@@ -166,7 +184,7 @@ async def alerts_hub(request: Request, partial: int = 0, severity: str = "", q: 
         sev = None
     query = q.strip()
 
-    ctx = await _load_alerts_context(severity_filter=sev, q=query)
+    ctx = await _load_alerts_context(severity_filter=sev, q=query, request=request)
     ctx["active"] = "alerts"
     ctx["is_partial"] = bool(partial)
 

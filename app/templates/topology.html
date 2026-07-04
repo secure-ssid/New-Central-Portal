@@ -9,6 +9,18 @@
         <p class="text-sm text-gray-500 mt-0.5">Interactive 3D infrastructure map &mdash; drag to rotate, scroll to zoom, click a device to open it</p>
     </div>
     <div class="flex items-center gap-2 flex-wrap justify-end">
+        {% if site_names %}
+        <form method="get" class="flex items-center gap-2">
+            <label for="topo-site-filter" class="text-xs text-slate-500 whitespace-nowrap">Site</label>
+            <select id="topo-site-filter" name="site" class="select text-xs" style="width:auto;min-width:140px;" aria-label="Filter topology by site"
+                    onchange="this.form.submit()">
+                <option value="">All sites</option>
+                {% for s in site_names %}
+                <option value="{{ s }}" {% if initial_site == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
         {% if port_fail_count %}
         <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>

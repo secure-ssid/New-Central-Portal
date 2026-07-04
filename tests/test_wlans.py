@@ -36,3 +36,18 @@ def test_wlans_bridge_error_sanitized(client, mock_central, stub_db, monkeypatch
     assert r.status_code == 200
     assert "internal wlan failure" not in r.text
     assert BRIDGE_UNAVAILABLE in r.text
+
+
+def test_wlans_pagination(client, mock_central, stub_db, monkeypatch):
+    from vendors import central_bridge as cb
+
+    async def wlans(**_kw):
+        return [
+            {"name": f"wlan-{i}", "essid": f"ssid-{i}", "security": "wpa2", "enabled": True}
+            for i in range(5)
+        ]
+
+    monkeypatch.setattr(cb, "list_wlans", wlans)
+    r = client.get("/wlans/?per_page=2")
+    assert r.status_code == 200
+    assert "Page 1 of 3" in r.text

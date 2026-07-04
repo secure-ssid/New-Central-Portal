@@ -50,6 +50,7 @@ async def topology(request: Request):
     get_switch_ports = None
     find_device_uplink = None
     raw_devices = []
+    raw_sites: list = []
     site_map: dict[str, str] = {}
     site_name_filter: str | None = None
     site_id_filter: str | None = None
@@ -148,6 +149,17 @@ async def topology(request: Request):
 
     filter_label = site_name_filter or initial_site or ""
 
+    site_names = sorted(
+        {
+            s.get("site_name") or s.get("siteName") or s.get("name") or ""
+            for s in (raw_sites if isinstance(raw_sites, list) else [])
+            if isinstance(s, dict)
+        } - {""},
+        key=str.lower,
+    )
+    if not site_names:
+        site_names = sorted({d.get("site") for d in devices if d.get("site")}, key=str.lower)
+
     return templates.TemplateResponse(
         request,
         "topology.html",
@@ -160,6 +172,7 @@ async def topology(request: Request):
             "port_fail_count": port_fail_count,
             "initial_site": filter_label,
             "site_filter_active": bool(initial_site),
+            "site_names": site_names,
             "device_cap_hit": capped,
             "device_cap": _DEVICE_CAP,
         },

@@ -12,11 +12,26 @@
     </p>
 </div>
 
-<form method="get" class="mb-4 max-w-md flex flex-wrap gap-2 items-center">
-    {% if per_page %}<input type="hidden" name="per_page" value="{{ per_page }}">{% endif %}
+<form method="get" class="mb-4 max-w-xl flex flex-wrap gap-2 items-center">
     <input name="q" value="{{ q }}" type="search" placeholder="Search SSID, security, VLAN…"
-           class="input flex-1" aria-label="Search WLANs">
+           class="input flex-1 min-w-[200px]" aria-label="Search WLANs">
+    <div class="flex items-center gap-1.5">
+        <span class="text-xs text-slate-500 whitespace-nowrap">Rows</span>
+        <select class="select text-xs" style="width:auto;padding:5px 8px;" aria-label="Rows per page"
+                onchange="var u = new URL(window.location); u.searchParams.set('per_page', this.value); u.searchParams.delete('page'); window.location = u;">
+            {% for n in [25, 50, 100, 200] %}
+            {% if per_page and per_page not in [25, 50, 100, 200] and loop.first %}<option value="{{ per_page }}" selected>{{ per_page }}</option>{% endif %}
+            <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}</option>
+            {% endfor %}
+        </select>
+    </div>
 </form>
+
+{% if q %}
+<p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} match{{ 'es' if total != 1 else '' }} for &ldquo;{{ q }}&rdquo;{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
+{% elif total_pages and total_pages > 1 %}
+<p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">{{ total }} WLANs &mdash; page {{ page }} of {{ total_pages }}.</p>
+{% endif %}
 
 {% if error %}
 <div class="card mb-4 border-amber-500/30 bg-amber-500/5">
@@ -58,14 +73,14 @@
     <span class="text-xs text-slate-500">Page {{ page }} of {{ total_pages }} &middot; {{ total }} total</span>
     <div class="flex gap-1 items-center">
         {% if has_prev %}
-        <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;">&lsaquo; Prev</a>
+        <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Previous page">&lsaquo; Prev</a>
         {% else %}
-        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;">&lsaquo; Prev</button>
+        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Previous page">&lsaquo; Prev</button>
         {% endif %}
         {% if has_next %}
-        <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;">Next &rsaquo;</a>
+        <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Next page">Next &rsaquo;</a>
         {% else %}
-        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;">Next &rsaquo;</button>
+        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Next page">Next &rsaquo;</button>
         {% endif %}
     </div>
 </nav>
