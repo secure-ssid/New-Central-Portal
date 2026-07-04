@@ -95,17 +95,19 @@ def search_sites(query: str, raw_sites: list) -> list[dict]:
     for s in raw_sites:
         if not isinstance(s, dict):
             continue
+        site_id = s.get("site_id") or s.get("id") or s.get("siteId") or ""
         name = s.get("site_name") or s.get("siteName") or s.get("name") or ""
         city = s.get("city") or ""
         state = s.get("state") or ""
         address = s.get("address") or ""
         if not _matches(query, name, city, state, address):
             continue
+        url = f"/sites/{site_id}" if site_id else "/sites/"
         out.append({
             "type": "site",
             "label": name or "Unnamed site",
             "sublabel": " · ".join(p for p in (city, state) if p) or address,
-            "url": "/sites/",
+            "url": url,
             "status": "",
         })
         if len(out) >= PER_TYPE_CAP:

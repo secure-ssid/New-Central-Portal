@@ -10,7 +10,6 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
 import security
@@ -20,6 +19,10 @@ from routes import assistant as assistant_routes
 from routes import auth as auth_routes
 from routes import notifications as notifications_routes
 from routes import search as search_routes
+from routes import status as status_routes
+from routes import alerts as alerts_routes
+from routes import wlans as wlans_routes
+from routes import platform as platform_routes
 
 # Logging: configure once, but don't stomp on uvicorn's handlers if present.
 if not logging.getLogger().handlers:
@@ -119,7 +122,7 @@ app = FastAPI(title="New Central Portal", lifespan=lifespan)
 # session cookie + Origin/Referer same-host check on unsafe methods — no
 # per-form tokens needed, so existing templates/HTMX markup stay untouched.
 
-AUTH_EXEMPT_PATHS = {"/login", "/health", "/healthz", "/favicon.ico", "/auth/whoami"}
+AUTH_EXEMPT_PATHS = {"/login", "/health", "/healthz", "/api/status", "/favicon.ico", "/auth/whoami"}
 AUTH_EXEMPT_PREFIXES = ("/static/",)
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # Noisy endpoints excluded from the audit log (bell polling / chat traffic).
@@ -191,7 +194,7 @@ from errors import register_error_handlers  # noqa: E402
 register_error_handlers(app)
 
 # Make templates available to routes
-templates = Jinja2Templates(directory="templates")
+from templates_shared import templates
 
 # Wire up the main sections
 app.include_router(auth_routes.router, tags=["auth"])
@@ -204,6 +207,10 @@ app.include_router(topology.router, prefix="/topology", tags=["topology"])
 app.include_router(notifications_routes.router, prefix="/notifications", tags=["notifications"])
 app.include_router(search_routes.router, prefix="/search", tags=["search"])
 app.include_router(assistant_routes.router, prefix="/assistant", tags=["assistant"])
+app.include_router(status_routes.router, tags=["status"])
+app.include_router(alerts_routes.router, prefix="/alerts", tags=["alerts"])
+app.include_router(wlans_routes.router, prefix="/wlans", tags=["wlans"])
+app.include_router(platform_routes.router, prefix="/platform", tags=["platform"])
 
 
 @app.get("/health")
