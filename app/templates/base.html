@@ -544,10 +544,14 @@
             </div>
 
             <!-- Footer hints -->
-            <div class="flex items-center gap-4 px-4 py-2 border-t border-surface-700 text-[11px] text-slate-500">
+            <div class="flex items-center justify-between gap-4 px-4 py-2 border-t border-surface-700 text-[11px] text-slate-500">
+                <div class="flex items-center gap-4">
                 <span class="flex items-center gap-1.5"><kbd class="kbd-hint" aria-hidden="true">&uarr;&darr;</kbd> navigate</span>
                 <span class="flex items-center gap-1.5"><kbd class="kbd-hint" aria-hidden="true">&crarr;</kbd> open</span>
                 <span class="flex items-center gap-1.5"><kbd class="kbd-hint" aria-hidden="true">esc</kbd> close</span>
+                </div>
+                <span x-show="searched && totalMatched > 0" class="text-slate-600 whitespace-nowrap"
+                      x-text="hasMore ? (totalMatched + ' matches — open a view-all row for more') : (totalMatched + ' match' + (totalMatched === 1 ? '' : 'es'))"></span>
             </div>
         </div>
     </div>
@@ -907,6 +911,8 @@
         sel: 0,
         loading: false,
         searched: false,
+        totalMatched: 0,
+        hasMore: false,
         _seq: 0,
         _prevFocus: null,
 
@@ -916,6 +922,8 @@
           this.open = true;
           this.results = filterQuickActions('');
           this.searched = false;
+          this.totalMatched = 0;
+          this.hasMore = false;
           this.$nextTick(() => { if (this.$refs.input) this.$refs.input.focus(); });
         },
         close: function () {
@@ -997,6 +1005,8 @@
             .then((data) => {
               if (seq !== this._seq) return;
               var api = (data && data.results) || [];
+              this.totalMatched = (data && data.total_matched) || api.length;
+              this.hasMore = !!(data && data.has_more);
               this.results = api.concat(filterQuickActions(query).slice(0, 3));
               this.sel = 0;
               this.searched = true;
@@ -1005,6 +1015,8 @@
             .catch(() => {
               if (seq !== this._seq) return;
               this.results = filterQuickActions(query);
+              this.totalMatched = 0;
+              this.hasMore = false;
               this.searched = true;
               this.loading = false;
             });
