@@ -352,10 +352,16 @@
         {% if roam_events %}
         <div class="space-y-2">
             {% for ev in roam_events[:20] %}
-            <div class="text-xs text-slate-400 border-b border-surface-700/50 pb-2">
-                <span class="text-slate-300">{{ ev.get('apName') or ev.get('deviceName') or ev.get('from') or 'Event' }}</span>
+            <div class="flex items-center justify-between gap-3 text-xs border-b border-surface-700/50 pb-2">
+                <span class="text-slate-300">
+                    {% set ap_serial = ev.get('serialNumber') or ev.get('deviceSerial') or ev.get('serial') %}
+                    {% set ap_name = ev.get('apName') or ev.get('deviceName') or ev.get('from') or 'Event' %}
+                    {% if ap_serial %}
+                    <a href="/devices/{{ ap_serial }}" class="text-brand-400 hover:text-brand-300">{{ ap_name }}</a>
+                    {% else %}{{ ap_name }}{% endif %}
+                </span>
                 {% if ev.get('timeAt') or ev.get('timestamp') %}
-                <span class="text-slate-600 ml-2">{{ (ev.get('timeAt') or ev.get('timestamp'))[:19] }}</span>
+                <span class="text-slate-600 flex-shrink-0">{{ (ev.get('timeAt') or ev.get('timestamp'))[:19].replace('T',' ') }}</span>
                 {% endif %}
             </div>
             {% endfor %}
