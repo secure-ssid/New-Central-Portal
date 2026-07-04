@@ -299,13 +299,13 @@
             </a>
         </nav>
 
-        <div class="px-3 py-2 border-t border-surface-700" x-data="portalStatus()" x-init="refresh()">
+        <div class="px-3 py-2 border-t border-surface-700" x-data x-init="$store.portal.startPolling()">
             <div class="flex items-center gap-1.5 mb-1.5">
                 <div class="flex items-center gap-2 min-w-0 flex-1 pl-1.5">
                     <span class="conn-dot flex-shrink-0"
-                          :class="pillClass"
+                          :class="$store.portal.pillClass"
                           aria-hidden="true"></span>
-                    <span class="conn-pill truncate" x-text="pillLabel" :title="status.label || ''"></span>
+                    <span class="conn-pill truncate" x-text="$store.portal.pillLabel" :title="$store.portal.status.label || ''"></span>
                 </div>
                 <button type="button" data-notif-bell
                         @click="sidebarOpen = false; window.dispatchEvent(new CustomEvent('toggle-notifications'))"
@@ -365,12 +365,12 @@
 
         <!-- Main -->
         <main class="flex-1 overflow-y-auto">
-            <div x-data="portalStatus()" x-init="refresh()" x-show="status.label && status.severity !== 'ok'" x-cloak
+            <div x-show="$store.portal.status.label && $store.portal.status.severity !== 'ok'" x-cloak
                  class="status-banner"
-                 :class="status.severity === 'warn' ? 'status-banner-warn' : (status.severity === 'ok' ? 'status-banner-ok' : 'status-banner-error')"
+                 :class="$store.portal.status.severity === 'warn' ? 'status-banner-warn' : ($store.portal.status.severity === 'ok' ? 'status-banner-ok' : 'status-banner-error')"
                  role="status">
                 <svg aria-hidden="true" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                <span x-text="status.label"></span>
+                <span x-text="$store.portal.status.label"></span>
             </div>
             <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
                 {% block content %}{% endblock %}
@@ -749,40 +749,37 @@
 <script>
   document.addEventListener('alpine:init', function () {
 
-    /* ── Portal connectivity status (banner + sidebar pill) ─────────── */
-    Alpine.data('portalStatus', function () {
-      return {
-        status: { mode: 'live', label: '', severity: 'ok', central: 'connected', db: 'ok' },
-        _timer: null,
-        get pillClass() {
-          if (this.status.central === 'connected' && this.status.db === 'ok') return 'conn-dot-ok';
-          if (this.status.central === 'unavailable') return 'conn-dot-warn';
-          return 'conn-dot-error';
-        },
-        get pillLabel() {
-          if (this.status.central === 'connected' && this.status.db === 'ok') return 'Central · Live';
-          if (this.status.central === 'unavailable') return 'Demo data';
-          if (this.status.db !== 'ok') return 'Partial';
-          return 'Degraded';
-        },
-        refresh: function () {
-          var self = this;
-          fetch('/api/status', { headers: { 'Accept': 'application/json' } })
-            .then(function (r) { return r.ok ? r.json() : {}; })
-            .then(function (data) { if (data && data.label) self.status = data; })
-            .catch(function () {});
-        },
-        init: function () {
-          var self = this;
-          this.refresh();
-          this._timer = setInterval(function () {
-            if (document.visibilityState === 'visible') self.refresh();
-          }, 60000);
-        },
-        destroy: function () {
-          if (this._timer) clearInterval(this._timer);
-        }
-      };
+    /* ── Portal connectivity status (shared Alpine store — single poll) ── */
+    Alpine.store('portal', {
+      status: { mode: 'live', label: '', severity: 'ok', central: 'connected', db: 'ok', data_mode: 'live' },
+      _timer: null,
+      _started: false,
+      get pillClass() {
+        if (this.status.central === 'connected' && this.status.db === 'ok' && this.status.data_mode === 'live') return 'conn-dot-ok';
+        if (this.status.central === 'unavailable' || this.status.data_mode === 'mock') return 'conn-dot-warn';
+        return 'conn-dot-error';
+      },
+      get pillLabel() {
+        if (this.status.central === 'connected' && this.status.db === 'ok' && this.status.data_mode === 'live') return 'Central · Live';
+        if (this.status.data_mode === 'mock' || this.status.central === 'unavailable') return 'Demo data';
+        if (this.status.db !== 'ok') return 'Partial';
+        return 'Degraded';
+      },
+      refresh: function () {
+        var self = this;
+        fetch('/api/status', { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : {}; })
+          .then(function (data) { if (data && data.label !== undefined) self.status = data; })
+          .catch(function () {});
+      },
+      startPolling: function () {
+        if (this._started) return;
+        this._started = true;
+        this.refresh();
+        this._timer = setInterval(function () {
+          if (document.visibilityState === 'visible') Alpine.store('portal').refresh();
+        }, 60000);
+      }
     });
 
     /* ── Command palette ───────────────────────────────────────────── */

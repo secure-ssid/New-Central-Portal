@@ -332,11 +332,14 @@ def _render_live_fragment(request: Request, context: dict) -> HTMLResponse:
 # ── Route ─────────────────────────────────────────────────────────────────────
 
 @router.get("/")
-async def home(request: Request, partial: int = 0):
+async def home(request: Request, partial: int = 0, lite: int = 0):
     """Dashboard / home page with quick stats.
 
     `?partial=1` returns only the `dashboard_live` fragment (no layout) —
     the page polls it via HTMX every 30s while the tab is visible.
+
+    `?partial=1&lite=1` skips expensive widgets (events, anomalies, site
+    health cards, offline health probes, tenant health) on partial refresh.
     """
     devices, clients = await asyncio.gather(
         aruba.get_devices(),
@@ -421,12 +424,14 @@ async def home(request: Request, partial: int = 0):
          "pct": f"{(wired_clients / client_total * 100) if client_total else 0:.1f}"},
     ]
 
-    events = await _recent_events(devices)
+    is_lite = bool(partial and lite)
+
+    events = [] if is_lite else await _recent_events(devices)
     alert_summary = await _alert_summary()
-    health_notes = await _offline_health_notes(devices)
-    tenant_health = await _tenant_health()
-    anomalies = await _anomaly_widgets(devices)
-    site_health_cards = await _site_health_cards()
+    health_notes = [] if is_lite else await _offline_health_notes(devices)
+    tenant_health = None if is_lite else await _tenant_health()
+    anomalies = [] if is_lite else await _anomaly_widgets(devices)
+    site_health_cards = [] if is_lite else await _site_health_cards()
 
     updated = datetime.now(timezone.utc).strftime("%I:%M %p UTC")
 
@@ -445,6 +450,7 @@ async def home(request: Request, partial: int = 0):
         "anomalies": anomalies,
         "site_health_cards": site_health_cards,
         "is_partial": bool(partial),
+        "is_lite": is_lite,
     }
 
     if partial:
