@@ -15,6 +15,11 @@
             Port data unavailable for {{ port_fail_count }} switch{{ 'es' if port_fail_count != 1 else '' }}
         </span>
         {% endif %}
+        {% if device_cap_hit %}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
+            Showing first {{ device_cap }} devices
+        </span>
+        {% endif %}
         <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:#10141f;color:#94a3b8;border:1px solid #1e2535;">
             {{ device_count }} device{{ 's' if device_count != 1 else '' }}
         </span>
@@ -376,7 +381,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
             '<div class="topo-tip-name">' + esc(n.label) + '</div>' +
             (n.model ? '<div class="topo-tip-row">' + esc(n.model) + '</div>' : '') +
             (n.ip ? '<div class="topo-tip-row topo-tip-mono">IP: ' + esc(n.ip) + '</div>' : '') +
-            (n.site ? '<div class="topo-tip-row">Site: ' + esc(n.site) + '</div>' : '') +
+            (n.site ? '<div class="topo-tip-row">Site: ' + (n.site_url ? '<a href="' + esc(n.site_url) + '" style="color:#fb923c;text-decoration:none;">' + esc(n.site) + '</a>' : esc(n.site)) + '</div>' : '') +
             '<div class="topo-tip-status" style="color:' + sc + '">' +
             '<span class="topo-tip-dot" style="background:' + sc + '"></span>' +
             esc((n.status || 'unknown').toUpperCase()) + '</div></div>';

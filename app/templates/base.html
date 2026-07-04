@@ -983,6 +983,13 @@
             this.sel = 0;
             return;
           }
+          if (query.length < 2) {
+            this.results = filterQuickActions(query);
+            this.searched = false;
+            this.loading = false;
+            this.sel = 0;
+            return;
+          }
           var seq = ++this._seq;
           this.loading = true;
           fetch('/search/api?q=' + encodeURIComponent(query))

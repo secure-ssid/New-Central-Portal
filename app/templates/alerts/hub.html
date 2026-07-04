@@ -22,27 +22,33 @@
 </div>
 
 <div id="alerts-live"
-     hx-get="/alerts/?partial=1{% if severity_filter %}&severity={{ severity_filter }}{% endif %}"
+     hx-get="/alerts/?partial=1{% if severity_filter %}&severity={{ severity_filter }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}"
      hx-trigger="every 60s [document.visibilityState=='visible']"
      hx-swap="innerHTML">
 {% block alerts_live %}
 
+<form method="get" class="mb-4 max-w-md flex flex-wrap gap-2 items-center">
+    {% if severity_filter %}<input type="hidden" name="severity" value="{{ severity_filter }}">{% endif %}
+    <input name="q" value="{{ q }}" type="search" placeholder="Search alerts by title, device, site…"
+           class="input flex-1" aria-label="Search alerts">
+</form>
+
 <!-- Severity filter tabs (inside live region so counts refresh) -->
 <div class="tabs mb-4 overflow-x-auto">
-    <a href="/alerts/" class="tab-btn no-underline {% if not severity_filter %}active{% endif %}"
+    <a href="/alerts/{% if q %}?q={{ q | urlencode }}{% endif %}" class="tab-btn no-underline {% if not severity_filter %}active{% endif %}"
        style="{% if not severity_filter %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
         Central <span class="tab-count" style="background:#232b3b;color:#94a3b8;">{{ summary.total }}</span>
     </a>
     <div class="tab-sep"></div>
-    <a href="/alerts/?severity=critical" class="tab-btn no-underline {% if severity_filter == 'critical' %}active{% endif %}"
+    <a href="/alerts/?severity=critical{% if q %}&q={{ q | urlencode }}{% endif %}" class="tab-btn no-underline {% if severity_filter == 'critical' %}active{% endif %}"
        style="{% if severity_filter == 'critical' %}color:#f87171;box-shadow:inset 0 -2px 0 #f87171;{% endif %}">
         Critical <span class="tab-count" style="background:rgba(239,68,68,.15);color:#f87171;">{{ summary.critical }}</span>
     </a>
-    <a href="/alerts/?severity=major" class="tab-btn no-underline {% if severity_filter == 'major' %}active{% endif %}"
+    <a href="/alerts/?severity=major{% if q %}&q={{ q | urlencode }}{% endif %}" class="tab-btn no-underline {% if severity_filter == 'major' %}active{% endif %}"
        style="{% if severity_filter == 'major' %}color:#fbbf24;box-shadow:inset 0 -2px 0 #fbbf24;{% endif %}">
         Major <span class="tab-count" style="background:rgba(251,191,36,.12);color:#fbbf24;">{{ summary.major }}</span>
     </a>
-    <a href="/alerts/?severity=minor" class="tab-btn no-underline {% if severity_filter == 'minor' %}active{% endif %}"
+    <a href="/alerts/?severity=minor{% if q %}&q={{ q | urlencode }}{% endif %}" class="tab-btn no-underline {% if severity_filter == 'minor' %}active{% endif %}"
        style="{% if severity_filter == 'minor' %}color:#94a3b8;box-shadow:inset 0 -2px 0 #94a3b8;{% endif %}">
         Minor <span class="tab-count">{{ summary.minor }}</span>
     </a>
@@ -89,7 +95,7 @@
                 </thead>
                 <tbody>
                     {% for a in central_alerts %}
-                    <tr class="tbl-row">
+                    <tr class="tbl-row"{% if a.device_serial %} onclick="window.location='/devices/{{ a.device_serial }}'" style="cursor:pointer;"{% endif %}>
                         <td>
                             <span class="text-xs font-semibold uppercase
                                 {% if a.severity == 'critical' %}text-red-400
@@ -106,7 +112,7 @@
                             {% if a.device_serial %}
                             <a href="/devices/{{ a.device_serial }}" class="text-brand-400 hover:text-brand-300">{{ a.device or a.device_serial }}</a>
                             {% elif a.device %}{{ a.device }}{% endif %}
-                            {% if a.site %}{% if a.device or a.device_serial %} · {% endif %}{{ a.site }}{% endif %}
+                            {% if a.site %}{% if a.device or a.device_serial %} · {% endif %}<a href="/devices/?site={{ a.site | urlencode }}" class="text-brand-400 hover:text-brand-300" onclick="event.stopPropagation();">{{ a.site }}</a>{% endif %}
                             {% if not a.device and not a.device_serial and not a.site %}—{% endif %}
                         </td>
                     </tr>

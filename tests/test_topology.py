@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-NODE_KEYS = {"id", "label", "group", "model", "status", "ip", "site", "url"}
+NODE_KEYS = {"id", "label", "group", "model", "status", "ip", "site", "site_id", "site_url", "url"}
 EDGE_KEYS = {"id", "source", "target", "port", "speed"}
 
 
@@ -41,6 +41,11 @@ class TestNodes:
         assert groups["SW1SERIAL"] == "switch"
         assert groups["AP1SERIAL"] == "ap"
         assert groups["GW1SERIAL"] == "gateway"
+
+    def test_hq_node_has_site_url(self, graph):
+        hq_nodes = [n for n in graph["nodes"] if n.get("site") == "HQ"]
+        assert hq_nodes
+        assert hq_nodes[0].get("site_url") == "/sites/101"
 
     def test_offline_devices_kept_with_status(self, graph):
         by_id = {n["id"]: n for n in graph["nodes"]}
