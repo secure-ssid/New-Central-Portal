@@ -5,7 +5,6 @@
 <script>
 document.addEventListener('alpine:init', () => {
     Alpine.data('devicesTable', () => ({
-        tab: 'all',
         sortCol: '',
         sortDir: 1,
         devices: [],
@@ -27,12 +26,8 @@ document.addEventListener('alpine:init', () => {
             if (this.sortCol !== col) return '⇅';
             return this.sortDir === 1 ? '↑' : '↓';
         },
-        get switchCount()  { return this.devices.filter(d => d.type === 'switch').length; },
-        get apCount()      { return this.devices.filter(d => d.type === 'access_point').length; },
-        get gwCount()      { return this.devices.filter(d => d.type === 'gateway').length; },
         get rows() {
             let r = this.devices;
-            if (this.tab !== 'all') r = r.filter(d => d.type === this.tab);
             if (this.sortCol) {
                 const col = this.sortCol, dir = this.sortDir;
                 r = [...r].sort((a, b) => {
@@ -113,6 +108,10 @@ document.addEventListener('alpine:init', () => {
 <script id="groups-json" type="application/json">{{ groups | tojson }}</script>
 <script id="sites-json" type="application/json">{{ sites | tojson }}</script>
 
+{% macro tab_href(qs) -%}
+?{{ qs }}
+{%- endmacro %}
+
 <div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
         <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Central</p>
@@ -174,6 +173,7 @@ document.addEventListener('alpine:init', () => {
             {% if per_page %}<input type="hidden" name="per_page" value="{{ per_page }}">{% endif %}
             {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
             {% if site_filter %}<input type="hidden" name="site" value="{{ site_filter }}">{% endif %}
+            {% if type_filter %}<input type="hidden" name="type" value="{{ type_filter }}">{% endif %}
             <svg aria-hidden="true" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" fill="none" stroke="#6b7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
             <input name="q" value="{{ q }}" type="search" placeholder="Search by name, serial, model, MAC, type, site, persona…"
                    aria-label="Search devices"
@@ -184,6 +184,7 @@ document.addEventListener('alpine:init', () => {
             {% if per_page %}<input type="hidden" name="per_page" value="{{ per_page }}">{% endif %}
             {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
             {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+            {% if type_filter %}<input type="hidden" name="type" value="{{ type_filter }}">{% endif %}
             <label for="site-filter" class="text-xs text-slate-500 whitespace-nowrap">Site</label>
             <select id="site-filter" name="site" class="select text-xs" style="width:auto;min-width:140px;" aria-label="Filter by site"
                     onchange="this.form.submit()">
@@ -198,6 +199,8 @@ document.addEventListener('alpine:init', () => {
 
     {% if q %}
     <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} match{{ 'es' if total != 1 else '' }} for &ldquo;{{ q }}&rdquo;{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
+    {% elif type_filter %}
+    <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} {{ type_filter | replace('_', ' ') }} device{{ 's' if total != 1 else '' }}{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
     {% elif site_filter %}
     <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">Showing {{ total }} device{{ 's' if total != 1 else '' }} at {{ site_filter }}{% if total_pages and total_pages > 1 %} &mdash; page {{ page }} of {{ total_pages }}{% endif %}.</p>
     {% elif status_filter %}
@@ -206,31 +209,27 @@ document.addEventListener('alpine:init', () => {
     <p class="text-[11px] text-slate-600 -mt-2 mb-3 px-0.5">{{ total }} devices &mdash; page {{ page }} of {{ total_pages }}.</p>
     {% endif %}
 
-    <!-- Tabs -->
+    <!-- Tabs (server-side type filter) -->
     <div class="tabs overflow-x-auto">
-        <button @click="tab='all'" class="tab-btn" style="padding-right:24px;"
-            :style="tab==='all' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
+        <a href="{{ tab_href(tab_qs_all) }}" class="tab-btn no-underline" style="padding-right:24px;{% if not type_filter %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
             All Devices
-            <span class="tab-count" :style="tab==='all' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="devices.length"></span>
-        </button>
+            <span class="tab-count" style="{% if not type_filter %}background:rgba(249,115,22,.18);color:#f97316;{% else %}background:#232b3b;color:#94a3b8;{% endif %}">{{ fleet_total }}</span>
+        </a>
         <div class="tab-sep"></div>
-        <button @click="tab='switch'" class="tab-btn"
-            :style="tab==='switch' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
+        <a href="{{ tab_href(tab_qs_switch) }}" class="tab-btn no-underline" style="{% if type_filter == 'switch' %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
             Switches
-            <span class="tab-count" :style="tab==='switch' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="switchCount"></span>
-        </button>
+            <span class="tab-count" style="{% if type_filter == 'switch' %}background:rgba(249,115,22,.18);color:#f97316;{% else %}background:#232b3b;color:#94a3b8;{% endif %}">{{ switch_total }}</span>
+        </a>
         <div class="tab-sep"></div>
-        <button @click="tab='access_point'" class="tab-btn"
-            :style="tab==='access_point' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
+        <a href="{{ tab_href(tab_qs_ap) }}" class="tab-btn no-underline" style="{% if type_filter == 'access_point' %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
             Access Points
-            <span class="tab-count" :style="tab==='access_point' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="apCount"></span>
-        </button>
+            <span class="tab-count" style="{% if type_filter == 'access_point' %}background:rgba(249,115,22,.18);color:#f97316;{% else %}background:#232b3b;color:#94a3b8;{% endif %}">{{ ap_total }}</span>
+        </a>
         <div class="tab-sep"></div>
-        <button @click="tab='gateway'" class="tab-btn"
-            :style="tab==='gateway' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
+        <a href="{{ tab_href(tab_qs_gateway) }}" class="tab-btn no-underline" style="{% if type_filter == 'gateway' %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
             Gateways
-            <span class="tab-count" :style="tab==='gateway' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'" x-text="gwCount"></span>
-        </button>
+            <span class="tab-count" style="{% if type_filter == 'gateway' %}background:rgba(249,115,22,.18);color:#f97316;{% else %}background:#232b3b;color:#94a3b8;{% endif %}">{{ gw_total }}</span>
+        </a>
     </div>
 
     <!-- Table -->

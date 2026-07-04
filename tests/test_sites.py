@@ -37,3 +37,9 @@ def test_site_list_search(client, mock_central, stub_db):
     assert r.status_code == 200
     assert "Branch" in r.text
     assert "HQ" not in r.text
+
+
+def test_site_list_pagination_metadata(client, mock_central, stub_db):
+    r = client.get("/sites/?per_page=1")
+    assert r.status_code == 200
+    assert "Page 1 of 2" in r.text

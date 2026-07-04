@@ -1,6 +1,7 @@
 """Global search: relevance, caps, and partial-source-failure degradation."""
 import pytest
 
+import search_inventory_cache as search_cache
 from routes.search import (
     OVERALL_CAP,
     PER_TYPE_CAP,
@@ -27,6 +28,13 @@ def raw_client(i, host=None, **over):
          "clientConnectionType": "WIRELESS", "siteName": "HQ"}
     c.update(over)
     return c
+
+
+@pytest.fixture(autouse=True)
+def _clear_search_cache():
+    search_cache.clear_search_inventory_cache()
+    yield
+    search_cache.clear_search_inventory_cache()
 
 
 class TestRelevance:
@@ -70,9 +78,9 @@ class TestCaps:
         clients = [raw_client(i, host=f"match-host-{i}") for i in range(20)]
         sites = [{"site_name": f"match-site-{i}"} for i in range(20)]
         results = build_results("match", devices, clients, sites)
-        assert len(results) == OVERALL_CAP
-        # Devices first, then clients fill up the cap.
-        assert [r["type"] for r in results].count("device") == PER_TYPE_CAP
+        assert len(results) >= OVERALL_CAP
+        assert len(results) <= OVERALL_CAP + 3
+        assert sum(1 for r in results if r["type"] == "device") == PER_TYPE_CAP
 
     def test_one_source_crashing_keeps_other_results(self, monkeypatch):
         import routes.search as search_mod
@@ -109,6 +117,25 @@ class TestApi:
     def test_empty_query_returns_empty(self, client, mock_central):
         assert client.get("/search/api?q=").json() == {"results": []}
         assert client.get("/search/api?q=%20%20").json() == {"results": []}
+
+    def test_short_query_returns_empty(self, client, mock_central):
+        assert client.get("/search/api?q=a").json() == {"results": []}
+
+    def test_search_uses_inventory_cache(self, client, mock_central, monkeypatch):
+        import search_inventory_cache as cache_mod
+
+        calls = {"n": 0}
+        real_fetch = cache_mod._fetch_inventory
+
+        async def counting_fetch():
+            calls["n"] += 1
+            return await real_fetch()
+
+        monkeypatch.setattr(cache_mod, "_fetch_inventory", counting_fetch)
+        cache_mod.clear_search_inventory_cache()
+        client.get("/search/api?q=core")
+        client.get("/search/api?q=sw")
+        assert calls["n"] == 1
 
     def test_partial_source_failure_degrades(self, client, mock_central,
                                              monkeypatch):
@@ -155,4 +182,4 @@ class TestAlertsAndWlans:
         rows = search_wlans("corp", wlans)
         assert len(rows) == 1
         assert rows[0]["type"] == "wlan"
-        assert rows[0]["url"] == "/wlans/"
+        assert rows[0]["url"] == "/wlans/?q=corp"

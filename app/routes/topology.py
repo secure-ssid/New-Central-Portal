@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request
+import asyncio
 import json
 import logging
 
@@ -9,6 +10,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_DEVICE_CAP = 200
+
+
+def _site_name_map(raw_sites: list) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for s in raw_sites:
+        if not isinstance(s, dict):
+            continue
+        site_id = s.get("site_id") or s.get("id") or s.get("siteId") or ""
+        name = s.get("site_name") or s.get("siteName") or s.get("name") or ""
+        if name and site_id:
+            mapping[name.lower()] = str(site_id)
+    return mapping
+
 
 @router.get("/")
 async def topology(request: Request):
@@ -18,14 +33,26 @@ async def topology(request: Request):
 
     get_switch_ports = None
     find_device_uplink = None
+    raw_devices = []
+    site_map: dict[str, str] = {}
     try:
         from vendors.central_bridge import (
             find_device_uplink as _uplink,
+            get_central_sites,
             get_devices,
             get_switch_ports,
         )
         find_device_uplink = _uplink
-        raw_devices = await get_devices(limit=200)
+        raw_devices, raw_sites = await asyncio.gather(
+            get_devices(limit=_DEVICE_CAP),
+            get_central_sites(),
+            return_exceptions=True,
+        )
+        if isinstance(raw_devices, Exception):
+            raise raw_devices
+        if isinstance(raw_sites, Exception):
+            raw_sites = []
+        site_map = _site_name_map(raw_sites if isinstance(raw_sites, list) else [])
     except Exception:
         logger.warning("central_bridge unavailable for topology, using fallback devices")
         get_switch_ports = None
@@ -34,6 +61,7 @@ async def topology(request: Request):
 
     devices = [_norm_device(d) for d in raw_devices]
     devices = [d for d in devices if d.get("serial")]
+    capped = len(devices) >= _DEVICE_CAP
 
     group_map = {
         "switch": "switch",
@@ -43,6 +71,11 @@ async def topology(request: Request):
 
     nodes = []
     for d in devices:
+        site_name = d.get("site") or ""
+        site_id = site_map.get(site_name.lower()) or d.get("site_id") or ""
+        site_url = f"/sites/{site_id}" if site_id else (
+            f"/devices/?site={site_name}" if site_name else ""
+        )
         nodes.append({
             "id": d["serial"],
             "label": d["name"] or d["serial"],
@@ -50,7 +83,9 @@ async def topology(request: Request):
             "model": d["model"],
             "status": d["status"],
             "ip": d["ip"],
-            "site": d["site"],
+            "site": site_name,
+            "site_id": str(site_id) if site_id else "",
+            "site_url": site_url,
             "url": f"/devices/{d['serial']}",
         })
     node_ids = {n["id"] for n in nodes}
@@ -89,5 +124,7 @@ async def topology(request: Request):
             "offline_count": len(nodes) - online_count,
             "port_fail_count": port_fail_count,
             "initial_site": initial_site,
+            "device_cap_hit": capped,
+            "device_cap": _DEVICE_CAP,
         },
     )

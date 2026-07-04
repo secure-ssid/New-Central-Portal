@@ -3,7 +3,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
-from pagination import filter_items
+from pagination import filter_items, paginate as _paginate
 from vendors.aruba_central import aruba
 
 from templates_shared import templates
@@ -59,10 +59,22 @@ async def list_sites(request: Request):
     sites = await _load_sites()
     q = request.query_params.get("q", "").strip()
     sites = filter_items(sites, q, "name", "city", "state", "address")
+    pg = _paginate(request, sites)
     return templates.TemplateResponse(
         request,
         "sites/list.html",
-        {"sites": sites, "q": q, "active": "sites"},
+        {
+            "sites": pg["items"],
+            "q": q,
+            "active": "sites",
+            "page": pg["page"],
+            "per_page": pg["per_page"],
+            "total": pg["total"],
+            "total_pages": pg["total_pages"],
+            "has_prev": pg["has_prev"],
+            "has_next": pg["has_next"],
+            "base_qs": pg["base_qs"],
+        },
     )
 
 

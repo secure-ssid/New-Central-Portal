@@ -5,8 +5,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-import db
+from pagination import filter_items
 
+import db
 from templates_shared import templates
 
 router = APIRouter()
@@ -99,7 +100,7 @@ def _normalize_portal_alert(raw: dict) -> dict:
     }
 
 
-async def _load_alerts_context(severity_filter: str | None = None) -> dict:
+async def _load_alerts_context(severity_filter: str | None = None, q: str = "") -> dict:
     central_alerts: list[dict] = []
     portal_history: list[dict] = []
     summary = {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
@@ -115,10 +116,12 @@ async def _load_alerts_context(severity_filter: str | None = None) -> dict:
                 summary[sev] += 1
             else:
                 summary["other"] += 1
+        filtered = all_central
         if severity_filter:
-            central_alerts = [a for a in all_central if a.get("severity") == severity_filter]
-        else:
-            central_alerts = all_central
+            filtered = [a for a in filtered if a.get("severity") == severity_filter]
+        if q:
+            filtered = filter_items(filtered, q, "title", "body", "device", "device_serial", "site")
+        central_alerts = filtered
     except Exception as exc:
         logger.warning("Central alerts unavailable: %s", exc)
 
@@ -128,6 +131,8 @@ async def _load_alerts_context(severity_filter: str | None = None) -> dict:
             for h in db.get_notification_history(limit=50)
             if isinstance(h, dict)
         ]
+        if q:
+            portal_history = filter_items(portal_history, q, "title", "body", "device", "device_serial")
     except Exception as exc:
         logger.warning("Portal notification history unavailable: %s", exc)
 
@@ -143,6 +148,7 @@ async def _load_alerts_context(severity_filter: str | None = None) -> dict:
         "timeline": timeline,
         "summary": summary,
         "severity_filter": severity_filter or "",
+        "q": q,
     }
 
 
@@ -154,12 +160,13 @@ def _render_alerts_fragment(request: Request, context: dict) -> HTMLResponse:
 
 
 @router.get("/")
-async def alerts_hub(request: Request, partial: int = 0, severity: str = ""):
+async def alerts_hub(request: Request, partial: int = 0, severity: str = "", q: str = ""):
     sev = severity.strip().lower() if severity else None
     if sev and sev not in ("critical", "major", "minor", "other"):
         sev = None
+    query = q.strip()
 
-    ctx = await _load_alerts_context(severity_filter=sev)
+    ctx = await _load_alerts_context(severity_filter=sev, q=query)
     ctx["active"] = "alerts"
     ctx["is_partial"] = bool(partial)
 

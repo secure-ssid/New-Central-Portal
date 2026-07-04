@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from pagination import filter_items, paginate as _paginate
+from urllib.parse import urlencode
 from vendors.aruba_central import aruba
 import asyncio
 import html
@@ -9,11 +10,22 @@ import json
 import logging
 import re
 
+from ops_format import format_ops_response
 from templates_shared import templates
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_VALID_DEVICE_TYPES = frozenset({"switch", "access_point", "gateway"})
+
+
+def _device_tab_qs(request: Request, type_value: str | None) -> str:
+    pairs = [(k, v) for k, v in request.query_params.multi_items() if k not in ("page", "type")]
+    if type_value:
+        pairs.append(("type", type_value))
+    return urlencode(pairs)
+
 
 def _wireless_cards(
     wireless_metrics: dict | None,
@@ -156,6 +168,7 @@ async def list_devices(request: Request):
     q = request.query_params.get("q", "").strip()
     status_filter = request.query_params.get("status", "").strip().lower()
     site_filter = request.query_params.get("site", "").strip()
+    type_filter = request.query_params.get("type", "").strip().lower()
     devices = filter_items(
         devices, q,
         "name", "serial", "model", "mac", "type", "site", "ip",
@@ -167,6 +180,12 @@ async def list_devices(request: Request):
     if site_filter:
         site_key = site_filter.lower()
         devices = [d for d in devices if (d.get("site") or "").lower() == site_key]
+    switch_total = sum(1 for d in devices if d.get("type") == "switch")
+    ap_total = sum(1 for d in devices if d.get("type") == "access_point")
+    gw_total = sum(1 for d in devices if d.get("type") == "gateway")
+    fleet_total = len(devices)
+    if type_filter in _VALID_DEVICE_TYPES:
+        devices = [d for d in devices if d.get("type") == type_filter]
     pg = _paginate(request, devices)
     return templates.TemplateResponse(
         request,
@@ -179,6 +198,15 @@ async def list_devices(request: Request):
             "status_filter": status_filter,
             "site_filter": site_filter,
             "site_names": site_names,
+            "type_filter": type_filter,
+            "fleet_total": fleet_total,
+            "switch_total": switch_total,
+            "ap_total": ap_total,
+            "gw_total": gw_total,
+            "tab_qs_all": _device_tab_qs(request, None),
+            "tab_qs_switch": _device_tab_qs(request, "switch"),
+            "tab_qs_ap": _device_tab_qs(request, "access_point"),
+            "tab_qs_gateway": _device_tab_qs(request, "gateway"),
             "active": "devices",
             "page": pg["page"],
             "per_page": pg["per_page"],
@@ -506,9 +534,10 @@ async def device_lldp(request: Request, serial: str):
                         "<table class='tbl'><thead><tr><th>Local</th><th>Neighbor</th><th>Remote Port</th></tr></thead>"
                         f"<tbody>{''.join(rows)}</tbody></table>"
                     )
-            text = result.get("output") or result.get("raw") or str(result)
-            return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;white-space:pre-wrap;'>{html.escape(str(text))}</pre>")
-        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+            text = result.get("output") or result.get("raw") or ""
+            if text:
+                return format_ops_response({"output": text})
+        return format_ops_response(result)
     except Exception as e:
         logger.exception("LLDP failed for %s", serial)
         return _ops_error(f"Error: {e}")
@@ -544,7 +573,7 @@ async def device_port_errors(request: Request, serial: str, interface: str = For
                         "<table class='tbl'><thead><tr><th>Interface</th><th>Errors</th><th>Severity</th></tr></thead>"
                         f"<tbody>{''.join(rows)}</tbody></table>"
                     )
-        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+        return format_ops_response(result)
     except Exception as e:
         logger.exception("Port errors failed for %s", serial)
         return _ops_error(f"Error: {e}")
@@ -570,7 +599,7 @@ async def device_find_mac(request: Request, serial: str, mac_address: str = Form
                     f"<p style='color:#4ade80;font-size:.8rem;'>MAC <strong>{html.escape(mac)}</strong> "
                     f"found on port <strong>{html.escape(str(port))}</strong></p>"
                 )
-        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+        return format_ops_response(result)
     except Exception as e:
         logger.exception("find-mac failed for %s", serial)
         return _ops_error(f"Error: {e}")
@@ -612,7 +641,7 @@ async def device_mac_table(request: Request, serial: str, interface: str = Form(
                     + "<table class='tbl'><thead><tr><th>MAC</th><th>VLAN</th><th>Port</th><th>Type</th></tr></thead>"
                     f"<tbody>{''.join(rows)}</tbody></table>"
                 )
-        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+        return format_ops_response(result)
     except Exception as e:
         logger.exception("mac-table failed for %s", serial)
         return _ops_error(f"Error: {e}")

@@ -41,3 +41,19 @@ def test_alerts_severity_filter(client, mock_central, stub_db):
     r = client.get("/alerts/?severity=critical")
     assert r.status_code == 200
     assert "severity=critical" in r.text or "Critical" in r.text
+
+
+def test_alerts_search_filter(client, mock_central, stub_db, monkeypatch):
+    from vendors import central_bridge as cb
+
+    async def alerts(limit=100):
+        return [
+            {"alertName": "AP Down", "severity": "critical", "deviceName": "lobby-ap"},
+            {"alertName": "High CPU", "severity": "major", "deviceName": "core-sw"},
+        ]
+
+    monkeypatch.setattr(cb, "list_active_alerts", alerts)
+    r = client.get("/alerts/?q=cpu")
+    assert r.status_code == 200
+    assert "High CPU" in r.text
+    assert "AP Down" not in r.text
