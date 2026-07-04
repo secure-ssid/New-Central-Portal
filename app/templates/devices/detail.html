@@ -613,6 +613,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         showLldp: false,
         showPortErr: false,
         showFindMac: false,
+        showMacTable: false,
         pingDest: '',
         traceDest: '',
         findMac: '',
@@ -666,6 +667,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
                 <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">Find MAC</p>
                 <p class="text-[0.7rem] text-gray-500">Locate MAC on switch</p>
             </button>
+            <button @click="showMacTable=!showMacTable;showConfig=false;showPing=false"
+                class="p-3 bg-surface-700 border border-surface-600 rounded-lg text-left cursor-pointer hover:border-brand-500/50 transition-colors"
+                :class="showMacTable && 'border-brand-500/60'">
+                <p class="text-[0.8rem] font-semibold text-slate-100 mb-0.5">MAC Table</p>
+                <p class="text-[0.7rem] text-gray-500">CX MAC entries</p>
+            </button>
             {% endif %}
 
             <!-- Reboot -->
@@ -711,6 +718,16 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
                 <input x-model="findMac" name="mac_address" type="text" placeholder="AA:BB:CC:DD:EE:FF"
                     class="flex-1 px-2.5 py-1.5 bg-surface-950 border border-surface-700 rounded-md text-slate-200 text-[0.8rem] font-mono">
                 <button type="submit" class="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-md text-white text-[0.8rem] font-semibold">Find</button>
+            </form>
+        </div>
+
+        <!-- MAC table panel -->
+        <div x-show="showMacTable" x-cloak class="mb-3 px-4 py-3 rounded-lg border border-surface-700 bg-surface-900">
+            <p class="text-[11px] text-slate-500 mb-2">May take up to 60 seconds on large switches.</p>
+            <form hx-post="/devices/{{ device.serial }}/mac-table" hx-target="#ops-output" hx-indicator="#ops-spinner" class="flex gap-2">
+                <input x-model="portIface" name="interface" type="text" placeholder="Interface (optional)"
+                    class="flex-1 px-2.5 py-1.5 bg-surface-950 border border-surface-700 rounded-md text-slate-200 text-[0.8rem]">
+                <button type="submit" class="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-md text-white text-[0.8rem] font-semibold">Fetch</button>
             </form>
         </div>
 

@@ -177,6 +177,11 @@ def mock_central(monkeypatch):
     monkeypatch.setattr(cb, "list_glp_service_offers", _async_return([]))
     monkeypatch.setattr(cb, "detect_client_flapping", _async_return({}))
     monkeypatch.setattr(cb, "detect_ssh_brute_force", _async_return({}))
+    monkeypatch.setattr(cb, "get_cx_mac_table", _async_return({"entries": []}))
+    monkeypatch.setattr(cb, "get_lldp_neighbors", _async_return({"neighbors": []}))
+    monkeypatch.setattr(cb, "get_switch_port_errors", _async_return({"ports": []}))
+    monkeypatch.setattr(cb, "find_mac_on_switch", _async_return({}))
+    monkeypatch.setattr(cb, "run_traceroute", _async_return({"status": "ok", "output": {"results": []}}))
     monkeypatch.setattr(cb, "get_device_health", _async_return({"health": None, "errors": []}))
     monkeypatch.setattr(cb, "find_device_uplink", _async_return(
         {"switch_serial": "SW1SERIAL", "switch_name": "core-sw-1", "port": "1/1/1"}))

@@ -554,6 +554,48 @@ async def device_find_mac(request: Request, serial: str, mac_address: str = Form
         return _ops_error(f"Error: {e}")
 
 
+@router.post("/{serial}/mac-table")
+async def device_mac_table(request: Request, serial: str, interface: str = Form("")):
+    from vendors.central_bridge import get_cx_mac_table
+    device = await aruba.get_device(serial)
+    if not device:
+        return _ops_error("Device not found.")
+    if device.get("type") != "switch":
+        return _ops_error("MAC table is only available on switches.")
+    iface = (interface or "").strip() or None
+    try:
+        result = await get_cx_mac_table(serial, interface=iface)
+        entries = []
+        if isinstance(result, dict):
+            entries = result.get("entries") or result.get("macs") or result.get("items") or []
+            if not entries and isinstance(result.get("output"), dict):
+                entries = result["output"].get("results", [])
+        elif isinstance(result, list):
+            entries = result
+        if entries:
+            rows = []
+            for e in entries[:100]:
+                if not isinstance(e, dict):
+                    continue
+                rows.append(
+                    f"<tr><td class='font-mono text-xs'>{html.escape(str(e.get('mac') or e.get('macAddress') or ''))}</td>"
+                    f"<td>{html.escape(str(e.get('vlan') or e.get('vlanId') or ''))}</td>"
+                    f"<td>{html.escape(str(e.get('port') or e.get('interface') or e.get('name') or ''))}</td>"
+                    f"<td>{html.escape(str(e.get('type') or e.get('entryType') or ''))}</td></tr>"
+                )
+            if rows:
+                note = f"<p class='text-[11px] text-slate-600 mb-2'>Showing {len(rows)} entr{'y' if len(rows)==1 else 'ies'}</p>"
+                return HTMLResponse(
+                    note
+                    + "<table class='tbl'><thead><tr><th>MAC</th><th>VLAN</th><th>Port</th><th>Type</th></tr></thead>"
+                    f"<tbody>{''.join(rows)}</tbody></table>"
+                )
+        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+    except Exception as e:
+        logger.exception("mac-table failed for %s", serial)
+        return _ops_error(f"Error: {e}")
+
+
 # ── Device Management: group & site assignment ──────────────────────────────
 
 @router.post("/assign-group")
