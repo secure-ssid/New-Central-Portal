@@ -4,8 +4,9 @@ import logging
 from fastapi import APIRouter, Request, HTTPException
 from vendors.aruba_central import aruba
 
-router = APIRouter()
 from templates_shared import templates
+
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # ── Server-side pagination ────────────────────────────────────────────────────

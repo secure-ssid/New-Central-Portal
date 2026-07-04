@@ -7,8 +7,9 @@ from fastapi.responses import HTMLResponse
 
 from vendors.aruba_central import aruba
 
-router = APIRouter()
 from templates_shared import templates
+
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Recent-events feed tuning: cap the fan-out so the dashboard stays cheap

@@ -6,8 +6,9 @@ from fastapi import APIRouter, Request
 
 import db
 
-router = APIRouter()
 from templates_shared import templates
+
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 

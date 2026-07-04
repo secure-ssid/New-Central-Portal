@@ -9,11 +9,11 @@ from config import settings
 import db
 import security
 from routes import assistant as assistant_routes
+from templates_shared import templates
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-from templates_shared import templates
 
 
 @router.get("/")
