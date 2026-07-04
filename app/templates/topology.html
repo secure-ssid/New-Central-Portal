@@ -982,6 +982,14 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     filterState.sites = {};
     siteKeys.forEach(function (k) { filterState.sites[k] = true; });
 
+    // Deep-link: /topology/?site=HQ pre-selects one site filter.
+    var preSite = {{ initial_site | tojson }};
+    if (preSite) {
+        Object.keys(filterState.sites).forEach(function (k) {
+            filterState.sites[k] = (k === preSite);
+        });
+    }
+
     // Build site checkboxes with DOM APIs (site names are user-controlled).
     if (!siteKeys.length) {
         var none = document.createElement('div');
@@ -994,7 +1002,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         lab.className = 'topo-check';
         var cb = document.createElement('input');
         cb.type = 'checkbox';
-        cb.checked = true;
+        cb.checked = filterState.sites[k];
         cb.setAttribute('aria-label', 'Filter site ' + siteLabels[k]);
         cb.addEventListener('change', function () {
             filterState.sites[k] = cb.checked;
@@ -1007,6 +1015,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         lab.appendChild(txt);
         sitesBox.appendChild(lab);
     });
+    if (preSite) applyFilters();
 
     function filtersDirty() {
         if (filterState.status !== 'all') return true;

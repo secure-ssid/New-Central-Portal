@@ -20,22 +20,15 @@ A modern, self-hosted operations portal for HPE Aruba Networking Central. It put
 
 ## Screenshots
 
-Screenshots live in `docs/screenshots/`.
+UI screenshots are optional — add PNG captures under `docs/screenshots/` when you want README previews. Expected filenames:
 
-<!-- screenshot: dashboard -->
-![Dashboard — live stats, charts, and events feed](docs/screenshots/dashboard-desktop.png)
+- `dashboard-desktop.png` — dashboard with live stats and events feed
+- `device-detail-desktop.png` — device detail with 3D switch faceplate
+- `topology-desktop.png` — 3D topology view
+- `notifications-desktop.png` — notification settings
+- `assistant-palette-desktop.png` — AI assistant drawer and command palette
 
-<!-- screenshot: device-detail -->
-![Device detail — 3D switch faceplate and ops panel](docs/screenshots/device-detail-desktop.png)
-
-<!-- screenshot: topology -->
-![3D topology — filters, focus mode, PNG export](docs/screenshots/topology-desktop.png)
-
-<!-- screenshot: notifications -->
-![Notifications — alert rules, recipients, and reports](docs/screenshots/notifications-desktop.png)
-
-<!-- screenshot: assistant -->
-![AI assistant drawer and Ctrl+K command palette](docs/screenshots/assistant-palette-desktop.png)
+Until those files exist, the links below will 404 in GitHub's preview — that is expected.
 
 ## Architecture
 

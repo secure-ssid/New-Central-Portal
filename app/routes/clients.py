@@ -2,11 +2,10 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.templating import Jinja2Templates
 from vendors.aruba_central import aruba
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
+from templates_shared import templates
 logger = logging.getLogger(__name__)
 
 # ── Server-side pagination ────────────────────────────────────────────────────
@@ -131,9 +130,27 @@ async def client_detail(request: Request, mac: str):
     if not client:
         raise HTTPException(404, "Client not found")
 
+    client_details = None
+    locate = None
+    roaming = None
+    try:
+        from vendors.central_bridge import get_client_details, get_client_roaming_history, locate_client
+        client_details, locate, roaming = await asyncio.gather(
+            get_client_details(mac),
+            locate_client(mac),
+            get_client_roaming_history(mac, hours=24),
+            return_exceptions=True,
+        )
+        if isinstance(client_details, Exception):
+            client_details = None
+        if isinstance(locate, Exception):
+            locate = None
+        if isinstance(roaming, Exception):
+            roaming = None
+    except Exception as exc:
+        logger.debug("Extended client data unavailable for %s: %s", mac, exc)
+
     # For wireless clients, find the switch the AP uplinks through
-    # (concurrent + memoized via _resolve_uplinks; a failure just leaves
-    # the uplink hop unknown rather than breaking the page).
     uplink = None
     if client.get("type") == "wireless" and client.get("connected_device_serial"):
         ap_serial = client["connected_device_serial"]
@@ -143,5 +160,12 @@ async def client_detail(request: Request, mac: str):
     return templates.TemplateResponse(
         request,
         "clients/detail.html",
-        {"client": client, "uplink": uplink, "active": "clients"},
+        {
+            "client": client,
+            "uplink": uplink,
+            "client_details": client_details if isinstance(client_details, dict) else None,
+            "locate": locate if isinstance(locate, dict) else None,
+            "roaming": roaming if isinstance(roaming, dict) else None,
+            "active": "clients",
+        },
     )

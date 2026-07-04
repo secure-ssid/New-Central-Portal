@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Alerts - New Central Portal{% endblock %}
+{% block content %}
+
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
+    <div>
+        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Operations</p>
+        <h1 class="text-2xl font-semibold text-white tracking-tight">Alerts</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Active Central alerts and portal notification history</p>
+    </div>
+    <a href="/notifications/" class="btn-secondary text-xs">Alert settings &rarr;</a>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div class="stat-card">
+        <p class="section-label mb-1">Active</p>
+        <p class="text-2xl font-bold text-white">{{ summary.total }}</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Critical</p>
+        <p class="text-2xl font-bold text-red-400">{{ summary.critical }}</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Major</p>
+        <p class="text-2xl font-bold text-amber-400">{{ summary.major }}</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Minor</p>
+        <p class="text-2xl font-bold text-slate-400">{{ summary.minor }}</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <div class="card">
+        <h2 class="text-lg font-semibold text-white mb-4">Central Active Alerts</h2>
+        {% if central_alerts %}
+        <div class="overflow-x-auto">
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Alert</th>
+                        <th>Device / Site</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in central_alerts %}
+                    <tr class="tbl-row">
+                        <td>
+                            <span class="text-xs font-semibold uppercase
+                                {% if a.severity == 'critical' %}text-red-400
+                                {% elif a.severity == 'major' %}text-amber-400
+                                {% elif a.severity == 'minor' %}text-slate-400
+                                {% else %}text-slate-500{% endif %}">{{ a.severity }}</span>
+                        </td>
+                        <td>
+                            <p class="text-sm text-slate-200">{{ a.title }}</p>
+                            {% if a.body %}<p class="text-xs text-slate-500 mt-0.5 truncate max-w-xs">{{ a.body }}</p>{% endif %}
+                        </td>
+                        <td class="text-xs text-slate-500">{{ a.device or a.site or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding:32px;">
+            <p>No active Central alerts</p>
+            <p class="text-xs text-slate-600">Alerts from Aruba Central appear here when centralmcp is connected.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2 class="text-lg font-semibold text-white mb-4">Portal Notification History</h2>
+        {% if portal_history %}
+        <div class="space-y-2">
+            {% for n in portal_history %}
+            <div class="p-3 rounded-lg border border-surface-700 bg-surface-900/60">
+                <div class="flex items-baseline justify-between gap-2">
+                    <p class="text-sm font-medium text-slate-200">{{ n.title }}</p>
+                    <span class="text-[10px] text-slate-600 flex-shrink-0">{{ n.time[:19].replace('T',' ') if n.time else '' }}</span>
+                </div>
+                {% if n.body %}<p class="text-xs text-slate-500 mt-1">{{ n.body }}</p>{% endif %}
+                {% if n.device %}<p class="text-[10px] text-slate-600 mt-1 font-mono">{{ n.device }}</p>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding:32px;">
+            <p>No portal notifications yet</p>
+            <p class="text-xs text-slate-600">Configure rules under <a href="/notifications/" class="text-brand-400 hover:text-brand-500">Notifications</a>.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
