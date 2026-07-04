@@ -80,3 +80,22 @@ def test_alerts_search_form_outside_live_region(client, mock_central, stub_db):
     assert html.index('aria-label="Search alerts"') < html.index('id="alerts-live"')
     partial = client.get("/alerts/?partial=1").text
     assert 'aria-label="Search alerts"' not in partial
+
+
+def test_alerts_filter_helper_outside_live_region(client, mock_central, stub_db, monkeypatch):
+    from vendors import central_bridge as cb
+
+    async def alerts(limit=100):
+        return [
+            {"alertName": f"Alert {i}", "severity": "minor", "deviceName": f"dev-{i}"}
+            for i in range(5)
+        ]
+
+    monkeypatch.setattr(cb, "list_active_alerts", alerts)
+    html = client.get("/alerts/?per_page=2").text
+    helper_pos = html.find("5 alerts")
+    live_pos = html.index('id="alerts-live"')
+    assert helper_pos != -1
+    assert helper_pos < live_pos
+    partial = client.get("/alerts/?partial=1&per_page=2").text
+    assert "alerts &mdash; page" not in partial

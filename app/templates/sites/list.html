@@ -66,14 +66,14 @@
     <span class="text-xs text-slate-500">Page {{ page }} of {{ total_pages }} &middot; {{ total }} total</span>
     <div class="flex gap-1 items-center">
         {% if has_prev %}
-        <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;">&lsaquo; Prev</a>
+        <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Previous page">&lsaquo; Prev</a>
         {% else %}
-        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;">&lsaquo; Prev</button>
+        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Previous page">&lsaquo; Prev</button>
         {% endif %}
         {% if has_next %}
-        <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;">Next &rsaquo;</a>
+        <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Next page">Next &rsaquo;</a>
         {% else %}
-        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;">Next &rsaquo;</button>
+        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Next page">Next &rsaquo;</button>
         {% endif %}
     </div>
 </nav>
