@@ -61,7 +61,11 @@
     </div>
     <div class="card">
         <p class="text-xs text-gray-500 uppercase tracking-wider mb-2">Site</p>
-        <p class="text-white">{{ device.site }}</p>
+        {% if device.site %}
+        <a href="/devices/?site={{ device.site | urlencode }}" class="text-brand-400 hover:text-brand-300">{{ device.site }}</a>
+        {% else %}
+        <p class="text-white">—</p>
+        {% endif %}
     </div>
     <div class="card">
         <p class="text-xs text-gray-500 uppercase tracking-wider mb-2">Serial</p>
@@ -553,6 +557,31 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     </div>
     {% else %}
     <p class="text-gray-500 text-sm">Wireless metrics unavailable for this AP.</p>
+    {% endif %}
+    {% if rf_neighbors %}
+    <div class="mt-4 pt-4 border-t border-surface-700">
+        <p class="section-label mb-2">RF Neighbors</p>
+        <div class="overflow-x-auto">
+            <table class="tbl text-[11px]">
+                <thead><tr><th>AP</th><th>BSSID</th><th>Band</th><th>Channel</th><th>RSSI</th></tr></thead>
+                <tbody>
+                    {% for n in rf_neighbors %}
+                    <tr class="tbl-row">
+                        <td>
+                            {% if n.serial %}
+                            <a href="/devices/{{ n.serial }}" class="text-brand-400 hover:text-brand-300">{{ n.name }}</a>
+                            {% else %}{{ n.name }}{% endif %}
+                        </td>
+                        <td class="font-mono text-slate-400">{{ n.bssid or '—' }}</td>
+                        <td>{{ n.band }}</td>
+                        <td>{{ n.channel }}</td>
+                        <td>{{ n.rssi }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
     {% endif %}
 </div>
 {% endif %}

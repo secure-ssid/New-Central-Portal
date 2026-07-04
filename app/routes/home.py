@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -425,6 +426,9 @@ def _enrich_site_cards(cards: list[dict], devices: list[dict]) -> list[dict]:
             else "#f87171" if total
             else "#64748b"
         )
+        if c.get("name"):
+            from urllib.parse import quote
+            c["devices_url"] = f"/devices/?site={quote(c['name'])}"
         enriched.append(c)
     return enriched
 

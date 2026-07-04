@@ -352,7 +352,11 @@
                     <p class="text-sm font-medium text-slate-200 truncate group-hover:text-brand-400 transition-colors">{{ s.name }}</p>
                     <p class="text-xs text-slate-500 mt-0.5">{{ s.label }}</p>
                     {% if s.device_total %}
-                    <p class="text-[10px] text-slate-600 mt-1">{{ s.device_online }}/{{ s.device_total }} devices online</p>
+                    <p class="text-[10px] text-slate-600 mt-1">
+                        {% if s.devices_url %}<a href="{{ s.devices_url }}" class="hover:text-brand-400" onclick="event.stopPropagation();">{% endif %}
+                        {{ s.device_online }}/{{ s.device_total }} devices online
+                        {% if s.devices_url %}</a>{% endif %}
+                    </p>
                     {% endif %}
                 </div>
             </div>

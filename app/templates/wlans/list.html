@@ -5,17 +5,22 @@
 <div class="page-header">
     <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Network</p>
     <h1 class="text-2xl font-semibold text-white tracking-tight">WLAN Inventory</h1>
-    <p class="text-sm text-slate-500 mt-0.5">Read-only SSID / WLAN list from Aruba Central{% if q %} &mdash; {{ wlans|length }} match{{ 'es' if wlans|length != 1 else '' }}{% endif %}</p>
+    <p class="text-sm text-slate-500 mt-0.5">
+        Read-only SSID / WLAN list from Aruba Central
+        {% if q %} &mdash; {{ total }} match{{ 'es' if total != 1 else '' }}{% else %} &mdash; {{ total }} total{% endif %}
+        {% if total_pages and total_pages > 1 %} &middot; page {{ page }} of {{ total_pages }}{% endif %}
+    </p>
 </div>
 
-<form method="get" class="mb-4 max-w-md">
+<form method="get" class="mb-4 max-w-md flex flex-wrap gap-2 items-center">
+    {% if per_page %}<input type="hidden" name="per_page" value="{{ per_page }}">{% endif %}
     <input name="q" value="{{ q }}" type="search" placeholder="Search SSID, security, VLAN…"
-           class="input" aria-label="Search WLANs">
+           class="input flex-1" aria-label="Search WLANs">
 </form>
 
 {% if error %}
 <div class="card mb-4 border-amber-500/30 bg-amber-500/5">
-    <p class="text-sm text-amber-400">WLAN data unavailable: {{ error }}</p>
+    <p class="text-sm text-amber-400">{{ error }}</p>
 </div>
 {% endif %}
 
@@ -46,6 +51,26 @@
         </tbody>
     </table>
 </div>
+
+{% if total_pages and total_pages > 1 %}
+{% set qs = base_qs ~ ('&' if base_qs else '') %}
+<nav class="flex flex-wrap items-center justify-between gap-2 mt-4 px-0.5 py-3" aria-label="Pagination">
+    <span class="text-xs text-slate-500">Page {{ page }} of {{ total_pages }} &middot; {{ total }} total</span>
+    <div class="flex gap-1 items-center">
+        {% if has_prev %}
+        <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;">&lsaquo; Prev</a>
+        {% else %}
+        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;">&lsaquo; Prev</button>
+        {% endif %}
+        {% if has_next %}
+        <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;">Next &rsaquo;</a>
+        {% else %}
+        <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;">Next &rsaquo;</button>
+        {% endif %}
+    </div>
+</nav>
+{% endif %}
+
 {% else %}
 <div class="card">
     <div class="empty-state">

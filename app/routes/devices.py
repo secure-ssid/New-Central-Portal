@@ -72,6 +72,25 @@ def _wireless_cards(
     return {"radios": radios, "metrics": metrics[:8], "channel_util_pct": util_pct}
 
 
+def _rf_neighbor_rows(raw: list | dict | None) -> list[dict]:
+    items: list = raw if isinstance(raw, list) else []
+    if isinstance(raw, dict):
+        items = raw.get("neighbors") or raw.get("items") or raw.get("aps") or []
+    rows: list[dict] = []
+    for n in items:
+        if not isinstance(n, dict):
+            continue
+        rows.append({
+            "name": n.get("apName") or n.get("deviceName") or n.get("name") or "—",
+            "serial": n.get("serialNumber") or n.get("serial") or "",
+            "bssid": n.get("bssid") or n.get("macAddress") or "",
+            "band": str(n.get("band") or n.get("radioBand") or "—"),
+            "channel": str(n.get("channel") or n.get("wirelessChannel") or "—"),
+            "rssi": str(n.get("rssi") or n.get("signalStrength") or n.get("snr") or "—"),
+        })
+    return rows[:20]
+
+
 def _normalize_ports(raw_ports) -> list[dict]:
     """Normalize raw Central switch-port dicts into a stable contract.
 
@@ -229,12 +248,18 @@ async def device_detail(request: Request, serial: str):
         raise HTTPException(404, "Device not found")
 
     health_task = get_device_health(serial)
-    clients_task = aruba.get_clients(limit=200)
+    site_id = device.get("site_id")
+    if site_id:
+        clients_task = aruba.get_clients(site_id=str(site_id), limit=200)
+    else:
+        clients_task = aruba.get_clients(limit=200)
     events_task = get_device_events(serial, hours=48, limit=20)
     health_label = None
     wireless_metrics = None
     ap_radios = None
     channel_util = None
+    rf_neighbors: list[dict] = []
+    rf_raw = None
 
     ports_error = False
     if device.get("type") == "switch":
@@ -254,17 +279,20 @@ async def device_detail(request: Request, serial: str):
             raw_ports = []
     elif device.get("type") == "access_point":
         try:
-            from vendors.central_bridge import get_ap_radios, get_channel_utilization, get_wireless_metrics
-            all_clients, events, health, wireless_metrics, ap_radios, channel_util = await asyncio.gather(
+            from vendors.central_bridge import (
+                get_ap_rf_neighbors, get_ap_radios, get_channel_utilization, get_wireless_metrics,
+            )
+            all_clients, events, health, wireless_metrics, ap_radios, channel_util, rf_raw = await asyncio.gather(
                 clients_task, events_task, health_task,
                 get_wireless_metrics(serial), get_ap_radios(serial), get_channel_utilization(serial),
+                get_ap_rf_neighbors(serial),
                 return_exceptions=True,
             )
         except Exception:
             all_clients, events, health = await asyncio.gather(
                 clients_task, events_task, health_task, return_exceptions=True
             )
-            wireless_metrics = ap_radios = channel_util = None
+            wireless_metrics = ap_radios = channel_util = rf_raw = None
         raw_ports = []
     else:
         all_clients, events, health = await asyncio.gather(
@@ -294,6 +322,12 @@ async def device_detail(request: Request, serial: str):
         ap_radios = None
     if isinstance(channel_util, Exception):
         channel_util = None
+    if isinstance(rf_raw, Exception):
+        rf_neighbors = []
+    elif isinstance(rf_raw, list):
+        rf_neighbors = _rf_neighbor_rows(rf_raw)
+    elif isinstance(rf_raw, dict):
+        rf_neighbors = _rf_neighbor_rows(rf_raw)
 
     device_name = device.get("name", "")
     connected_clients = [
@@ -324,6 +358,7 @@ async def device_detail(request: Request, serial: str):
                 ap_radios if isinstance(ap_radios, dict) else None,
                 channel_util if isinstance(channel_util, dict) else None,
             ),
+            "rf_neighbors": rf_neighbors,
             "active": "devices",
         },
     )
@@ -500,8 +535,10 @@ async def device_traceroute(request: Request, serial: str, destination: str = Fo
                 continue
             out_text = html.escape(str(item.get("output", "")))
             html_parts.append(f'<pre style="font-size:.72rem;color:#94a3b8;white-space:pre-wrap;">{out_text}</pre>')
-        body = "".join(html_parts) or f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>"
-        return HTMLResponse(body)
+        body = "".join(html_parts)
+        if body:
+            return HTMLResponse(body)
+        return format_ops_response(result)
     except Exception as e:
         logger.exception("traceroute failed for %s", serial)
         return _ops_error(f"Error: {e}")

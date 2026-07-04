@@ -12,7 +12,7 @@ def test_wlans_page_renders(client, mock_central, stub_db):
 def test_wlans_search_filter(client, mock_central, stub_db, monkeypatch):
     from vendors import central_bridge as cb
 
-    async def wlans(limit=200):
+    async def wlans(**_kw):
         return [
             {"name": "corp-wifi", "essid": "corp-wifi", "security": "wpa2", "vlanId": 20, "enabled": True},
             {"name": "guest", "essid": "guest-wifi", "security": "open", "vlanId": 99, "enabled": False},

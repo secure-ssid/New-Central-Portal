@@ -361,6 +361,25 @@ async def get_channel_utilization(serial: str) -> dict:
     return await _run(_fn, serial)
 
 
+async def get_ap_rf_neighbors(serial: str) -> list[dict]:
+    """Co-channel / RF neighbor APs for an access point (best-effort)."""
+    try:
+        from mcp_servers.monitoring import get_ap_neighbors as _fn
+        result = await _run(_fn, serial)
+    except Exception:
+        result = await invoke_tool_router(
+            "get_ap_neighbors", {"serial": serial, "serialNumber": serial}
+        )
+    if isinstance(result, list):
+        return [r for r in result if isinstance(r, dict)]
+    if isinstance(result, dict):
+        if result.get("error"):
+            return []
+        items = result.get("neighbors") or result.get("items") or result.get("aps") or []
+        return [r for r in items if isinstance(r, dict)] if isinstance(items, list) else []
+    return []
+
+
 async def detect_client_flapping(serial: str, hours: int = 24) -> dict:
     from mcp_servers.monitoring import detect_client_flapping as _fn
     return await _run(_fn, serial, hours=hours)
