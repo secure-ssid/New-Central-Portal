@@ -8,6 +8,15 @@
   .donut-seg-anim { animation: donut-in .9s ease-out both; }
   .mix-bar { display: flex; width: 100%; height: 10px; border-radius: 9999px; overflow: hidden; background: #1e2535; }
   .mix-seg { height: 100%; min-width: 2px; }
+  @keyframes ticker-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+  .alert-ticker-track { display: flex; width: max-content; animation: ticker-scroll 28s linear infinite; }
+  .alert-ticker-track:hover { animation-play-state: paused; }
+  .sparkline { display: block; width: 100%; height: 22px; opacity: .85; }
+  .site-gauge-ring { transform: rotate(-90deg); transform-origin: 50% 50%; }
+  /* NOC wallboard — enlarged typography when body has .noc-mode */
+  .noc-mode .stat-card .text-3xl { font-size: 2.75rem; line-height: 1; }
+  .noc-mode .page-header h1 { font-size: 2rem; }
+  .noc-mode #dash-spark-row { display: grid; }
 </style>
 
 <!-- Page header -->
@@ -17,15 +26,21 @@
         <h1 class="text-2xl font-semibold text-white tracking-tight">Network Dashboard</h1>
         <p class="text-sm text-slate-500 mt-0.5">Real-time view of your Aruba Central infrastructure</p>
     </div>
-    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-surface-700 bg-surface-800/60 text-[11px]"
-          title="Auto-refreshes every 30 seconds while this tab is visible">
+    <div class="flex items-center gap-2">
+        <button type="button" @click="$store.ui.toggleNoc()" class="btn-secondary text-xs hidden sm:inline-flex"
+                :title="$store.ui.nocMode ? 'Exit wallboard (W)' : 'NOC wallboard (W)'">
+            <span x-text="$store.ui.nocMode ? 'Exit wallboard' : 'Wallboard'"></span>
+        </button>
+        <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-surface-700 bg-surface-800/60 text-[11px]"
+              title="Auto-refreshes every 30 seconds while this tab is visible">
         <span class="relative flex w-2 h-2 flex-shrink-0" aria-hidden="true">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-40"></span>
             <span class="relative inline-flex rounded-full w-2 h-2 bg-green-400"></span>
         </span>
         <span class="text-green-400 font-semibold tracking-widest uppercase">Live</span>
         <span id="dash-updated-label" class="text-slate-500">as of {{ updated }}</span>
-    </span>
+        </span>
+    </div>
 </div>
 
 <!-- Live region: HTMX re-fetches this fragment every 30s while the tab is visible.
@@ -36,14 +51,53 @@
      hx-swap="innerHTML">
 {% block dashboard_live %}
 
+{% if alert_ticker %}
+<div class="alert-ticker mb-4 rounded-lg border overflow-hidden
+    {% if alert_summary.critical %}border-red-500/40 bg-red-950/20{% else %}border-amber-500/30 bg-amber-950/15{% endif %}"
+     role="status" aria-live="polite">
+    <div class="flex items-stretch">
+        <div class="flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest flex-shrink-0
+            {% if alert_summary.critical %}text-red-400 bg-red-500/10{% else %}text-amber-400 bg-amber-500/10{% endif %}">
+            <span class="relative flex w-2 h-2" aria-hidden="true">
+                {% if alert_summary.critical %}<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-50"></span>{% endif %}
+                <span class="relative inline-flex rounded-full w-2 h-2 {% if alert_summary.critical %}bg-red-400{% else %}bg-amber-400{% endif %}"></span>
+            </span>
+            Live Alerts
+        </div>
+        <div class="flex-1 overflow-hidden py-2 relative">
+            <div class="alert-ticker-track">
+                {% for a in alert_ticker %}
+                <a href="{{ a.url }}" class="inline-flex items-center gap-2 px-6 text-xs whitespace-nowrap no-underline hover:text-brand-400 transition-colors
+                    {% if a.severity == 'critical' %}text-red-300{% else %}text-amber-200{% endif %}">
+                    <span class="font-semibold uppercase text-[10px] opacity-70">{{ a.severity }}</span>
+                    <span>{{ a.title }}</span>
+                </a>
+                {% endfor %}
+                {# duplicate for seamless loop #}
+                {% for a in alert_ticker %}
+                <a href="{{ a.url }}" class="inline-flex items-center gap-2 px-6 text-xs whitespace-nowrap no-underline hover:text-brand-400 transition-colors
+                    {% if a.severity == 'critical' %}text-red-300{% else %}text-amber-200{% endif %}">
+                    <span class="font-semibold uppercase text-[10px] opacity-70">{{ a.severity }}</span>
+                    <span>{{ a.title }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        <a href="/alerts/" class="flex items-center px-3 text-[10px] text-slate-500 hover:text-brand-400 flex-shrink-0 border-l border-surface-700/80">Hub &rarr;</a>
+    </div>
+</div>
+{% endif %}
+
 <!-- Row 1: primary stats -->
-<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4" id="dash-stat-row"
+     data-stats='{{ {"online_pct": stats.online_pct, "total_clients": stats.total_clients, "offline_devices": stats.offline_devices, "total_devices": stats.total_devices} | tojson }}'>
     <div class="stat-card">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Total Devices</p>
             <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#fb923c" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
         </div>
         <p class="text-3xl font-bold text-brand-500">{{ stats.total_devices }}</p>
+        <svg class="sparkline mt-2" data-spark="total_devices" viewBox="0 0 80 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#fb923c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points=""/></svg>
         <p class="text-xs text-slate-600 mt-1">{% if stats.total_devices %}{{ stats.switches }} SW &middot; {{ stats.aps }} AP &middot; {{ stats.gateways }} GW{% if stats.other_devices %} &middot; {{ stats.other_devices }} other{% endif %}{% else %}Managed devices{% endif %}</p>
     </div>
     <div class="stat-card">
@@ -52,6 +106,7 @@
             <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#4ade80" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
         </div>
         <p class="text-3xl font-bold text-green-400">{{ stats.online_devices }}</p>
+        <svg class="sparkline mt-2" data-spark="online_pct" viewBox="0 0 80 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points=""/></svg>
         <p class="text-xs mt-1 {% if stats.online_pct >= 90 %}text-green-500/70{% else %}text-slate-600{% endif %}">{{ stats.online_pct }}% of fleet</p>
     </div>
     <div class="stat-card">
@@ -60,6 +115,7 @@
             <svg aria-hidden="true" width="15" height="15" fill="none" stroke="{% if stats.offline_devices > 0 %}#f87171{% else %}#475569{% endif %}" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
         </div>
         <p class="text-3xl font-bold {% if stats.offline_devices > 0 %}text-red-400{% else %}text-slate-500{% endif %}">{{ stats.offline_devices }}</p>
+        <svg class="sparkline mt-2" data-spark="offline_devices" viewBox="0 0 80 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points=""/></svg>
         <p class="text-xs text-slate-600 mt-1">{% if stats.offline_devices > 0 %}Require attention{% else %}All systems healthy{% endif %}</p>
     </div>
     <div class="stat-card">
@@ -68,6 +124,7 @@
             <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#60a5fa" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path stroke-linecap="round" d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         </div>
         <p class="text-3xl font-bold text-blue-400">{{ stats.total_clients }}</p>
+        <svg class="sparkline mt-2" data-spark="total_clients" viewBox="0 0 80 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points=""/></svg>
         <p class="text-xs text-slate-600 mt-1">{% if stats.total_clients %}{{ stats.wireless_clients }} wireless &middot; {{ stats.wired_clients }} wired{% else %}Connected sessions{% endif %}</p>
     </div>
 </div>
@@ -221,12 +278,26 @@
 </div>
 {% endif %}
 
-{% if tenant_health or anomalies %}
+{% if tenant_cards or anomalies %}
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-    {% if tenant_health %}
+    {% if tenant_cards %}
     <div class="card">
         <p class="section-label mb-3">Tenant Health</p>
-        <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-36 overflow-y-auto">{{ tenant_health | tojson(indent=2) }}</pre>
+        <div class="grid grid-cols-2 gap-2">
+            {% for t in tenant_cards %}
+            <div class="p-3 rounded-lg border bg-surface-900/50
+                {% if t.tone == 'ok' %}border-green-500/25{% elif t.tone == 'warn' %}border-amber-500/25{% elif t.tone == 'critical' %}border-red-500/25{% else %}border-surface-700{% endif %}">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">{{ t.label }}</p>
+                <p class="text-sm font-semibold truncate
+                    {% if t.tone == 'ok' %}text-green-400{% elif t.tone == 'warn' %}text-amber-400{% elif t.tone == 'critical' %}text-red-400{% else %}text-slate-200{% endif %}">{{ t.value }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif tenant_health %}
+    <div class="card">
+        <p class="section-label mb-3">Tenant Health</p>
+        <p class="text-sm text-slate-400">Health data available but not structured.</p>
     </div>
     {% endif %}
     {% if anomalies %}
@@ -253,9 +324,30 @@
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {% for s in site_health_cards %}
-        <a href="/sites/{{ s.id }}" class="rounded-lg border border-surface-700 bg-surface-900/60 p-3 hover:border-brand-500/40 transition-colors no-underline">
-            <p class="text-sm font-medium text-slate-200 truncate">{{ s.name }}</p>
-            <p class="text-xs text-slate-500 mt-1">{{ s.label }}</p>
+        <a href="/sites/{{ s.id }}" class="group rounded-lg border bg-surface-900/60 p-3 hover:border-brand-500/40 transition-all no-underline
+            {% if s.tone == 'critical' %}border-red-500/30{% elif s.tone == 'warn' %}border-amber-500/20{% else %}border-surface-700{% endif %}">
+            <div class="flex items-start gap-3">
+                <div class="relative w-11 h-11 flex-shrink-0">
+                    <svg viewBox="0 0 36 36" class="w-full h-full" aria-hidden="true">
+                        <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#1e2535" stroke-width="3"></circle>
+                        {% if s.device_total %}
+                        <circle class="site-gauge-ring" cx="18" cy="18" r="15.9155" fill="none"
+                                stroke="{{ s.ring_color }}" stroke-width="3" stroke-linecap="round"
+                                stroke-dasharray="{{ s.ring_dash }}" stroke-dashoffset="25"></circle>
+                        {% endif %}
+                    </svg>
+                    <span class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-300">
+                        {% if s.device_total %}{{ s.device_pct }}%{% else %}—{% endif %}
+                    </span>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium text-slate-200 truncate group-hover:text-brand-400 transition-colors">{{ s.name }}</p>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ s.label }}</p>
+                    {% if s.device_total %}
+                    <p class="text-[10px] text-slate-600 mt-1">{{ s.device_online }}/{{ s.device_total }} devices online</p>
+                    {% endif %}
+                </div>
+            </div>
         </a>
         {% endfor %}
     </div>
@@ -425,6 +517,54 @@
     });
     setInterval(render, 1000);
     render();
+
+    /* Sparkline trend buffers (sessionStorage, last 20 samples) */
+    var SPARK_KEYS = ['online_pct', 'total_clients', 'offline_devices', 'total_devices'];
+    var SPARK_COLORS = { online_pct: '#4ade80', total_clients: '#60a5fa', offline_devices: '#f87171', total_devices: '#fb923c' };
+    function loadHistory() {
+      try { return JSON.parse(sessionStorage.getItem('dashSpark') || '{}'); } catch (e) { return {}; }
+    }
+    function saveHistory(h) {
+      try { sessionStorage.setItem('dashSpark', JSON.stringify(h)); } catch (e) {}
+    }
+    function pushStats(stats) {
+      if (!stats) return;
+      var h = loadHistory();
+      SPARK_KEYS.forEach(function (k) {
+        if (stats[k] === undefined) return;
+        h[k] = (h[k] || []).concat([Number(stats[k])]).slice(-20);
+      });
+      saveHistory(h);
+      drawSparklines(h);
+    }
+    function drawSparklines(h) {
+      document.querySelectorAll('.sparkline[data-spark]').forEach(function (svg) {
+        var key = svg.getAttribute('data-spark');
+        var vals = h[key] || [];
+        var poly = svg.querySelector('polyline');
+        if (!poly || vals.length < 2) return;
+        var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+        var range = max - min || 1;
+        var pts = vals.map(function (v, i) {
+          var x = (i / (vals.length - 1)) * 80;
+          var y = 20 - ((v - min) / range) * 16 - 2;
+          return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+        poly.setAttribute('points', pts);
+        poly.setAttribute('stroke', SPARK_COLORS[key] || '#94a3b8');
+      });
+    }
+    var row = document.getElementById('dash-stat-row');
+    if (row && row.dataset.stats) {
+      try { pushStats(JSON.parse(row.dataset.stats)); } catch (e) {}
+    }
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+      if (!evt.target || evt.target.id !== 'dashboard-live') return;
+      var newRow = document.getElementById('dash-stat-row');
+      if (newRow && newRow.dataset.stats) {
+        try { pushStats(JSON.parse(newRow.dataset.stats)); } catch (e) {}
+      }
+    });
   })();
 </script>
 

@@ -316,6 +316,127 @@ async def _offline_health_notes(devices: list[dict]) -> list[dict]:
     return notes
 
 
+def _health_tone(label: str | None) -> str:
+    """Map a health label to a semantic color token for templates."""
+    if not label:
+        return "neutral"
+    s = str(label).lower()
+    if any(w in s for w in ("healthy", "good", "ok", "up", "normal")):
+        return "ok"
+    if any(w in s for w in ("warn", "degrad", "minor", "medium")):
+        return "warn"
+    if any(w in s for w in ("critical", "bad", "down", "fail", "error", "out")):
+        return "critical"
+    return "neutral"
+
+
+def _tenant_health_cards(payload: dict | None) -> list[dict]:
+    """Turn tenant health JSON into structured dashboard cards."""
+    if not isinstance(payload, dict):
+        return []
+    skip = {"items", "data", "raw"}
+    cards: list[dict] = []
+    priority = (
+        "status", "healthStatus", "health", "connectivity", "connectivityStatus",
+        "subscriptionStatus", "licenseStatus", "apiLatency", "latencyMs", "lastSync",
+    )
+    for key in priority:
+        val = payload.get(key)
+        if val not in (None, "", [], {}):
+            cards.append({
+                "label": key.replace("_", " ").replace("Status", " status"),
+                "value": str(val),
+                "tone": _health_tone(str(val)),
+            })
+    for key, val in payload.items():
+        if key in skip or key in priority or val in (None, "", [], {}):
+            continue
+        if isinstance(val, (dict, list)):
+            continue
+        cards.append({
+            "label": key.replace("_", " "),
+            "value": str(val),
+            "tone": _health_tone(str(val)),
+        })
+    return cards[:6]
+
+
+def _enrich_site_cards(cards: list[dict], devices: list[dict]) -> list[dict]:
+    """Add per-site device online counts to site health cards."""
+    if not cards:
+        return cards
+    by_site: dict[str, dict] = {}
+    for d in devices:
+        if not isinstance(d, dict):
+            continue
+        site = (d.get("site") or "").strip().lower()
+        if not site:
+            continue
+        bucket = by_site.setdefault(site, {"total": 0, "online": 0})
+        bucket["total"] += 1
+        if d.get("status") == "online":
+            bucket["online"] += 1
+    enriched = []
+    for card in cards:
+        c = dict(card)
+        name_key = (c.get("name") or "").strip().lower()
+        counts = by_site.get(name_key, {"total": 0, "online": 0})
+        total = counts["total"]
+        online = counts["online"]
+        c["device_total"] = total
+        c["device_online"] = online
+        c["device_pct"] = int(round(online / total * 100)) if total else 0
+        c["tone"] = _health_tone(c.get("label"))
+        c["ring_dash"] = f"{c['device_pct']:.1f} {100 - c['device_pct']:.1f}"
+        c["ring_color"] = (
+            "#4ade80" if c["device_pct"] >= 90
+            else "#fbbf24" if c["device_pct"] >= 70
+            else "#f87171" if total
+            else "#64748b"
+        )
+        enriched.append(c)
+    return enriched
+
+
+async def _alert_ticker(limit: int = 8) -> list[dict]:
+    """Top severity-sorted alerts for the dashboard ticker."""
+    try:
+        from vendors.central_bridge import get_alerts
+        raw = await get_alerts(limit=50)
+    except Exception as exc:
+        logger.debug("Alert ticker unavailable: %s", exc)
+        return []
+    order = {"critical": 0, "major": 1, "minor": 2, "other": 3}
+    items: list[dict] = []
+    for a in raw:
+        if not isinstance(a, dict):
+            continue
+        sev = _severity_class(str(a.get("severity") or a.get("alertSeverity") or ""))
+        if sev not in ("critical", "major"):
+            continue
+        title = a.get("title") or a.get("alertName") or a.get("name") or "Alert"
+        serial = a.get("serialNumber") or a.get("serial") or ""
+        items.append({
+            "title": str(title),
+            "severity": sev,
+            "device_serial": serial,
+            "url": f"/devices/{serial}" if serial else "/alerts/",
+        })
+    items.sort(key=lambda x: order.get(x["severity"], 9))
+    return items[:limit]
+
+
+def _severity_class(sev: str) -> str:
+    s = (sev or "").lower()
+    if s in ("critical", "crit"):
+        return "critical"
+    if s in ("major", "high", "warning", "warn"):
+        return "major"
+    if s in ("minor", "medium", "low"):
+        return "minor"
+    return "other"
+
+
 def _render_live_fragment(request: Request, context: dict) -> HTMLResponse:
     """Render only the `dashboard_live` block of home.html (HTMX poll target).
 
@@ -428,10 +549,14 @@ async def home(request: Request, partial: int = 0, lite: int = 0):
 
     events = [] if is_lite else await _recent_events(devices)
     alert_summary = await _alert_summary()
+    alert_ticker = await _alert_ticker()
     health_notes = [] if is_lite else await _offline_health_notes(devices)
     tenant_health = None if is_lite else await _tenant_health()
+    tenant_cards = _tenant_health_cards(tenant_health) if tenant_health else []
     anomalies = [] if is_lite else await _anomaly_widgets(devices)
-    site_health_cards = [] if is_lite else await _site_health_cards()
+    site_health_cards = [] if is_lite else _enrich_site_cards(
+        await _site_health_cards(), devices if isinstance(devices, list) else []
+    )
 
     updated = datetime.now(timezone.utc).strftime("%I:%M %p UTC")
 
@@ -445,8 +570,10 @@ async def home(request: Request, partial: int = 0, lite: int = 0):
         "client_mix": client_mix,
         "events": events,
         "alert_summary": alert_summary,
+        "alert_ticker": alert_ticker,
         "health_notes": health_notes,
         "tenant_health": tenant_health,
+        "tenant_cards": tenant_cards,
         "anomalies": anomalies,
         "site_health_cards": site_health_cards,
         "is_partial": bool(partial),
