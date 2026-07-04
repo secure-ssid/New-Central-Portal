@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Config - New Central Portal{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Platform</p>
+    <h1 class="text-2xl font-semibold text-white tracking-tight">Config &amp; Firmware</h1>
+    <p class="text-sm text-slate-500 mt-0.5">Read-only firmware compliance and running config viewer</p>
+</div>
+
+{% if compliance_error %}
+<div class="card mb-4 border-amber-500/30 bg-amber-500/5">
+    <p class="text-sm text-amber-400">Firmware compliance unavailable: {{ compliance_error }}</p>
+</div>
+{% elif compliance %}
+<div class="card mb-6">
+    <p class="section-label mb-3">Firmware Compliance</p>
+    <pre class="text-xs text-slate-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ compliance | tojson(indent=2) }}</pre>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2 class="text-lg font-semibold text-white mb-4">Running Config</h2>
+    <form class="flex flex-wrap gap-2 mb-4"
+          hx-post="/platform/config/running"
+          hx-target="#config-output"
+          hx-indicator="#config-spinner">
+        <select name="serial" class="select max-w-xs" required>
+            <option value="">Select device…</option>
+            {% for d in devices %}
+            <option value="{{ d.serial }}">{{ d.name }} ({{ d.serial }})</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn-primary">Fetch config</button>
+        <span id="config-spinner" class="htmx-indicator spinner" role="status" aria-label="Loading"></span>
+    </form>
+    <p class="text-[11px] text-slate-600 mb-2">Read-only — may take up to 60s for large configs.</p>
+    <div id="config-output" class="bg-surface-950 rounded-lg p-3 min-h-[48px]"></div>
+</div>
+
+{% endblock %}

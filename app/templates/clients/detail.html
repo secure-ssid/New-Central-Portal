@@ -320,4 +320,41 @@
 </div>
 {% endif %}
 
+{% if client_details or locate or roaming %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    {% if client_details %}
+    <div class="card">
+        <p class="section-label mb-3">Extended Details</p>
+        <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ client_details | tojson(indent=2) }}</pre>
+    </div>
+    {% endif %}
+    {% if locate %}
+    <div class="card">
+        <p class="section-label mb-3">Current Location</p>
+        <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ locate | tojson(indent=2) }}</pre>
+    </div>
+    {% endif %}
+    {% if roaming %}
+    <div class="card lg:col-span-2">
+        <p class="section-label mb-3">Roaming History (24h)</p>
+        {% set roam_events = roaming.get('events') or roaming.get('items') or roaming.get('history') or [] %}
+        {% if roam_events %}
+        <div class="space-y-2">
+            {% for ev in roam_events[:20] %}
+            <div class="text-xs text-slate-400 border-b border-surface-700/50 pb-2">
+                <span class="text-slate-300">{{ ev.get('apName') or ev.get('deviceName') or ev.get('from') or 'Event' }}</span>
+                {% if ev.get('timeAt') or ev.get('timestamp') %}
+                <span class="text-slate-600 ml-2">{{ (ev.get('timeAt') or ev.get('timestamp'))[:19] }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <pre class="text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ roaming | tojson(indent=2) }}</pre>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 {% endblock %}

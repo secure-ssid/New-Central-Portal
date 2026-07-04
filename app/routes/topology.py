@@ -1,19 +1,20 @@
 from fastapi import APIRouter, Request
-from fastapi.templating import Jinja2Templates
 import json
 import logging
 
 from topology_graph import build_topology_edges
+from templates_shared import templates
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
 
 
 @router.get("/")
 async def topology(request: Request):
     from vendors.aruba_central import _norm_device, aruba
+
+    initial_site = (request.query_params.get("site") or "").strip()
 
     get_switch_ports = None
     find_device_uplink = None
@@ -87,5 +88,6 @@ async def topology(request: Request):
             "online_count": online_count,
             "offline_count": len(nodes) - online_count,
             "port_fail_count": port_fail_count,
+            "initial_site": initial_site,
         },
     )

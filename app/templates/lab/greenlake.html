@@ -309,6 +309,12 @@ document.addEventListener('alpine:init', () => {
             Audit Log
             <span class="tab-count" :style="tab==='audit' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'">{{ audit_logs|length }}</span>
         </button>
+        <div class="tab-sep"></div>
+        <button @click="tab='catalog'" class="tab-btn"
+            :style="tab==='catalog' ? 'color:#f97316;box-shadow:inset 0 -2px 0 #f97316;' : 'box-shadow:none;'">
+            Service Catalog
+            <span class="tab-count" :style="tab==='catalog' ? 'background:rgba(249,115,22,.18);color:#f97316;' : 'background:#232b3b;color:#94a3b8;'">{{ service_offers|length }}</span>
+        </button>
     </div>
 
     <!-- ═══════════════  DEVICES  ═══════════════ -->
@@ -584,6 +590,33 @@ document.addEventListener('alpine:init', () => {
                 </template>
             </tbody>
         </table>
+    </div>
+
+    <!-- ═══════════════  SERVICE CATALOG  ═══════════════ -->
+    <div x-show="tab==='catalog'" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+        <div style="padding:14px 20px;border-bottom:1px solid #1e2535;">
+            <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;">GLP service offers (read-only)</p>
+        </div>
+        {% if service_offers %}
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#0d1117;">
+                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;">Name</th>
+                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;">Type</th>
+                <th style="padding:10px 20px;text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;">ID</th>
+            </tr></thead>
+            <tbody>
+                {% for o in service_offers %}
+                <tr class="tbl-row">
+                    <td style="padding:10px 20px;font-size:.78rem;color:#e2e8f0;">{{ o.name or o.displayName or '—' }}</td>
+                    <td style="padding:10px 20px;font-size:.72rem;color:#94a3b8;">{{ o.type or o.serviceType or '—' }}</td>
+                    <td style="padding:10px 20px;font-size:.68rem;color:#6b7280;font-family:monospace;">{{ o.id or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="padding:32px 20px;color:#4b5563;font-size:.85rem;text-align:center;">No service catalog entries — requires GLP API access.</p>
+        {% endif %}
     </div>
 
 </div>

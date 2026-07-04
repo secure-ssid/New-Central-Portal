@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from vendors.aruba_central import aruba
 import asyncio
 import html
@@ -9,10 +8,11 @@ import json
 import logging
 import re
 
+from templates_shared import templates
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
 
 # ── Server-side pagination ────────────────────────────────────────────────────
 
@@ -188,6 +188,9 @@ async def device_detail(request: Request, serial: str):
     all_clients_task = aruba.get_clients()
     events_task = get_device_events(serial, hours=48, limit=20)
     health_label = None
+    wireless_metrics = None
+    ap_radios = None
+    channel_util = None
 
     ports_error = False
     if device.get("type") == "switch":
@@ -205,6 +208,20 @@ async def device_detail(request: Request, serial: str):
             )
             ports_error = True
             raw_ports = []
+    elif device.get("type") == "access_point":
+        try:
+            from vendors.central_bridge import get_ap_radios, get_channel_utilization, get_wireless_metrics
+            all_clients, events, health, wireless_metrics, ap_radios, channel_util = await asyncio.gather(
+                all_clients_task, events_task, health_task,
+                get_wireless_metrics(serial), get_ap_radios(serial), get_channel_utilization(serial),
+                return_exceptions=True,
+            )
+        except Exception:
+            all_clients, events, health = await asyncio.gather(
+                all_clients_task, events_task, health_task, return_exceptions=True
+            )
+            wireless_metrics = ap_radios = channel_util = None
+        raw_ports = []
     else:
         all_clients, events, health = await asyncio.gather(
             all_clients_task, events_task, health_task, return_exceptions=True
@@ -227,6 +244,12 @@ async def device_detail(request: Request, serial: str):
     elif isinstance(health, dict):
         from routes.home import _health_issue_label
         health_label = _health_issue_label(health)
+    if isinstance(wireless_metrics, Exception):
+        wireless_metrics = None
+    if isinstance(ap_radios, Exception):
+        ap_radios = None
+    if isinstance(channel_util, Exception):
+        channel_util = None
 
     device_name = device.get("name", "")
     connected_clients = [
@@ -248,6 +271,9 @@ async def device_detail(request: Request, serial: str):
             "ports_json": ports_json,
             "events": events,
             "health_label": health_label,
+            "wireless_metrics": wireless_metrics if isinstance(wireless_metrics, dict) else None,
+            "ap_radios": ap_radios if isinstance(ap_radios, dict) else None,
+            "channel_util": channel_util if isinstance(channel_util, dict) else None,
             "active": "devices",
         },
     )
@@ -377,6 +403,196 @@ async def device_ping(
         )
     except Exception as e:
         logger.exception("ping failed for %s", serial)
+        return _ops_error(f"Error: {e}")
+
+
+def _validate_mac(mac: str) -> str | None:
+    """Return normalized MAC if valid, else None."""
+    raw = re.sub(r"[^0-9a-fA-F]", "", mac or "")
+    if len(raw) != 12:
+        return None
+    upper = raw.upper()
+    return ":".join(upper[i:i + 2] for i in range(0, 12, 2))
+
+
+def _long_running_notice() -> str:
+    return (
+        '<p style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">'
+        '<span class="spinner" style="vertical-align:middle;margin-right:6px;"></span>'
+        "Running — may take up to 60s…</p>"
+    )
+
+
+# ── Ops: traceroute ───────────────────────────────────────────────────────────
+
+@router.post("/{serial}/traceroute")
+async def device_traceroute(request: Request, serial: str, destination: str = Form(...)):
+    from vendors.central_bridge import run_traceroute
+    dest = _validate_ping_destination(destination)
+    if dest is None:
+        return _ops_error("Invalid destination — enter an IPv4/IPv6 address or a hostname.")
+    device = await aruba.get_device(serial)
+    if not device:
+        return _ops_error("Device not found.")
+    try:
+        result = await run_traceroute(serial, device.get("type", "switch"), dest)
+        if not isinstance(result, dict):
+            result = {}
+        outputs = result.get("output", {}).get("results", []) if isinstance(result.get("output"), dict) else []
+        if result.get("errors"):
+            return HTMLResponse(
+                _long_running_notice()
+                + f"<p style='color:#f87171;'>{html.escape('; '.join(result['errors']))}</p>"
+            )
+        html_parts = []
+        for item in outputs:
+            if not isinstance(item, dict):
+                continue
+            out_text = html.escape(str(item.get("output", "")))
+            html_parts.append(f'<pre style="font-size:.72rem;color:#94a3b8;white-space:pre-wrap;">{out_text}</pre>')
+        body = "".join(html_parts) or f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>"
+        return HTMLResponse(body)
+    except Exception as e:
+        logger.exception("traceroute failed for %s", serial)
+        return _ops_error(f"Error: {e}")
+
+
+# ── Ops: LLDP neighbors ───────────────────────────────────────────────────────
+
+@router.post("/{serial}/lldp")
+async def device_lldp(request: Request, serial: str):
+    from vendors.central_bridge import get_lldp_neighbors
+    device = await aruba.get_device(serial)
+    if not device:
+        return _ops_error("Device not found.")
+    try:
+        result = await get_lldp_neighbors(serial)
+        if isinstance(result, dict):
+            neighbors = result.get("neighbors") or result.get("items") or result.get("lldp") or []
+            if isinstance(neighbors, list) and neighbors:
+                rows = []
+                for n in neighbors:
+                    if not isinstance(n, dict):
+                        continue
+                    rows.append(
+                        f"<tr><td>{html.escape(str(n.get('localPort') or n.get('port') or ''))}</td>"
+                        f"<td>{html.escape(str(n.get('neighborName') or n.get('systemName') or ''))}</td>"
+                        f"<td>{html.escape(str(n.get('neighborPort') or n.get('portId') or ''))}</td></tr>"
+                    )
+                if rows:
+                    return HTMLResponse(
+                        "<table class='tbl'><thead><tr><th>Local</th><th>Neighbor</th><th>Remote Port</th></tr></thead>"
+                        f"<tbody>{''.join(rows)}</tbody></table>"
+                    )
+            text = result.get("output") or result.get("raw") or str(result)
+            return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;white-space:pre-wrap;'>{html.escape(str(text))}</pre>")
+        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+    except Exception as e:
+        logger.exception("LLDP failed for %s", serial)
+        return _ops_error(f"Error: {e}")
+
+
+# ── Ops: port errors ────────────────────────────────────────────────────────────
+
+@router.post("/{serial}/port-errors")
+async def device_port_errors(request: Request, serial: str, interface: str = Form("")):
+    from vendors.central_bridge import get_switch_port_errors
+    device = await aruba.get_device(serial)
+    if not device:
+        return _ops_error("Device not found.")
+    iface = (interface or "").strip() or None
+    try:
+        result = await get_switch_port_errors(serial, interface=iface)
+        if isinstance(result, dict):
+            ports = result.get("ports") or result.get("interfaces") or result.get("items") or []
+            if isinstance(ports, list) and ports:
+                rows = []
+                for p in ports:
+                    if not isinstance(p, dict):
+                        continue
+                    sev = str(p.get("severity") or p.get("status") or "").lower()
+                    color = "#f87171" if "error" in sev or "critical" in sev else "#94a3b8"
+                    rows.append(
+                        f"<tr><td>{html.escape(str(p.get('interface') or p.get('name') or ''))}</td>"
+                        f"<td style='color:{color};'>{html.escape(str(p.get('errors') or p.get('errorCount') or p.get('count') or ''))}</td>"
+                        f"<td>{html.escape(str(p.get('severity') or ''))}</td></tr>"
+                    )
+                if rows:
+                    return HTMLResponse(
+                        "<table class='tbl'><thead><tr><th>Interface</th><th>Errors</th><th>Severity</th></tr></thead>"
+                        f"<tbody>{''.join(rows)}</tbody></table>"
+                    )
+        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+    except Exception as e:
+        logger.exception("Port errors failed for %s", serial)
+        return _ops_error(f"Error: {e}")
+
+
+# ── Ops: find MAC ───────────────────────────────────────────────────────────────
+
+@router.post("/{serial}/find-mac")
+async def device_find_mac(request: Request, serial: str, mac_address: str = Form(...)):
+    from vendors.central_bridge import find_mac_on_switch
+    mac = _validate_mac(mac_address)
+    if not mac:
+        return _ops_error("Invalid MAC address.")
+    device = await aruba.get_device(serial)
+    if not device:
+        return _ops_error("Device not found.")
+    try:
+        result = await find_mac_on_switch(serial, mac)
+        if isinstance(result, dict):
+            port = result.get("port") or result.get("interface") or result.get("vlan")
+            if port:
+                return HTMLResponse(
+                    f"<p style='color:#4ade80;font-size:.8rem;'>MAC <strong>{html.escape(mac)}</strong> "
+                    f"found on port <strong>{html.escape(str(port))}</strong></p>"
+                )
+        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+    except Exception as e:
+        logger.exception("find-mac failed for %s", serial)
+        return _ops_error(f"Error: {e}")
+
+
+@router.post("/{serial}/mac-table")
+async def device_mac_table(request: Request, serial: str, interface: str = Form("")):
+    from vendors.central_bridge import get_cx_mac_table
+    device = await aruba.get_device(serial)
+    if not device:
+        return _ops_error("Device not found.")
+    if device.get("type") != "switch":
+        return _ops_error("MAC table is only available on switches.")
+    iface = (interface or "").strip() or None
+    try:
+        result = await get_cx_mac_table(serial, interface=iface)
+        entries = []
+        if isinstance(result, dict):
+            entries = result.get("entries") or result.get("macs") or result.get("items") or []
+            if not entries and isinstance(result.get("output"), dict):
+                entries = result["output"].get("results", [])
+        elif isinstance(result, list):
+            entries = result
+        if entries:
+            rows = []
+            for e in entries[:100]:
+                if not isinstance(e, dict):
+                    continue
+                rows.append(
+                    f"<tr><td class='font-mono text-xs'>{html.escape(str(e.get('mac') or e.get('macAddress') or ''))}</td>"
+                    f"<td>{html.escape(str(e.get('vlan') or e.get('vlanId') or ''))}</td>"
+                    f"<td>{html.escape(str(e.get('port') or e.get('interface') or e.get('name') or ''))}</td>"
+                    f"<td>{html.escape(str(e.get('type') or e.get('entryType') or ''))}</td></tr>"
+                )
+            if rows:
+                note = f"<p class='text-[11px] text-slate-600 mb-2'>Showing {len(rows)} entr{'y' if len(rows)==1 else 'ies'}</p>"
+                return HTMLResponse(
+                    note
+                    + "<table class='tbl'><thead><tr><th>MAC</th><th>VLAN</th><th>Port</th><th>Type</th></tr></thead>"
+                    f"<tbody>{''.join(rows)}</tbody></table>"
+                )
+        return HTMLResponse(f"<pre style='font-size:.72rem;color:#94a3b8;'>{html.escape(str(result))}</pre>")
+    except Exception as e:
+        logger.exception("mac-table failed for %s", serial)
         return _ops_error(f"Error: {e}")
 
 

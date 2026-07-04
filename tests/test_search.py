@@ -101,7 +101,8 @@ class TestApi:
         assert any(r["type"] == "client" and r["label"] == "laptop-1"
                    for r in results)
         results = client.get("/search/api?q=memphis").json()["results"]
-        assert any(r["type"] == "site" and r["label"] == "HQ" for r in results)
+        assert any(r["type"] == "site" and r["label"] == "HQ" and r["url"] == "/sites/101"
+                   for r in results)
 
     def test_empty_query_returns_empty(self, client, mock_central):
         assert client.get("/search/api?q=").json() == {"results": []}

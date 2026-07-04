@@ -8,9 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    {% if use_built_tailwind %}
+    <link rel="stylesheet" href="/static/dist/tailwind.css">
+    {% else %}
     <script src="/static/vendor/tailwindcss-play-3.4.10.js"></script>
+    {% endif %}
     <script src="/static/vendor/htmx-2.0.3.min.js"></script>
     <script src="/static/vendor/alpinejs-3.15.12.min.js" defer></script>
+    {% if not use_built_tailwind %}
     <script>
       tailwind.config = {
         darkMode: 'class',
@@ -27,6 +32,7 @@
         }
       }
     </script>
+    {% endif %}
     <style>
       :root { color-scheme: dark; }
 
@@ -169,6 +175,21 @@
       .notif-item.unread { background:rgba(249,115,22,.055); border-left-color:#f97316; }
       .notif-item.unread:hover { background:rgba(249,115,22,.1); }
       .notif-body-text { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+      /* ── Portal status banner ──────────────────────────────────────── */
+      .status-banner { display:flex; align-items:center; gap:10px; padding:8px 14px; font-size:.78rem; font-weight:500; border-bottom:1px solid transparent; }
+      .status-banner-ok { background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.25); color:#86efac; }
+      .status-banner-warn { background:rgba(251,191,36,.08); border-color:rgba(251,191,36,.3); color:#fcd34d; }
+      .status-banner-error { background:rgba(239,68,68,.08); border-color:rgba(239,68,68,.3); color:#fca5a5; }
+      .conn-pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#64748b; }
+      .conn-dot { width:8px; height:8px; border-radius:9999px; flex-shrink:0; }
+      .conn-dot-ok { background:#4ade80; box-shadow:0 0 6px rgba(74,222,128,.5); }
+      .conn-dot-warn { background:#fbbf24; box-shadow:0 0 6px rgba(251,191,36,.45); }
+      .conn-dot-error { background:#f87171; box-shadow:0 0 6px rgba(248,113,113,.45); }
+      .lab-badge { font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 8px; border-radius:9999px; flex-shrink:0; }
+      .lab-badge-live { background:rgba(34,197,94,.12); color:#4ade80; box-shadow:inset 0 0 0 1px rgba(34,197,94,.35); }
+      .lab-badge-demo { background:rgba(148,163,184,.1); color:#94a3b8; box-shadow:inset 0 0 0 1px rgba(148,163,184,.25); }
+      .lab-badge-token { background:rgba(249,115,22,.1); color:#fb923c; box-shadow:inset 0 0 0 1px rgba(249,115,22,.35); }
     </style>
 </head>
 <body class="text-slate-300 min-h-screen"
@@ -219,11 +240,21 @@
 
         <nav class="flex-1 py-2" aria-label="Primary"
              @click="if ($event.target.closest('a')) sidebarOpen = false">
-            <div class="nav-section">Central</div>
+            <div class="nav-section">Operations</div>
             <a href="/" class="nav-link {% if active == 'home' %}active{% endif %}" {% if active == 'home' %}aria-current="page"{% endif %}>
                 <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
                 Dashboard
             </a>
+            <a href="/alerts/" class="nav-link {% if active == 'alerts' %}active{% endif %}" {% if active == 'alerts' %}aria-current="page"{% endif %}>
+                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path stroke-linecap="round" d="M12 9v4m0 4h.01"/></svg>
+                Alerts
+            </a>
+            <a href="/notifications/" class="nav-link {% if active == 'notifications' %}active{% endif %}" {% if active == 'notifications' %}aria-current="page"{% endif %}>
+                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                Notifications
+            </a>
+
+            <div class="nav-section">Inventory</div>
             <a href="/devices/" class="nav-link {% if active == 'devices' %}active{% endif %}" {% if active == 'devices' %}aria-current="page"{% endif %}>
                 <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path stroke-linecap="round" d="M8 21h8M12 17v4"/></svg>
                 Devices
@@ -232,50 +263,66 @@
                 <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path stroke-linecap="round" d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
                 Clients
             </a>
-            <a href="/topology/" class="nav-link {% if active == 'topology' %}active{% endif %}" {% if active == 'topology' %}aria-current="page"{% endif %}>
-                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path stroke-linecap="round" d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
-                Topology
-            </a>
             <a href="/sites/" class="nav-link {% if active == 'sites' %}active{% endif %}" {% if active == 'sites' %}aria-current="page"{% endif %}>
                 <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
                 Sites
             </a>
 
-            <div class="nav-section">GreenLake</div>
+            <div class="nav-section">Network</div>
+            <a href="/topology/" class="nav-link {% if active == 'topology' %}active{% endif %}" {% if active == 'topology' %}aria-current="page"{% endif %}>
+                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path stroke-linecap="round" d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
+                Topology
+            </a>
+            <a href="/wlans/" class="nav-link {% if active == 'wlans' %}active{% endif %}" {% if active == 'wlans' %}aria-current="page"{% endif %}>
+                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+                WLANs
+            </a>
+
+            <div class="nav-section">Platform</div>
             <a href="/lab/greenlake" class="nav-link {% if active == 'greenlake' %}active{% endif %}" {% if active == 'greenlake' %}aria-current="page"{% endif %}>
                 <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-4.9-6H7a4 4 0 00-4 4z"/></svg>
                 GreenLake
             </a>
-            <a href="/notifications/" class="nav-link {% if active == 'notifications' %}active{% endif %}" {% if active == 'notifications' %}aria-current="page"{% endif %}>
-                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                Notifications
+            <a href="/platform/nac" class="nav-link {% if active == 'nac' %}active{% endif %}" {% if active == 'nac' %}aria-current="page"{% endif %}>
+                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path stroke-linecap="round" d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                NAC
+            </a>
+            <a href="/platform/config" class="nav-link {% if active == 'config' %}active{% endif %}" {% if active == 'config' %}aria-current="page"{% endif %}>
+                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+                Config
             </a>
 
-            <div class="nav-section">Playground</div>
+            <div class="nav-section">Tools</div>
             <a href="/lab/" class="nav-link {% if active == 'lab' %}active{% endif %}" {% if active == 'lab' %}aria-current="page"{% endif %}>
                 <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
                 Lab
             </a>
         </nav>
 
-        <div class="px-3 py-2 border-t border-surface-700 flex items-center gap-1.5">
-            <div class="flex items-center gap-2 min-w-0 flex-1 pl-1.5">
-                <span class="relative flex w-2 h-2 flex-shrink-0" aria-hidden="true">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-40"></span>
-                    <span class="relative inline-flex rounded-full w-2 h-2 bg-green-400"></span>
-                </span>
-                <span class="text-[11px] text-slate-500 truncate tracking-wide">Aruba Central &middot; Connected</span>
+        <div class="px-3 py-2 border-t border-surface-700" x-data="portalStatus()" x-init="refresh()">
+            <div class="flex items-center gap-1.5 mb-1.5">
+                <div class="flex items-center gap-2 min-w-0 flex-1 pl-1.5">
+                    <span class="conn-dot flex-shrink-0"
+                          :class="pillClass"
+                          aria-hidden="true"></span>
+                    <span class="conn-pill truncate" x-text="pillLabel" :title="status.label || ''"></span>
+                </div>
+                <button type="button" data-notif-bell
+                        @click="sidebarOpen = false; window.dispatchEvent(new CustomEvent('toggle-notifications'))"
+                        class="relative p-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-700/60 flex-shrink-0"
+                        aria-label="Notifications"
+                        :aria-label="'Notifications, ' + $store.notif.unread + ' unread'"
+                        aria-haspopup="dialog" aria-controls="notif-panel"
+                        :aria-expanded="$store.notif.open ? 'true' : 'false'">
+                    <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                    <span x-show="$store.notif.unread > 0" x-cloak class="notif-badge" x-text="$store.notif.badge" aria-hidden="true"></span>
+                </button>
             </div>
-            <button type="button" data-notif-bell
-                    @click="sidebarOpen = false; window.dispatchEvent(new CustomEvent('toggle-notifications'))"
-                    class="relative p-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-700/60 flex-shrink-0"
-                    aria-label="Notifications"
-                    :aria-label="'Notifications, ' + $store.notif.unread + ' unread'"
-                    aria-haspopup="dialog" aria-controls="notif-panel"
-                    :aria-expanded="$store.notif.open ? 'true' : 'false'">
-                <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                <span x-show="$store.notif.unread > 0" x-cloak class="notif-badge" x-text="$store.notif.badge" aria-hidden="true"></span>
-            </button>
+            {% if auth_enabled() %}
+            <form method="post" action="/logout" class="pl-1.5">
+                <button type="submit" class="text-[11px] text-slate-500 hover:text-brand-400 transition-colors">Sign out</button>
+            </form>
+            {% endif %}
         </div>
     </aside>
 
@@ -318,6 +365,13 @@
 
         <!-- Main -->
         <main class="flex-1 overflow-y-auto">
+            <div x-data="portalStatus()" x-init="refresh()" x-show="status.label && status.severity !== 'ok'" x-cloak
+                 class="status-banner"
+                 :class="status.severity === 'warn' ? 'status-banner-warn' : (status.severity === 'ok' ? 'status-banner-ok' : 'status-banner-error')"
+                 role="status">
+                <svg aria-hidden="true" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                <span x-text="status.label"></span>
+            </div>
             <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
                 {% block content %}{% endblock %}
             </div>
@@ -490,7 +544,7 @@
             </div>
             <div class="min-w-0 flex-1">
                 <p class="text-sm font-semibold text-white leading-tight">AI Assistant</p>
-                <p class="text-[11px] text-slate-500 truncate">Ask about your network</p>
+                <p class="text-[11px] text-slate-500 truncate">Ask about your network · <a href="/lab/assistant" class="text-brand-400 hover:text-brand-500">settings</a></p>
             </div>
             <button type="button" @click="clearChat()" :disabled="pending || messages.length === 0"
                     class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-700/60 disabled:opacity-40 disabled:hover:bg-transparent"
@@ -694,6 +748,42 @@
 
 <script>
   document.addEventListener('alpine:init', function () {
+
+    /* ── Portal connectivity status (banner + sidebar pill) ─────────── */
+    Alpine.data('portalStatus', function () {
+      return {
+        status: { mode: 'live', label: '', severity: 'ok', central: 'connected', db: 'ok' },
+        _timer: null,
+        get pillClass() {
+          if (this.status.central === 'connected' && this.status.db === 'ok') return 'conn-dot-ok';
+          if (this.status.central === 'unavailable') return 'conn-dot-warn';
+          return 'conn-dot-error';
+        },
+        get pillLabel() {
+          if (this.status.central === 'connected' && this.status.db === 'ok') return 'Central · Live';
+          if (this.status.central === 'unavailable') return 'Demo data';
+          if (this.status.db !== 'ok') return 'Partial';
+          return 'Degraded';
+        },
+        refresh: function () {
+          var self = this;
+          fetch('/api/status', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : {}; })
+            .then(function (data) { if (data && data.label) self.status = data; })
+            .catch(function () {});
+        },
+        init: function () {
+          var self = this;
+          this.refresh();
+          this._timer = setInterval(function () {
+            if (document.visibilityState === 'visible') self.refresh();
+          }, 60000);
+        },
+        destroy: function () {
+          if (this._timer) clearInterval(this._timer);
+        }
+      };
+    });
 
     /* ── Command palette ───────────────────────────────────────────── */
     Alpine.data('commandPalette', function () {

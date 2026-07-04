@@ -4,14 +4,13 @@ import re
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from fastapi.templating import Jinja2Templates
+from templates_shared import templates
 from datetime import datetime, timezone
 import db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
 
 # Simple server-side email validation (pragmatic, not RFC-exhaustive).
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
