@@ -21,11 +21,17 @@
     </div>
 </div>
 
-<!-- Severity filter tabs -->
+<div id="alerts-live"
+     hx-get="/alerts/?partial=1{% if severity_filter %}&severity={{ severity_filter }}{% endif %}"
+     hx-trigger="every 60s [document.visibilityState=='visible']"
+     hx-swap="innerHTML">
+{% block alerts_live %}
+
+<!-- Severity filter tabs (inside live region so counts refresh) -->
 <div class="tabs mb-4 overflow-x-auto">
     <a href="/alerts/" class="tab-btn no-underline {% if not severity_filter %}active{% endif %}"
        style="{% if not severity_filter %}color:#f97316;box-shadow:inset 0 -2px 0 #f97316;{% endif %}">
-        All <span class="tab-count" style="background:#232b3b;color:#94a3b8;">{{ summary.total + portal_history|length }}</span>
+        Central <span class="tab-count" style="background:#232b3b;color:#94a3b8;">{{ summary.total }}</span>
     </a>
     <div class="tab-sep"></div>
     <a href="/alerts/?severity=critical" class="tab-btn no-underline {% if severity_filter == 'critical' %}active{% endif %}"
@@ -40,13 +46,13 @@
        style="{% if severity_filter == 'minor' %}color:#94a3b8;box-shadow:inset 0 -2px 0 #94a3b8;{% endif %}">
         Minor <span class="tab-count">{{ summary.minor }}</span>
     </a>
+    {% if not severity_filter and portal_history %}
+    <div class="tab-sep"></div>
+    <span class="tab-btn text-slate-500 cursor-default" style="pointer-events:none;">
+        Portal <span class="tab-count" style="background:#232b3b;color:#64748b;">{{ portal_history|length }}</span>
+    </span>
+    {% endif %}
 </div>
-
-<div id="alerts-live"
-     hx-get="/alerts/?partial=1{% if severity_filter %}&severity={{ severity_filter }}{% endif %}"
-     hx-trigger="every 60s [document.visibilityState=='visible']"
-     hx-swap="innerHTML">
-{% block alerts_live %}
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
     <div class="stat-card">

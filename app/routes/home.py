@@ -180,14 +180,45 @@ def _health_issue_label(health_payload: dict | None) -> str | None:
     return None
 
 
-async def _alert_summary() -> dict:
+async def _fetch_dashboard_alerts() -> tuple[dict, list[dict]]:
+    """Single Central alerts fetch for summary + ticker (avoids duplicate API calls)."""
+    empty_summary = {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
     try:
-        from vendors.central_bridge import get_alerts
-        alerts = await get_alerts(limit=ALERT_SUMMARY_LIMIT)
-        return _count_active_alerts(alerts)
+        from vendors.central_bridge import list_active_alerts
+        raw = await list_active_alerts(limit=ALERT_SUMMARY_LIMIT)
     except Exception as exc:
         logger.warning("Alerts unavailable for dashboard: %s", exc)
-        return {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
+        return empty_summary, []
+
+    summary = _count_active_alerts(raw)
+    order = {"critical": 0, "major": 1, "minor": 2, "other": 3}
+    ticker: list[dict] = []
+    for a in raw:
+        if not isinstance(a, dict):
+            continue
+        sev = _severity_class(str(a.get("severity") or a.get("alertSeverity") or ""))
+        if sev not in ("critical", "major"):
+            continue
+        title = a.get("title") or a.get("alertName") or a.get("name") or "Alert"
+        serial = a.get("serialNumber") or a.get("serial") or ""
+        ticker.append({
+            "title": str(title),
+            "severity": sev,
+            "device_serial": serial,
+            "url": f"/devices/{serial}" if serial else "/alerts/",
+        })
+    ticker.sort(key=lambda x: order.get(x["severity"], 9))
+    return summary, ticker[:8]
+
+
+async def _alert_summary() -> dict:
+    summary, _ = await _fetch_dashboard_alerts()
+    return summary
+
+
+async def _alert_ticker(limit: int = 8) -> list[dict]:
+    _, ticker = await _fetch_dashboard_alerts()
+    return ticker[:limit]
 
 
 async def _tenant_health() -> dict | None:
@@ -398,34 +429,6 @@ def _enrich_site_cards(cards: list[dict], devices: list[dict]) -> list[dict]:
     return enriched
 
 
-async def _alert_ticker(limit: int = 8) -> list[dict]:
-    """Top severity-sorted alerts for the dashboard ticker."""
-    try:
-        from vendors.central_bridge import get_alerts
-        raw = await get_alerts(limit=50)
-    except Exception as exc:
-        logger.debug("Alert ticker unavailable: %s", exc)
-        return []
-    order = {"critical": 0, "major": 1, "minor": 2, "other": 3}
-    items: list[dict] = []
-    for a in raw:
-        if not isinstance(a, dict):
-            continue
-        sev = _severity_class(str(a.get("severity") or a.get("alertSeverity") or ""))
-        if sev not in ("critical", "major"):
-            continue
-        title = a.get("title") or a.get("alertName") or a.get("name") or "Alert"
-        serial = a.get("serialNumber") or a.get("serial") or ""
-        items.append({
-            "title": str(title),
-            "severity": sev,
-            "device_serial": serial,
-            "url": f"/devices/{serial}" if serial else "/alerts/",
-        })
-    items.sort(key=lambda x: order.get(x["severity"], 9))
-    return items[:limit]
-
-
 def _severity_class(sev: str) -> str:
     s = (sev or "").lower()
     if s in ("critical", "crit"):
@@ -499,7 +502,8 @@ async def home(request: Request, partial: int = 0, lite: int = 0):
         # Existing keys — semantics unchanged.
         "total_devices": total,
         "online_devices": online,
-        "offline_devices": total - online,
+        "offline_devices": offline_strict,
+        "not_online_devices": total - online,
         "online_pct": int(online / total * 100) if total else 0,
         "total_clients": len(clients),
         "switches": switches,
@@ -548,8 +552,7 @@ async def home(request: Request, partial: int = 0, lite: int = 0):
     is_lite = bool(partial and lite)
 
     events = [] if is_lite else await _recent_events(devices)
-    alert_summary = await _alert_summary()
-    alert_ticker = await _alert_ticker()
+    alert_summary, alert_ticker = await _fetch_dashboard_alerts()
     health_notes = [] if is_lite else await _offline_health_notes(devices)
     tenant_health = None if is_lite else await _tenant_health()
     tenant_cards = _tenant_health_cards(tenant_health) if tenant_health else []

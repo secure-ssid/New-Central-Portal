@@ -16,7 +16,10 @@
   /* NOC wallboard — enlarged typography when body has .noc-mode */
   .noc-mode .stat-card .text-3xl { font-size: 2.75rem; line-height: 1; }
   .noc-mode .page-header h1 { font-size: 2rem; }
-  .noc-mode #dash-spark-row { display: grid; }
+  .noc-mode .sparkline { height: 32px; }
+  @media (prefers-reduced-motion: reduce) {
+    .alert-ticker-track { animation: none !important; }
+  }
 </style>
 
 <!-- Page header -->
@@ -27,9 +30,9 @@
         <p class="text-sm text-slate-500 mt-0.5">Real-time view of your Aruba Central infrastructure</p>
     </div>
     <div class="flex items-center gap-2">
-        <button type="button" @click="$store.ui.toggleNoc()" class="btn-secondary text-xs hidden sm:inline-flex"
-                :title="$store.ui.nocMode ? 'Exit wallboard (W)' : 'NOC wallboard (W)'">
-            <span x-text="$store.ui.nocMode ? 'Exit wallboard' : 'Wallboard'"></span>
+        <button type="button" @click="$store.ui && $store.ui.toggleNoc()" class="btn-secondary text-xs inline-flex"
+                :title="$store.ui && $store.ui.nocMode ? 'Exit wallboard (W)' : 'NOC wallboard (W)'">
+            <span x-text="$store.ui && $store.ui.nocMode ? 'Exit wallboard' : 'Wallboard'"></span>
         </button>
         <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-surface-700 bg-surface-800/60 text-[11px]"
               title="Auto-refreshes every 30 seconds while this tab is visible">
@@ -48,7 +51,8 @@
 <div id="dashboard-live"
      hx-get="/?partial=1&lite=1"
      hx-trigger="every 30s [document.visibilityState=='visible']"
-     hx-swap="innerHTML">
+     hx-swap="innerHTML"
+     data-poll="dashboard">
 {% block dashboard_live %}
 
 {% if alert_ticker %}
@@ -90,7 +94,7 @@
 
 <!-- Row 1: primary stats -->
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4" id="dash-stat-row"
-     data-stats='{{ {"online_pct": stats.online_pct, "total_clients": stats.total_clients, "offline_devices": stats.offline_devices, "total_devices": stats.total_devices} | tojson }}'>
+     data-stats='{{ {"online_devices": stats.online_devices, "total_clients": stats.total_clients, "offline_devices": stats.offline_devices, "total_devices": stats.total_devices} | tojson }}'>
     <div class="stat-card">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Total Devices</p>
@@ -100,23 +104,27 @@
         <svg class="sparkline mt-2" data-spark="total_devices" viewBox="0 0 80 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#fb923c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points=""/></svg>
         <p class="text-xs text-slate-600 mt-1">{% if stats.total_devices %}{{ stats.switches }} SW &middot; {{ stats.aps }} AP &middot; {{ stats.gateways }} GW{% if stats.other_devices %} &middot; {{ stats.other_devices }} other{% endif %}{% else %}Managed devices{% endif %}</p>
     </div>
-    <div class="stat-card">
+    <div class="stat-card group">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Online</p>
             <svg aria-hidden="true" width="15" height="15" fill="none" stroke="#4ade80" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
         </div>
+        <a href="/devices/?status=online" class="block no-underline hover:opacity-90 transition-opacity">
         <p class="text-3xl font-bold text-green-400">{{ stats.online_devices }}</p>
-        <svg class="sparkline mt-2" data-spark="online_pct" viewBox="0 0 80 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points=""/></svg>
+        <svg class="sparkline mt-2" data-spark="online_devices" viewBox="0 0 80 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points=""/></svg>
         <p class="text-xs mt-1 {% if stats.online_pct >= 90 %}text-green-500/70{% else %}text-slate-600{% endif %}">{{ stats.online_pct }}% of fleet</p>
+        </a>
     </div>
-    <div class="stat-card">
+    <div class="stat-card group">
         <div class="flex items-center justify-between mb-3">
             <p class="section-label">Offline</p>
             <svg aria-hidden="true" width="15" height="15" fill="none" stroke="{% if stats.offline_devices > 0 %}#f87171{% else %}#475569{% endif %}" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
         </div>
+        <a href="/devices/?status=offline" class="block no-underline hover:opacity-90 transition-opacity">
         <p class="text-3xl font-bold {% if stats.offline_devices > 0 %}text-red-400{% else %}text-slate-500{% endif %}">{{ stats.offline_devices }}</p>
         <svg class="sparkline mt-2" data-spark="offline_devices" viewBox="0 0 80 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points=""/></svg>
-        <p class="text-xs text-slate-600 mt-1">{% if stats.offline_devices > 0 %}Require attention{% else %}All systems healthy{% endif %}</p>
+        <p class="text-xs text-slate-600 mt-1">{% if stats.offline_devices > 0 %}Offline{% if stats.unknown_devices %} · {{ stats.unknown_devices }} unknown{% endif %}{% else %}All devices responding{% endif %}</p>
+        </a>
     </div>
     <div class="stat-card">
         <div class="flex items-center justify-between mb-3">
@@ -513,14 +521,29 @@
       if (evt.target && evt.target.id === 'dashboard-live') {
         lastUpdated = Date.now();
         render();
+        var newRow = document.getElementById('dash-stat-row');
+        if (newRow && newRow.dataset.stats) {
+          try { pushStats(JSON.parse(newRow.dataset.stats)); } catch (e) {}
+        }
+      }
+    });
+    document.body.addEventListener('htmx:responseError', function (evt) {
+      if (evt.target && evt.target.id === 'dashboard-live') {
+        label.textContent = 'update failed';
+        label.classList.add('text-red-400');
+      }
+    });
+    document.body.addEventListener('htmx:afterRequest', function (evt) {
+      if (evt.target && evt.target.id === 'dashboard-live' && evt.detail.successful) {
+        label.classList.remove('text-red-400');
       }
     });
     setInterval(render, 1000);
     render();
 
     /* Sparkline trend buffers (sessionStorage, last 20 samples) */
-    var SPARK_KEYS = ['online_pct', 'total_clients', 'offline_devices', 'total_devices'];
-    var SPARK_COLORS = { online_pct: '#4ade80', total_clients: '#60a5fa', offline_devices: '#f87171', total_devices: '#fb923c' };
+    var SPARK_KEYS = ['online_devices', 'total_clients', 'offline_devices', 'total_devices'];
+    var SPARK_COLORS = { online_devices: '#4ade80', total_clients: '#60a5fa', offline_devices: '#f87171', total_devices: '#fb923c' };
     function loadHistory() {
       try { return JSON.parse(sessionStorage.getItem('dashSpark') || '{}'); } catch (e) { return {}; }
     }
@@ -532,7 +555,13 @@
       var h = loadHistory();
       SPARK_KEYS.forEach(function (k) {
         if (stats[k] === undefined) return;
-        h[k] = (h[k] || []).concat([Number(stats[k])]).slice(-20);
+        var v = Number(stats[k]);
+        var prev = h[k] || [];
+        if (prev.length === 0) {
+          h[k] = [v, v];
+        } else {
+          h[k] = prev.concat([v]).slice(-20);
+        }
       });
       saveHistory(h);
       drawSparklines(h);
@@ -542,7 +571,8 @@
         var key = svg.getAttribute('data-spark');
         var vals = h[key] || [];
         var poly = svg.querySelector('polyline');
-        if (!poly || vals.length < 2) return;
+        if (!poly || vals.length < 1) return;
+        if (vals.length === 1) vals = [vals[0], vals[0]];
         var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
         var range = max - min || 1;
         var pts = vals.map(function (v, i) {
@@ -558,13 +588,6 @@
     if (row && row.dataset.stats) {
       try { pushStats(JSON.parse(row.dataset.stats)); } catch (e) {}
     }
-    document.body.addEventListener('htmx:afterSwap', function (evt) {
-      if (!evt.target || evt.target.id !== 'dashboard-live') return;
-      var newRow = document.getElementById('dash-stat-row');
-      if (newRow && newRow.dataset.stats) {
-        try { pushStats(JSON.parse(newRow.dataset.stats)); } catch (e) {}
-      }
-    });
   })();
 </script>
 

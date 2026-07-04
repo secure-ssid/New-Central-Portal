@@ -154,11 +154,14 @@ async def list_devices(request: Request):
     if isinstance(groups, Exception): groups = []
     if isinstance(sites, Exception): sites = []
     q = request.query_params.get("q", "").strip()
+    status_filter = request.query_params.get("status", "").strip().lower()
     devices = filter_items(
         devices, q,
         "name", "serial", "model", "mac", "type", "site", "ip",
         "persona", "deployment", "device_function",
     )
+    if status_filter in ("online", "offline"):
+        devices = [d for d in devices if d.get("status") == status_filter]
     pg = _paginate(request, devices)
     return templates.TemplateResponse(
         request,
@@ -168,6 +171,7 @@ async def list_devices(request: Request):
             "groups": groups,
             "sites": sites,
             "q": q,
+            "status_filter": status_filter,
             "active": "devices",
             "page": pg["page"],
             "per_page": pg["per_page"],
