@@ -115,11 +115,17 @@ class TestApi:
                    for r in results)
 
     def test_empty_query_returns_empty(self, client, mock_central):
-        assert client.get("/search/api?q=").json() == {"results": []}
-        assert client.get("/search/api?q=%20%20").json() == {"results": []}
+        assert client.get("/search/api?q=").json() == {
+            "results": [], "total_matched": 0, "has_more": False,
+        }
+        assert client.get("/search/api?q=%20%20").json() == {
+            "results": [], "total_matched": 0, "has_more": False,
+        }
 
     def test_short_query_returns_empty(self, client, mock_central):
-        assert client.get("/search/api?q=a").json() == {"results": []}
+        assert client.get("/search/api?q=a").json() == {
+            "results": [], "total_matched": 0, "has_more": False,
+        }
 
     def test_search_uses_inventory_cache(self, client, mock_central, monkeypatch):
         import search_inventory_cache as cache_mod
@@ -164,7 +170,16 @@ class TestApi:
             monkeypatch.setattr(cb, fn, boom)
         r = client.get("/search/api?q=anything")
         assert r.status_code == 200
-        assert r.json() == {"results": []}
+        assert r.json() == {"results": [], "total_matched": 0, "has_more": False}
+
+    def test_search_returns_total_matched(self, client, mock_central):
+        data = client.get("/search/api?q=hq").json()
+        assert data["total_matched"] >= 1
+        assert "has_more" in data
+
+    def test_search_type_filter(self, client, mock_central):
+        data = client.get("/search/api?q=hq&type=site").json()
+        assert all(r["type"] == "site" for r in data["results"])
 
     def test_overlong_query_rejected_by_validation(self, client, mock_central):
         assert client.get("/search/api?q=" + "a" * 201).status_code == 422

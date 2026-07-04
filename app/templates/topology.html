@@ -15,6 +15,11 @@
             Port data unavailable for {{ port_fail_count }} switch{{ 'es' if port_fail_count != 1 else '' }}
         </span>
         {% endif %}
+        {% if site_filter_active %}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(59,130,246,.1);color:#60a5fa;border:1px solid rgba(59,130,246,.3);">
+            Site: {{ initial_site }}
+        </span>
+        {% endif %}
         {% if device_cap_hit %}
         <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
             Showing first {{ device_cap }} devices
@@ -1003,11 +1008,12 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     filterState.sites = {};
     siteKeys.forEach(function (k) { filterState.sites[k] = true; });
 
-    // Deep-link: /topology/?site=HQ pre-selects one site filter.
+    // Deep-link: /topology/?site=HQ pre-selects one site filter (case-insensitive).
     var preSite = {{ initial_site | tojson }};
     if (preSite) {
+        var preLower = String(preSite).toLowerCase();
         Object.keys(filterState.sites).forEach(function (k) {
-            filterState.sites[k] = (k === preSite);
+            filterState.sites[k] = String(k).toLowerCase() === preLower;
         });
     }
 

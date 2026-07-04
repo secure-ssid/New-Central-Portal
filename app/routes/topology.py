@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Request
-import asyncio
 import json
 import logging
 
@@ -14,6 +13,7 @@ _DEVICE_CAP = 200
 
 
 def _site_name_map(raw_sites: list) -> dict[str, str]:
+    """Lowercase site name → site id."""
     mapping: dict[str, str] = {}
     for s in raw_sites:
         if not isinstance(s, dict):
@@ -21,8 +21,24 @@ def _site_name_map(raw_sites: list) -> dict[str, str]:
         site_id = s.get("site_id") or s.get("id") or s.get("siteId") or ""
         name = s.get("site_name") or s.get("siteName") or s.get("name") or ""
         if name and site_id:
-            mapping[name.lower()] = str(site_id)
+            mapping[name.strip().lower()] = str(site_id)
     return mapping
+
+
+def _resolve_site_query(initial_site: str, site_map: dict[str, str]) -> tuple[str | None, str | None]:
+    """Map ``?site=`` query to (display name, site id) for server-side filtering."""
+    if not initial_site:
+        return None, None
+    query = initial_site.strip()
+    if query.isdigit():
+        site_id = query
+        id_to_name = {v: k for k, v in site_map.items()}
+        name_key = id_to_name.get(site_id)
+        display = name_key.title() if name_key else None
+        return display, site_id
+    key = query.lower()
+    site_id = site_map.get(key)
+    return query, site_id
 
 
 @router.get("/")
@@ -35,6 +51,9 @@ async def topology(request: Request):
     find_device_uplink = None
     raw_devices = []
     site_map: dict[str, str] = {}
+    site_name_filter: str | None = None
+    site_id_filter: str | None = None
+
     try:
         from vendors.central_bridge import (
             find_device_uplink as _uplink,
@@ -43,25 +62,39 @@ async def topology(request: Request):
             get_switch_ports,
         )
         find_device_uplink = _uplink
-        raw_devices, raw_sites = await asyncio.gather(
-            get_devices(limit=_DEVICE_CAP),
-            get_central_sites(),
-            return_exceptions=True,
-        )
-        if isinstance(raw_devices, Exception):
-            raise raw_devices
+        raw_sites = await get_central_sites()
         if isinstance(raw_sites, Exception):
             raw_sites = []
         site_map = _site_name_map(raw_sites if isinstance(raw_sites, list) else [])
+        site_name_filter, site_id_filter = _resolve_site_query(initial_site, site_map)
+
+        if site_id_filter:
+            raw_devices = await get_devices(site_id=site_id_filter, limit=_DEVICE_CAP)
+        else:
+            raw_devices = await get_devices(limit=_DEVICE_CAP)
+        if isinstance(raw_devices, Exception):
+            raise raw_devices
     except Exception:
         logger.warning("central_bridge unavailable for topology, using fallback devices")
         get_switch_ports = None
         find_device_uplink = None
         raw_devices = await aruba.get_devices()
+        site_name_filter, site_id_filter = _resolve_site_query(initial_site, site_map)
 
     devices = [_norm_device(d) for d in raw_devices]
     devices = [d for d in devices if d.get("serial")]
-    capped = len(devices) >= _DEVICE_CAP
+    if site_name_filter and not site_id_filter:
+        name_key = site_name_filter.lower()
+        devices = [d for d in devices if (d.get("site") or "").lower() == name_key]
+    elif site_name_filter and site_id_filter:
+        name_key = site_name_filter.lower()
+        devices = [
+            d for d in devices
+            if (d.get("site") or "").lower() == name_key
+            or str(d.get("site_id") or "") == site_id_filter
+        ]
+
+    capped = len(devices) >= _DEVICE_CAP and not site_id_filter
 
     group_map = {
         "switch": "switch",
@@ -113,6 +146,8 @@ async def topology(request: Request):
 
     graph_json = json.dumps({"nodes": nodes, "edges": edges}).replace("</", "<\\/")
 
+    filter_label = site_name_filter or initial_site or ""
+
     return templates.TemplateResponse(
         request,
         "topology.html",
@@ -123,7 +158,8 @@ async def topology(request: Request):
             "online_count": online_count,
             "offline_count": len(nodes) - online_count,
             "port_fail_count": port_fail_count,
-            "initial_site": initial_site,
+            "initial_site": filter_label,
+            "site_filter_active": bool(initial_site),
             "device_cap_hit": capped,
             "device_cap": _DEVICE_CAP,
         },
