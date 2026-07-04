@@ -3,7 +3,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from routes.home import _donut_segments, _parse_event_time, _pct, _relative_age
+from routes.home import (
+    _count_active_alerts,
+    _donut_segments,
+    _health_issue_label,
+    _parse_event_time,
+    _pct,
+    _relative_age,
+)
 
 NOW = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -139,3 +146,25 @@ class TestDashboardRender:
         monkeypatch.setattr(cb, "get_sites", boom)
         r = client.get("/")
         assert r.status_code == 200  # zero-division guards hold
+
+
+class TestAlertAndHealthHelpers:
+    def test_count_active_alerts(self):
+        alerts = [
+            {"severity": "critical"},
+            {"severity": "major"},
+            {"alertSeverity": "minor"},
+        ]
+        summary = _count_active_alerts(alerts)
+        assert summary["total"] == 3
+        assert summary["critical"] == 1
+        assert summary["major"] == 1
+        assert summary["minor"] == 1
+
+    def test_health_issue_label_from_list(self):
+        label = _health_issue_label({"health": [{"status": "OUT_OF_SYNC"}]})
+        assert label == "OUT_OF_SYNC"
+
+    def test_health_issue_label_none_when_empty(self):
+        assert _health_issue_label({"health": []}) is None
+        assert _health_issue_label(None) is None

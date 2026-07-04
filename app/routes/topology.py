@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
-import asyncio
 import json
 import logging
+
+from topology_graph import build_topology_edges
 
 logger = logging.getLogger(__name__)
 
@@ -15,19 +16,22 @@ async def topology(request: Request):
     from vendors.aruba_central import _norm_device, aruba
 
     get_switch_ports = None
+    find_device_uplink = None
     try:
-        from vendors.central_bridge import get_devices, get_switch_ports
-        raw_devices = await get_devices(limit=100)
+        from vendors.central_bridge import (
+            find_device_uplink as _uplink,
+            get_devices,
+            get_switch_ports,
+        )
+        find_device_uplink = _uplink
+        raw_devices = await get_devices(limit=200)
     except Exception:
-        # centralmcp unavailable — fall back to the same mock fleet the
-        # rest of the portal uses so topology still renders (without
-        # port-derived edges; the synthetic links cover connectivity).
         logger.warning("central_bridge unavailable for topology, using fallback devices")
+        get_switch_ports = None
+        find_device_uplink = None
         raw_devices = await aruba.get_devices()
-    devices = [_norm_device(d) for d in raw_devices]
 
-    # Keep every device that has a serial; offline devices are rendered
-    # dimmed/red in the 3D view rather than hidden.
+    devices = [_norm_device(d) for d in raw_devices]
     devices = [d for d in devices if d.get("serial")]
 
     group_map = {
@@ -50,70 +54,27 @@ async def topology(request: Request):
         })
     node_ids = {n["id"] for n in nodes}
 
-    # Fetch switch ports to build edges. Only query switches that are
-    # online — offline ones can't answer anyway.
-    switches = [
-        d for d in devices
-        if d["type"] == "switch" and (d.get("status") or "").lower() == "online"
-    ]
-    if get_switch_ports is None:
-        switches = []
-    port_results = await asyncio.gather(
-        *[get_switch_ports(sw["serial"]) for sw in switches],
-        return_exceptions=True,
-    )
-
-    edges = []
-    seen_edges = set()
     port_fail_count = 0
-
-    for sw, ports in zip(switches, port_results):
-        if isinstance(ports, BaseException):
-            port_fail_count += 1
-            logger.warning(
-                "Failed to fetch ports for switch %s (%s): %r",
-                sw.get("name") or sw["serial"], sw["serial"], ports,
-            )
-            continue
-        if not ports:
-            continue
-        for port in ports:
-            nbr_serial = (port.get("neighbourSerial") or "").strip()
-            nbr_type = (port.get("neighbourType") or "").lower()
-            # Skip empties and self-loops
-            if not nbr_serial or nbr_serial == sw["serial"]:
-                continue
-            # Only wire to known infrastructure devices, not raw client MACs
-            if nbr_type not in ("access point", "gateway", "switch"):
-                continue
-            # Don't create edges to devices we don't have a node for
-            if nbr_serial not in node_ids:
-                continue
-            # Dedupe bidirectional reports with a sorted-tuple key
-            edge_key = tuple(sorted((sw["serial"], nbr_serial)))
-            if edge_key[0] == edge_key[1] or edge_key in seen_edges:
-                continue
-            seen_edges.add(edge_key)
-            edges.append({
-                "id": f"{sw['serial']}-{nbr_serial}",
-                "source": sw["serial"],
-                "target": nbr_serial,
-                "port": port.get("name") or port.get("id") or "",
-                "speed": port.get("speed") or 0,
-            })
+    if get_switch_ports is not None:
+        edges, port_fail_count = await build_topology_edges(
+            devices,
+            node_ids,
+            get_switch_ports,
+            find_device_uplink=find_device_uplink,
+        )
+    else:
+        edges = []
 
     if port_fail_count:
         logger.warning(
-            "Port data unavailable for %d of %d switches in topology view",
-            port_fail_count, len(switches),
+            "Port data unavailable for %d switch(es) in topology view",
+            port_fail_count,
         )
 
     online_count = sum(
         1 for n in nodes if (n["status"] or "").lower() == "online"
     )
 
-    # Escape "</" so the payload can never close its enclosing <script> tag
-    # (device names are user-controlled in Central).
     graph_json = json.dumps({"nodes": nodes, "edges": edges}).replace("</", "<\\/")
 
     return templates.TemplateResponse(

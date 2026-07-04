@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Doc Q&A - Lab - New Central Portal{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <a href="/lab/" class="hover:text-brand-400 transition-colors">Lab</a>
+        <span class="text-slate-700">/</span>
+        <span class="text-slate-400">Doc Q&A</span>
+    </div>
+    <h1 class="text-2xl font-bold text-white">Documentation Q&A</h1>
+    <p class="text-sm text-slate-500 mt-0.5">Compact cited answers from local docs — tries OpenAPI lookup first for API-shaped questions</p>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card mb-6">
+        <form hx-post="/lab/doc-ask" hx-target="#ask-results" hx-indicator="#ask-spinner" hx-disabled-elt="#ask-btn" class="flex gap-2">
+            <input type="text" name="question" required autocomplete="off"
+                   placeholder="How do I assign devices to a site in New Central?"
+                   class="input flex-1">
+            <button type="submit" id="ask-btn" class="btn-primary px-5">
+                <span>Ask</span>
+                <span id="ask-spinner" class="htmx-indicator"><span class="spinner"></span></span>
+            </button>
+        </form>
+    </div>
+    <div id="ask-results">
+        <div class="card">
+            <div class="empty-state">
+                <p>Ask a question about New Central configuration or APIs</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

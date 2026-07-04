@@ -139,6 +139,21 @@ def _unwrap(result: list | dict | None) -> list[dict]:
     return []
 
 
+async def _fetch_paginated(fetch_fn, *, limit: int = 200, max_items: int = 1000) -> list[dict]:
+    """Page through a centralmcp list tool until exhausted or max_items reached."""
+    collected: list[dict] = []
+    offset = 0
+    while len(collected) < max_items:
+        page = _unwrap(await fetch_fn(limit=limit, offset=offset))
+        if not page:
+            break
+        collected.extend(page)
+        if len(page) < limit:
+            break
+        offset += limit
+    return collected[:max_items]
+
+
 # ── Sites ─────────────────────────────────────────────────────────────────────
 
 async def get_sites(limit: int = 100) -> list[dict]:
@@ -157,14 +172,21 @@ async def get_devices(
     device_type: str | None = None,
     site_id: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[dict]:
     from mcp_servers.monitoring import list_devices
-    kwargs: dict[str, Any] = {"limit": limit}
+    kwargs: dict[str, Any] = {"limit": limit, "offset": offset}
     if device_type:
         kwargs["device_type"] = device_type
     if site_id:
         kwargs["site_id"] = site_id
     return _unwrap(await _run(list_devices, **kwargs))
+
+
+async def get_all_devices(limit_per_page: int = 200, max_items: int = 1000) -> list[dict]:
+    async def _page(**kwargs):
+        return await get_devices(**kwargs)
+    return await _fetch_paginated(_page, limit=limit_per_page, max_items=max_items)
 
 
 async def get_device(serial: str) -> dict | None:
@@ -237,17 +259,34 @@ async def get_device_events(serial: str, hours: int = 24, limit: int = 20) -> li
     return _unwrap(result) if isinstance(result, dict) else (result if isinstance(result, list) else [])
 
 
+async def get_device_health(serial: str) -> dict:
+    from mcp_servers.monitoring import get_device_health as _health
+    return await _run(_health, serial_number=serial)
+
+
+async def get_lldp_neighbors(serial: str) -> dict:
+    from mcp_servers.ops import get_lldp_neighbors as _lldp
+    return await _run(_lldp, serial)
+
+
 # ── Clients ──────────────────────────────────────────────────────────────────
 
 async def get_clients(
     site_id: str | None = None,
     limit: int = 100,
+    offset: int = 0,
 ) -> list[dict]:
     from mcp_servers.monitoring import list_clients
-    kwargs: dict[str, Any] = {"limit": limit}
+    kwargs: dict[str, Any] = {"limit": limit, "offset": offset}
     if site_id:
         kwargs["site_id"] = site_id
     return _unwrap(await _run(list_clients, **kwargs))
+
+
+async def get_all_clients(limit_per_page: int = 200, max_items: int = 1000) -> list[dict]:
+    async def _page(**kwargs):
+        return await get_clients(**kwargs)
+    return await _fetch_paginated(_page, limit=limit_per_page, max_items=max_items)
 
 
 async def find_client(mac_or_ip: str) -> dict | None:
@@ -625,6 +664,27 @@ async def search_docs(query: str, top_k: int = 5) -> list[dict]:
         return [{"error": str(exc)}]
 
 
+async def lookup_api(query: str, top_k: int = 10) -> list[dict]:
+    """Exact OpenAPI field/endpoint lookup via centralmcp specs index."""
+    try:
+        from mcp_servers.rag import lookup_api as _lookup
+        return await _run(_lookup, query, top_k=top_k)
+    except Exception as exc:
+        logger.warning("API lookup failed: %s", exc)
+        return [{"error": str(exc)}]
+
+
+async def ask_docs(question: str, top_k: int = 3, source: str | None = None) -> dict:
+    """Compact cited answer from local docs/API indexes."""
+    try:
+        from mcp_servers.rag import ask_docs as _ask
+        result = await _run(_ask, question, top_k=top_k, source=source)
+        return result if isinstance(result, dict) else {"answer": str(result), "citations": [], "mode": "unknown"}
+    except Exception as exc:
+        logger.warning("ask_docs failed: %s", exc)
+        return {"answer": str(exc), "citations": [], "mode": "error"}
+
+
 # ── MCP Tool Registry (Lab tester) ────────────────────────────────────────────
 
 TOOL_REGISTRY: dict[str, list[dict]] = {
@@ -645,7 +705,9 @@ TOOL_REGISTRY: dict[str, list[dict]] = {
         {"name": "list_mac_registrations", "desc": "List NAC MAC registrations", "params": '{"limit": 50}'},
     ],
     "docs": [
-        {"name": "search_docs", "desc": "Semantic search over Aruba docs", "params": '{"query": "how to configure VLAN", "top_k": 5}'},
+        {"name": "search_docs", "desc": "Hybrid search over Aruba docs", "params": '{"query": "how to configure VLAN", "top_k": 5}'},
+        {"name": "lookup_api",  "desc": "Exact API schema/enum lookup",  "params": '{"query": "wlan ssid auth-type enum", "top_k": 10}'},
+        {"name": "ask_docs",    "desc": "Compact cited doc answer",      "params": '{"question": "How do I assign a device to a site?", "top_k": 3}'},
     ],
 }
 
@@ -662,6 +724,8 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     "cx_traceroute":           ("mcp_servers.ops", "cx_traceroute"),
     "list_mac_registrations":  ("mcp_servers.nac", "list_mac_registrations"),
     "search_docs":             ("mcp_servers.rag", "search_docs"),
+    "lookup_api":              ("mcp_servers.rag", "lookup_api"),
+    "ask_docs":                ("mcp_servers.rag", "ask_docs"),
 }
 
 

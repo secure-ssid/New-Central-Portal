@@ -1,0 +1,26 @@
+<div class="space-y-4">
+    {% if error %}
+    <div class="card" style="border-color:rgba(239,68,68,.35);">
+        <p class="text-sm font-semibold" style="color:#f87171;">{{ error }}</p>
+    </div>
+    {% else %}
+    <div class="card">
+        <p class="section-label mb-2">Answer{% if mode %} <span class="text-slate-600 normal-case">via {{ mode }}</span>{% endif %}</p>
+        <p class="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{{ answer }}</p>
+    </div>
+    {% if citations %}
+    <div class="card">
+        <p class="section-label mb-3">Citations</p>
+        <ul class="space-y-2 text-sm">
+            {% for cite in citations %}
+            <li class="text-slate-400">
+                {% if cite.file_path %}<span class="font-mono text-slate-300">{{ cite.file_path }}</span>{% endif %}
+                {% if cite.source %}<span class="text-slate-600"> &middot; {{ cite.source }}</span>{% endif %}
+                {% if cite.score is defined %}<span class="text-slate-600"> &middot; score {{ cite.score }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>

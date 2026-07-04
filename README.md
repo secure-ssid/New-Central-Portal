@@ -161,5 +161,7 @@ SMTP settings (server, port, credentials, sender, recipients) are managed in the
 
 ## Extending
 
+- **Integration tests:** `docker compose -f docker-compose.yml -f docker-compose.integration.yml run --rm integration-tests` (requires centralmcp mounted with valid `credentials.yaml`).
+
 - **New Lab experiment:** add a route in `app/routes/lab.py`, a template under `app/templates/lab/`, and an entry in the `lab_menu()` experiments list. Experiments are self-contained, so one breaking never affects the others.
 - **New vendor:** add a client module under `app/vendors/` with a singleton instance, then import it from the routes that need it.

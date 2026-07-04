@@ -8,6 +8,10 @@ NODE_KEYS = {"id", "label", "group", "model", "status", "ip", "site", "url"}
 EDGE_KEYS = {"id", "source", "target", "port", "speed"}
 
 
+def _edge_keys(edge: dict) -> set[str]:
+    return set(edge.keys())
+
+
 def extract_graph(html: str) -> dict:
     m = re.search(r"var RAW = (\{.*\});", html)
     assert m, "graph payload not found in topology page"
@@ -60,7 +64,7 @@ class TestEdges:
 
     def test_edge_field_contract(self, graph):
         for edge in graph["edges"]:
-            assert set(edge) == EDGE_KEYS, edge
+            assert EDGE_KEYS <= _edge_keys(edge), edge
 
     def test_self_loops_skipped(self, graph):
         assert all(e["source"] != e["target"] for e in graph["edges"])

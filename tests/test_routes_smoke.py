@@ -17,6 +17,8 @@ import pytest
     ("/topology/", ["var RAW = {", "SW1SERIAL"]),
     ("/notifications/", ["ops@example.com"]),
     ("/lab/", ["Network Chatbot", "MCP Tool Tester"]),
+    ("/lab/doc-api", ["OpenAPI Lookup"]),
+    ("/lab/doc-ask", ["Documentation Q&A"]),
 ])
 def test_page_renders(client, mock_central, stub_db, path, markers):
     r = client.get(path)

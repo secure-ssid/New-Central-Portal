@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 EVENT_FANOUT_DEVICES = 5
 EVENT_FEED_LIMIT = 10
 EVENT_LOOKBACK_HOURS = 24
+HEALTH_CHECK_OFFLINE_LIMIT = 5
+ALERT_SUMMARY_LIMIT = 50
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -140,6 +142,87 @@ async def _recent_events(devices: list[dict]) -> list[dict]:
         return []
 
 
+def _count_active_alerts(alerts: list[dict]) -> dict:
+    """Summarise alert severities for the dashboard stat strip."""
+    summary = {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
+    for alert in alerts:
+        if not isinstance(alert, dict):
+            continue
+        summary["total"] += 1
+        sev = str(alert.get("severity") or alert.get("alertSeverity") or "").lower()
+        if sev in ("critical", "crit"):
+            summary["critical"] += 1
+        elif sev in ("major", "high"):
+            summary["major"] += 1
+        elif sev in ("minor", "medium", "low"):
+            summary["minor"] += 1
+        else:
+            summary["other"] += 1
+    return summary
+
+
+def _health_issue_label(health_payload: dict | None) -> str | None:
+    """Extract a short human label from a get_device_health response."""
+    if not isinstance(health_payload, dict):
+        return None
+    health = health_payload.get("health")
+    if health is None:
+        return None
+    if isinstance(health, list):
+        if not health:
+            return None
+        first = health[0] if isinstance(health[0], dict) else {}
+        status = first.get("status") or first.get("healthStatus") or first.get("state")
+        return str(status) if status else "issue reported"
+    if isinstance(health, dict):
+        status = health.get("status") or health.get("healthStatus") or health.get("state")
+        return str(status) if status else None
+    return None
+
+
+async def _alert_summary() -> dict:
+    try:
+        from vendors.central_bridge import get_alerts
+        alerts = await get_alerts(limit=ALERT_SUMMARY_LIMIT)
+        return _count_active_alerts(alerts)
+    except Exception as exc:
+        logger.warning("Alerts unavailable for dashboard: %s", exc)
+        return {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
+
+
+async def _offline_health_notes(devices: list[dict]) -> list[dict]:
+    """Fetch config/monitoring health hints for a few offline devices."""
+    try:
+        from vendors.central_bridge import get_device_health
+    except Exception:
+        return []
+
+    offline = [
+        d for d in devices
+        if isinstance(d, dict) and d.get("status") == "offline" and d.get("serial")
+    ][:HEALTH_CHECK_OFFLINE_LIMIT]
+    if not offline:
+        return []
+
+    results = await asyncio.gather(
+        *(get_device_health(d["serial"]) for d in offline),
+        return_exceptions=True,
+    )
+
+    notes: list[dict] = []
+    for dev, result in zip(offline, results):
+        if isinstance(result, BaseException):
+            continue
+        label = _health_issue_label(result if isinstance(result, dict) else None)
+        if label:
+            notes.append({
+                "serial": dev["serial"],
+                "name": dev.get("name") or dev["serial"],
+                "label": label,
+            })
+    return notes
+
+
 def _render_live_fragment(request: Request, context: dict) -> HTMLResponse:
     """Render only the `dashboard_live` block of home.html (HTMX poll target).
 
@@ -246,6 +329,8 @@ async def home(request: Request, partial: int = 0):
     ]
 
     events = await _recent_events(devices)
+    alert_summary = await _alert_summary()
+    health_notes = await _offline_health_notes(devices)
 
     updated = datetime.now(timezone.utc).strftime("%I:%M %p UTC")
 
@@ -258,6 +343,8 @@ async def home(request: Request, partial: int = 0):
         "device_mix": device_mix,
         "client_mix": client_mix,
         "events": events,
+        "alert_summary": alert_summary,
+        "health_notes": health_notes,
         "is_partial": bool(partial),
     }
 
