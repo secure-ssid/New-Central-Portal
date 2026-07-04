@@ -174,6 +174,7 @@ def mock_central(monkeypatch):
     monkeypatch.setattr(cb, "list_wlans", _async_return([]))
     monkeypatch.setattr(cb, "list_mac_registrations", _async_return([]))
     monkeypatch.setattr(cb, "get_firmware_compliance", _async_return({}))
+    monkeypatch.setattr(cb, "get_ap_rf_neighbors", _async_return([]))
     monkeypatch.setattr(cb, "list_glp_service_offers", _async_return([]))
     monkeypatch.setattr(cb, "detect_client_flapping", _async_return({}))
     monkeypatch.setattr(cb, "detect_ssh_brute_force", _async_return({}))

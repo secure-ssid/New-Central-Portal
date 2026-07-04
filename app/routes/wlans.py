@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Request
 
 from bridge_errors import BRIDGE_UNAVAILABLE
-from pagination import filter_items
+from pagination import filter_items, paginate as _paginate
 from templates_shared import templates
 
 router = APIRouter()
@@ -35,9 +35,22 @@ async def list_wlans_page(request: Request):
         error = BRIDGE_UNAVAILABLE
 
     wlans = filter_items(wlans, q, "name", "essid", "type", "security", "vlan")
+    pg = _paginate(request, wlans)
 
     return templates.TemplateResponse(
         request,
         "wlans/list.html",
-        {"wlans": wlans, "error": error, "q": q, "active": "wlans"},
+        {
+            "wlans": pg["items"],
+            "error": error,
+            "q": q,
+            "active": "wlans",
+            "page": pg["page"],
+            "per_page": pg["per_page"],
+            "total": pg["total"],
+            "total_pages": pg["total_pages"],
+            "has_prev": pg["has_prev"],
+            "has_next": pg["has_next"],
+            "base_qs": pg["base_qs"],
+        },
     )
