@@ -427,7 +427,6 @@ def _enrich_site_cards(cards: list[dict], devices: list[dict]) -> list[dict]:
             else "#64748b"
         )
         if c.get("name"):
-            from urllib.parse import quote
             c["devices_url"] = f"/devices/?site={quote(c['name'])}"
         enriched.append(c)
     return enriched
