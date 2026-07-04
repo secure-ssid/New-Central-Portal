@@ -27,3 +27,17 @@ def test_alerts_hub_renders(client, mock_central, stub_db):
     r = client.get("/alerts/")
     assert r.status_code == 200
     assert "Alerts" in r.text
+    assert 'id="alerts-live"' in r.text
+
+
+def test_alerts_partial_fragment(client, mock_central, stub_db):
+    r = client.get("/alerts/?partial=1")
+    assert r.status_code == 200
+    assert "<html" not in r.text
+    assert "Central Active Alerts" in r.text
+
+
+def test_alerts_severity_filter(client, mock_central, stub_db):
+    r = client.get("/alerts/?severity=critical")
+    assert r.status_code == 200
+    assert "severity=critical" in r.text or "Critical" in r.text

@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
 
 import db
 
@@ -98,8 +99,7 @@ def _normalize_portal_alert(raw: dict) -> dict:
     }
 
 
-@router.get("/")
-async def alerts_hub(request: Request):
+async def _load_alerts_context(severity_filter: str | None = None) -> dict:
     central_alerts: list[dict] = []
     portal_history: list[dict] = []
     summary = {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
@@ -107,7 +107,18 @@ async def alerts_hub(request: Request):
     try:
         from vendors.central_bridge import list_active_alerts
         raw = await list_active_alerts(limit=100)
-        central_alerts = [_normalize_central_alert(a) for a in raw if isinstance(a, dict)]
+        all_central = [_normalize_central_alert(a) for a in raw if isinstance(a, dict)]
+        for alert in all_central:
+            sev = alert.get("severity", "other")
+            summary["total"] += 1
+            if sev in summary:
+                summary[sev] += 1
+            else:
+                summary["other"] += 1
+        if severity_filter:
+            central_alerts = [a for a in all_central if a.get("severity") == severity_filter]
+        else:
+            central_alerts = all_central
     except Exception as exc:
         logger.warning("Central alerts unavailable: %s", exc)
 
@@ -120,28 +131,39 @@ async def alerts_hub(request: Request):
     except Exception as exc:
         logger.warning("Portal notification history unavailable: %s", exc)
 
-    for alert in central_alerts:
-        summary["total"] += 1
-        sev = alert.get("severity", "other")
-        if sev in summary:
-            summary[sev] += 1
-        else:
-            summary["other"] += 1
-
     timeline = sorted(
-        central_alerts + portal_history,
+        central_alerts + ([] if severity_filter else portal_history),
         key=lambda a: _parse_time(a.get("time")) or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )[:30]
 
-    return templates.TemplateResponse(
-        request,
-        "alerts/hub.html",
-        {
-            "central_alerts": central_alerts,
-            "portal_history": portal_history,
-            "timeline": timeline,
-            "summary": summary,
-            "active": "alerts",
-        },
-    )
+    return {
+        "central_alerts": central_alerts,
+        "portal_history": portal_history if not severity_filter else [],
+        "timeline": timeline,
+        "summary": summary,
+        "severity_filter": severity_filter or "",
+    }
+
+
+def _render_alerts_fragment(request: Request, context: dict) -> HTMLResponse:
+    template = templates.env.get_template("alerts/hub.html")
+    block = template.blocks["alerts_live"]
+    ctx = template.new_context({"request": request, **context})
+    return HTMLResponse("".join(block(ctx)))
+
+
+@router.get("/")
+async def alerts_hub(request: Request, partial: int = 0, severity: str = ""):
+    sev = severity.strip().lower() if severity else None
+    if sev and sev not in ("critical", "major", "minor", "other"):
+        sev = None
+
+    ctx = await _load_alerts_context(severity_filter=sev)
+    ctx["active"] = "alerts"
+    ctx["is_partial"] = bool(partial)
+
+    if partial:
+        return _render_alerts_fragment(request, ctx)
+
+    return templates.TemplateResponse(request, "alerts/hub.html", ctx)
