@@ -15,7 +15,7 @@ A modern, self-hosted operations portal for HPE Aruba Networking Central. It put
   - Email alerts and scheduled daily/weekly summary reports over SMTP (configured in the UI, test-send included).
   - License/subscription expiry checks against GreenLake (daily) and SSL certificate expiry monitoring for hosts you list.
 - **AI Assistant** — a chat drawer available on every page, grounded with a just-fetched snapshot of your devices and clients, so it answers questions about *your* network. A global command palette (Ctrl+K / Cmd+K) searches devices, clients, and sites instantly.
-- **Lab** — a sandbox of self-contained experiments: network chatbot with RAG (Qdrant + Ollama) and MCP tool calling, semantic doc search, MCP tool tester, self-healing simulator (dry-run), AI health report, config viewer, ping tester, alert dashboard, client fingerprints, and a GreenLake Platform explorer.
+- **Lab** — a sandbox of self-contained experiments: network chatbot with RAG (centralmcp LanceDB index) and MCP tool calling, semantic doc search, MCP tool tester, self-healing simulator (dry-run), AI health report, config viewer, ping tester, alert dashboard, client fingerprints, and a GreenLake Platform explorer.
 - **Platform** — optional session login (`PORTAL_PASSWORD`), `/healthz` liveness + DB check for orchestration, responsive mobile layout with slide-in sidebar, accessibility-minded markup (ARIA labels, keyboard navigation, focus management), and defensive error handling throughout: API failures log and degrade, they don't 500.
 
 ## Screenshots
@@ -46,7 +46,7 @@ Browser ──► Caddy (:80/:443) ──► FastAPI app (:8000)
                                   ├─ vendors/aruba_central ───► New Central REST API (mock fallback)
                                   ├─ vendors/central_bridge ──► Classic Central (OAuth2 w/ auto-refresh)
                                   │                          ──► centralmcp tools + GreenLake (GLP)
-                                  │                          ──► Qdrant + Ollama (RAG for the Lab)
+                                  │                          ──► centralmcp RAG (LanceDB; optional Redis + Ollama)
                                   └─ PostgreSQL 16 + pgvector — settings, alert rules, notification
                                      history, device status snapshots, report schedule
 ```
@@ -88,7 +88,7 @@ New-Central-Portal/
 - Docker with the Compose plugin.
 - Optional: an HPE Aruba Networking Central API token (the UI serves mock data without one).
 - Optional: a local `centralmcp` checkout (the companion MCP tools project) for the MCP bridge, GreenLake features, and Lab tools.
-- Optional: Qdrant and Ollama running on the host for the Lab's RAG features.
+- Optional: centralmcp doc indexes built (`scripts/download_indexes.py` in centralmcp) for Lab RAG; optional Redis + Ollama for the alternate RAG backend.
 
 ### Run it
 
@@ -148,8 +148,7 @@ All settings are environment variables, documented with safe placeholders in [.e
 | `DEVICE_FETCH_LIMIT` | Max devices fetched per status poll. | `1000` | No |
 | `GITHUB_TOKEN` | GitHub PAT for the GitHub Models endpoint — powers the AI assistant and Lab chatbot. | empty | For AI features |
 | `ANTHROPIC_API_KEY` | Anthropic API key (reserved for Claude-backed experiments). | empty | No |
-| `QDRANT_URL` | Qdrant vector store URL for RAG. | `http://host.docker.internal:6333` | For Lab RAG |
-| `OLLAMA_URL` | Ollama URL used for RAG embeddings. | `http://host.docker.internal:11434` | For Lab RAG |
+| `OLLAMA_URL` | Ollama URL when using centralmcp's Redis RAG backend. | `http://host.docker.internal:11434` | Optional Lab RAG |
 | `LOG_LEVEL` | Python logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). | `INFO` | No |
 
 SMTP settings (server, port, credentials, sender, recipients) are managed in the UI under **Notifications** and stored in the database, not in the environment.

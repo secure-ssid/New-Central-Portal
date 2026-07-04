@@ -3,12 +3,15 @@
 Requires these env vars (set in docker-compose.yml):
   PYTHONPATH=/centralmcp
   CREDS_PATH=/centralmcp/config/credentials.yaml
-  QDRANT_URL=http://host.docker.internal:6333   (for RAG)
-  OLLAMA_URL=http://host.docker.internal:11434  (for RAG)
   CLASSIC_CENTRAL_BASE_URL, CLASSIC_CENTRAL_CLIENT_ID, etc. (Classic Central)
+
+RAG doc search delegates to centralmcp's LanceDB backend by default
+(CENTRALMCP_RAG_BACKEND=lancedb). Set CENTRALMCP_RAG_BACKEND=redis plus
+OLLAMA_URL when using the optional Redis Stack deployment.
 """
 import asyncio
 import importlib
+import inspect
 import json
 import logging
 import os
@@ -102,9 +105,26 @@ def get_classic_client() -> ClassicCentralClient:
 
 
 async def _run(fn, *args, **kwargs) -> Any:
-    """Run a blocking centralmcp function in a thread pool."""
+    """Run a centralmcp function — await coroutines, thread-pool sync callables."""
+    if inspect.iscoroutinefunction(fn):
+        return await fn(*args, **kwargs)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
+
+
+def _resolve_troubleshoot_type(serial: str, device_type: str) -> str | None:
+    """Map portal device types to centralmcp troubleshoot URL segments."""
+    from mcp_servers.shared import device_type_for_troubleshoot
+
+    portal_dt = (device_type or "").lower()
+    # Generic "switch" from aruba_central normalization — disambiguate via inventory.
+    if portal_dt in ("switch", "unknown", ""):
+        return device_type_for_troubleshoot(serial, None)
+    return device_type_for_troubleshoot(serial, device_type)
+
+
+def _ops_error(message: str) -> dict:
+    return {"status": None, "errors": [message]}
 
 
 def _unwrap(result: list | dict | None) -> list[dict]:
@@ -184,7 +204,7 @@ async def _get_switch_ports_cached(serial: str) -> list[dict]:
 async def find_device_uplink(device_serial: str) -> dict | None:
     """Return the switch + port that an AP/device uplinks through."""
     from mcp_servers.monitoring import list_devices
-    all_devices = _unwrap(await _run(list_devices, limit=50))
+    all_devices = _unwrap(await _run(list_devices, limit=200))
     switches = [
         d for d in all_devices
         if isinstance(d, dict)
@@ -324,34 +344,99 @@ async def add_device_to_group(scope_id: str, serial_numbers: list[str]) -> dict:
 
 async def run_show(serial: str, device_type: str, commands: list[str]) -> dict:
     """Run show commands — picks the right function by device type."""
-    dtype = device_type.lower()
-    if "switch" in dtype or dtype in ("cx", "aos_cx"):
+    dtype = _resolve_troubleshoot_type(serial, device_type)
+    if dtype == "aps":
+        return _ops_error(
+            "Show commands are not supported on Access Points via the Central troubleshooting API."
+        )
+    if dtype == "cx":
         from mcp_servers.ops import cx_show
         return await _run(cx_show, serial, commands)
-    elif "access_point" in dtype or dtype == "ap":
+    if dtype == "aos-s":
         from mcp_servers.ops import aos_s_show
         return await _run(aos_s_show, serial, commands)
-    elif "gateway" in dtype or dtype == "gw":
+    if dtype == "gateways":
         from mcp_servers.ops import gateway_show
         return await _run(gateway_show, serial, commands)
-    else:
-        from mcp_servers.ops import cx_show
-        return await _run(cx_show, serial, commands)
+    return _ops_error(f"Could not determine device type for show commands on {serial}.")
 
 
 async def run_ping(serial: str, device_type: str, destination: str, count: int = 5) -> dict:
-    dtype = device_type.lower()
-    if "switch" in dtype or dtype in ("cx", "aos_cx"):
+    dtype = _resolve_troubleshoot_type(serial, device_type)
+    if dtype == "aps":
+        return _ops_error(
+            "Ping is not supported on Access Points via the Central troubleshooting API."
+        )
+    if dtype == "cx":
         from mcp_servers.ops import cx_ping
-        return await _run(cx_ping, serial, destination, count)
-    else:
+        return await _run(cx_ping, serial, destination, count=count)
+    if dtype == "aos-s":
         from mcp_servers.ops import aos_s_ping
         return await _run(aos_s_ping, serial, destination)
+    if dtype == "gateways":
+        return _ops_error("Ping is not supported on gateways.")
+    return _ops_error(f"Could not determine device type for ping on {serial}.")
 
 
 async def run_reboot(serial: str, device_type: str) -> dict:
-    from mcp_servers.ops import reboot_device
-    return await _run(reboot_device, serial_number=serial, device_type=device_type or None)
+    """Reboot a device via Central troubleshooting API (bypasses MCP elicitation)."""
+    from mcp_servers.shared import _AOS_S_BASE, compact_http_error, get_client
+
+    dtype = _resolve_troubleshoot_type(serial, device_type)
+    if dtype == "aps":
+        endpoint = f"/network-troubleshooting/v1alpha1/aps/{serial}/reboot"
+        reboot_type = "AP"
+    elif dtype == "cx":
+        endpoint = f"/network-troubleshooting/v1alpha1/cx/{serial}/reboot"
+        reboot_type = "CX"
+    elif dtype == "aos-s":
+        endpoint = f"{_AOS_S_BASE}/{serial}/reboot"
+        reboot_type = "AOS-S"
+    elif dtype == "gateways":
+        endpoint = f"/network-troubleshooting/v1alpha1/gateways/{serial}/reboot"
+        reboot_type = "GATEWAY"
+    else:
+        return {
+            "status": "failed",
+            "serial_number": serial,
+            "device_type": device_type,
+            "response": None,
+            "errors": [f"Could not determine device type for reboot on {serial}."],
+        }
+
+    errors: list[str] = []
+    client = get_client()
+    try:
+        response = await client._arequest("POST", endpoint, json={})
+        if response.status_code not in (200, 201, 202):
+            errors.append(compact_http_error(response))
+            return {
+                "status": "failed",
+                "serial_number": serial,
+                "device_type": reboot_type,
+                "response": None,
+                "errors": errors,
+            }
+        try:
+            resp_body = response.json()
+        except Exception:
+            resp_body = {}
+        return {
+            "status": "submitted",
+            "serial_number": serial,
+            "device_type": reboot_type,
+            "response": resp_body,
+            "errors": errors,
+        }
+    except Exception as exc:
+        errors.append(str(exc))
+        return {
+            "status": "failed",
+            "serial_number": serial,
+            "device_type": reboot_type,
+            "response": None,
+            "errors": errors,
+        }
 
 
 # ── GreenLake Platform (GLP) ──────────────────────────────────────────────────
@@ -530,41 +615,13 @@ async def assign_glp_device_to_app(serial_number: str) -> dict:
 
 # ── RAG Doc Search ────────────────────────────────────────────────────────────
 
-def search_docs(query: str, top_k: int = 5) -> list[dict]:
-    """Semantic search over Aruba docs via Qdrant + Ollama.
-
-    Uses QDRANT_URL and OLLAMA_URL env vars so the URLs are configurable
-    inside Docker (avoids the hardcoded localhost in centralmcp's rag.py).
-    """
-    qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
-    ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-
+async def search_docs(query: str, top_k: int = 5) -> list[dict]:
+    """Hybrid doc search via centralmcp RAG (LanceDB by default, Redis optional)."""
     try:
-        from qdrant_client import QdrantClient
-        from pipeline.clients.qdrant_client import DOCS_COLLECTION
-        from pipeline.clients.ollama_client import OllamaClient
-
-        ollama = OllamaClient(url=ollama_url)
-        qdrant = QdrantClient(url=qdrant_url)
-
-        query_vector = ollama.embed(query)
-        hits = qdrant.query_points(
-            collection_name=DOCS_COLLECTION,
-            query=query_vector,
-            limit=min(top_k, 20),
-        )
-
-        return [
-            {
-                "text": h.payload.get("text", ""),
-                "source": h.payload.get("source", ""),
-                "file_path": h.payload.get("file_path", ""),
-                "score": h.score,
-            }
-            for h in hits.points
-        ]
+        from mcp_servers.rag import search_docs as _search
+        return await _run(_search, query, top_k=top_k)
     except Exception as exc:
-        logger.warning("Doc search failed (qdrant=%s, ollama=%s): %s", qdrant_url, ollama_url, exc)
+        logger.warning("Doc search failed: %s", exc)
         return [{"error": str(exc)}]
 
 
@@ -631,11 +688,6 @@ async def run_tool(tool_name: str, params_json: str) -> dict:
         }
 
     module_path, fn_name = _TOOL_MAP[tool_name]
-
-    # search_docs goes through the bridge implementation to use env-based URLs
-    if tool_name == "search_docs":
-        output = search_docs(**params)
-        return {"tool": tool_name, "params": params, "output": output, "status": "success", "error": None}
 
     try:
         module = importlib.import_module(module_path)
