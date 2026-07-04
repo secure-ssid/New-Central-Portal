@@ -6,9 +6,16 @@
     <div>
         <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Central</p>
         <h1 class="text-2xl font-semibold text-white tracking-tight">Sites</h1>
-        <p class="text-sm text-slate-500 mt-0.5">{{ sites | length }} physical location{{ '' if sites | length == 1 else 's' }} under management</p>
+        <p class="text-sm text-slate-500 mt-0.5">{{ sites | length }} physical location{{ '' if sites | length == 1 else 's' }}{% if q %} matching &ldquo;{{ q }}&rdquo;{% endif %}</p>
     </div>
 </div>
+
+{% if sites or q %}
+<form method="get" class="mb-4 max-w-md">
+    <input name="q" value="{{ q }}" type="search" placeholder="Search sites by name, city, state…"
+           class="input" aria-label="Search sites">
+</form>
+{% endif %}
 
 {% if sites %}
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

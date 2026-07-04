@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Request
 
+from pagination import filter_items
 from templates_shared import templates
 
 router = APIRouter()
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 async def list_wlans_page(request: Request):
     wlans: list[dict] = []
     error = None
+    q = request.query_params.get("q", "").strip()
     try:
         from vendors.central_bridge import list_wlans
         raw = await list_wlans(limit=200)
@@ -31,8 +33,10 @@ async def list_wlans_page(request: Request):
         logger.warning("WLAN list unavailable: %s", exc)
         error = str(exc)
 
+    wlans = filter_items(wlans, q, "name", "essid", "type", "security", "vlan")
+
     return templates.TemplateResponse(
         request,
         "wlans/list.html",
-        {"wlans": wlans, "error": error, "active": "wlans"},
+        {"wlans": wlans, "error": error, "q": q, "active": "wlans"},
     )

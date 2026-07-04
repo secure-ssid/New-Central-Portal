@@ -28,3 +28,10 @@ def test_site_list(client, mock_central, stub_db):
     assert r.status_code == 200
     assert "HQ" in r.text
     assert "Branch" in r.text
+
+
+def test_site_list_search(client, mock_central, stub_db):
+    r = client.get("/sites/?q=branch")
+    assert r.status_code == 200
+    assert "Branch" in r.text
+    assert "HQ" not in r.text

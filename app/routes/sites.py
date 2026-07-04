@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
+from pagination import filter_items
 from vendors.aruba_central import aruba
 
 from templates_shared import templates
@@ -56,10 +57,12 @@ async def _load_sites() -> list[dict]:
 @router.get("/")
 async def list_sites(request: Request):
     sites = await _load_sites()
+    q = request.query_params.get("q", "").strip()
+    sites = filter_items(sites, q, "name", "city", "state", "address")
     return templates.TemplateResponse(
         request,
         "sites/list.html",
-        {"sites": sites, "active": "sites"},
+        {"sites": sites, "q": q, "active": "sites"},
     )
 
 
