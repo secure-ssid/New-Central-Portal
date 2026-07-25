@@ -3,61 +3,128 @@
 
 {% block styles %}
 <style>
-    /* Was height:calc(100vh - 215px) — a hard-coded guess at the header +
-       page-header height that silently broke whenever either changed.
-       Fill the remaining space instead. */
-    #topo-wrap { position:relative; width:100%; flex:1 1 auto; min-height:480px; background:#060a14; border:1px solid #1e2535; border-radius:12px; overflow:hidden; }
+    /* ── Canvas shell ───────────────────────────────────────────────────
+       Was height:calc(100vh - 215px) — a hard-coded guess at the header +
+       page-header height that broke silently whenever either changed. The
+       shell is a flex column (see .page-shell--fill) and this fills it. */
+    #topo-wrap { position:relative; width:100%; flex:1 1 auto; min-height:480px; background:radial-gradient(circle at 50% 45%, #0b1020 0%, #060a14 70%); border:1px solid #1e2535; border-radius:12px; overflow:hidden; }
     #graph-3d { position:absolute; inset:0; }
     .topo-overlay { position:absolute; z-index:20; }
-    .topo-btn { background:#10141f; border:1px solid #1e2535; color:#94a3b8; border-radius:8px; padding:6px 13px; font-size:.72rem; font-weight:600; cursor:pointer; transition:all .15s; white-space:nowrap; }
-    .topo-btn:hover { border-color:#f97316; color:#f97316; }
-    .topo-btn.active { background:rgba(249,115,22,.12); border-color:rgba(249,115,22,.55); color:#f97316; }
-    .topo-input { background:#10141f; border:1px solid #1e2535; color:#e2e8f0; border-radius:8px; padding:6px 12px; font-size:.74rem; width:185px; outline:none; transition:border-color .15s; }
+    /* A class that sets `display` beats the user-agent [hidden] rule, and the
+       overlay classes below all set one. Make the attribute authoritative. */
+    [hidden] { display:none !important; }
+
+    /* ── Surfaces ───────────────────────────────────────────────────────
+       One elevated-surface treatment for every floating panel, instead of
+       each overlay declaring its own background/blur/border inline. */
+    .topo-surface { background:rgba(13,17,23,.88); border:1px solid #232c3f; border-radius:10px; backdrop-filter:blur(8px); box-shadow:0 8px 28px -12px rgba(0,0,0,.8); }
+
+    /* ── Header badges ──────────────────────────────────────────────────
+       Four hand-styled inline variants (device count, site filter, port
+       warning, device cap) collapsed onto one shape with tone modifiers. */
+    .topo-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 11px; border-radius:6px; font-size:.7rem; font-weight:600; background:#10141f; color:#94a3b8; border:1px solid #1e2535; white-space:nowrap; }
+    .topo-badge--warn { background:rgba(251,191,36,.1); color:#fbbf24; border-color:rgba(251,191,36,.3); }
+    .topo-badge--info { background:rgba(59,130,246,.1); color:#60a5fa; border-color:rgba(59,130,246,.3); }
+
+    /* ── Toolbar ────────────────────────────────────────────────────────
+       Grouped into search | view state | actions, with hairline dividers.
+       Previously eight equal-weight buttons sat in one flat row, each
+       carrying its own state in its label ("Layout: Hierarchy", "Orbit:
+       on"), which read as a wall of text with no hierarchy. */
+    .topo-toolbar { top:12px; left:12px; right:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .topo-group { display:flex; align-items:center; gap:4px; padding:4px; border-radius:10px; }
+    .topo-group + .topo-group { position:relative; }
+    .topo-spacer { flex:1 1 auto; }
+
+    .topo-btn { display:inline-flex; align-items:center; gap:6px; background:transparent; border:1px solid transparent; color:#94a3b8; border-radius:7px; padding:5px 10px; font-size:.72rem; font-weight:600; cursor:pointer; transition:background .15s, color .15s, border-color .15s; white-space:nowrap; }
+    .topo-btn:hover { background:rgba(148,163,184,.09); color:#e2e8f0; }
+    .topo-btn:focus-visible { outline:2px solid #f97316; outline-offset:1px; }
+    .topo-btn.active { background:rgba(249,115,22,.14); border-color:rgba(249,115,22,.45); color:#fb923c; }
+    .topo-btn svg { width:13px; height:13px; flex-shrink:0; opacity:.85; }
+    /* Icon-only actions keep their label for screen readers via aria-label. */
+    .topo-btn--icon { padding:6px; }
+
+    .topo-search { position:relative; display:flex; align-items:center; }
+    .topo-input { background:rgba(6,10,20,.7); border:1px solid #232c3f; color:#e2e8f0; border-radius:8px; padding:6px 34px 6px 30px; font-size:.74rem; width:210px; outline:none; transition:border-color .15s, box-shadow .15s; font-family:inherit; }
     .topo-input::placeholder { color:#4b5563; }
-    .topo-input:focus { border-color:#22d3ee; }
-    .topo-chip { display:inline-flex; align-items:center; gap:5px; background:rgba(16,20,31,.85); border:1px solid #1e2535; border-radius:7px; padding:4px 10px; font-size:.68rem; color:#94a3b8; backdrop-filter:blur(4px); }
-    .topo-chip b { color:#e2e8f0; font-weight:700; }
-    .topo-legend-row { display:flex; align-items:center; gap:8px; font-size:.68rem; color:#94a3b8; margin-top:5px; }
+    .topo-input:focus { border-color:#f97316; box-shadow:0 0 0 3px rgba(249,115,22,.13); }
+    .topo-search-icon { position:absolute; left:10px; width:12px; height:12px; color:#4b5563; pointer-events:none; }
+    #topo-search-count { position:absolute; right:10px; font-size:.62rem; font-weight:700; color:#22d3ee; pointer-events:none; }
+
+    /* ── Stats strip ────────────────────────────────────────────────────*/
+    .topo-stats { bottom:12px; right:12px; display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; max-width:52%; }
+    .topo-chip { display:inline-flex; align-items:center; gap:5px; background:rgba(13,17,23,.88); border:1px solid #232c3f; border-radius:7px; padding:4px 9px; font-size:.67rem; color:#8b95a8; backdrop-filter:blur(6px); }
+    .topo-chip b { color:#e2e8f0; font-weight:700; font-variant-numeric:tabular-nums; }
+    .topo-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
+
+    /* ── Legend (collapsible) ───────────────────────────────────────────
+       Eleven always-on rows, six of them link-speed swatches, permanently
+       occluded the lower-left of the canvas. It is reference material, so
+       it opens on demand and remembers the choice. */
+    .topo-legend { left:12px; bottom:12px; padding:12px 14px; max-width:230px; }
+    .topo-legend[hidden] { display:none; }
+    .topo-legend-row { display:flex; align-items:center; gap:8px; font-size:.67rem; color:#8b95a8; margin-top:5px; }
     .topo-legend-row:first-child { margin-top:0; }
-    .topo-dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
-    .topo-legend-icon { width:16px; height:16px; flex-shrink:0; display:inline-block; }
-    .topo-tier-icon { width:14px; height:14px; flex-shrink:0; display:inline-block; }
-    .topo-line { width:20px; height:0; border-top:2px solid #22d3ee; display:inline-block; flex-shrink:0; }
-    .topo-line.dashed { border-top:1px solid #475569; }
-    /* Filters panel */
-    .topo-panel { background:rgba(16,20,31,.93); border:1px solid #1e2535; border-radius:12px; padding:14px 16px; width:232px; backdrop-filter:blur(6px); box-shadow:0 8px 32px rgba(0,0,0,.55); }
-    .topo-panel-label { font-size:.62rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#64748b; margin-bottom:6px; }
+    .topo-legend-icon { width:15px; height:15px; flex-shrink:0; display:inline-block; }
+    .topo-legend-head { font-size:.58rem; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:#5a677d; margin:10px 0 6px; padding-top:9px; border-top:1px solid #232c3f; }
+    .topo-legend-head:first-child { margin-top:0; padding-top:0; border-top:none; }
+    .topo-line { width:18px; height:0; border-top:2px solid #22d3ee; display:inline-block; flex-shrink:0; }
+    .topo-line.dashed { border-top:1px dashed #475569; }
+
+    /* ── Filters panel ──────────────────────────────────────────────────*/
+    .topo-panel { padding:14px 16px; width:236px; }
+    .topo-panel-label { font-size:.6rem; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:#5a677d; margin-bottom:7px; }
     .topo-check { display:flex; align-items:center; gap:8px; font-size:.72rem; color:#94a3b8; padding:3px 0; cursor:pointer; transition:color .15s; }
     .topo-check:hover { color:#e2e8f0; }
     .topo-check input { accent-color:#f97316; width:13px; height:13px; cursor:pointer; flex-shrink:0; }
     .topo-check span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    /* Restyle the 3d-force-graph tooltip container */
+    .topo-seg { display:flex; gap:5px; }
+    .topo-seg--grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:5px; }
+    .topo-seg .topo-btn { flex:1; justify-content:center; border-color:#232c3f; }
+
+    /* ── Node tooltip (3d-force-graph injects .scene-tooltip) ───────────*/
     .scene-tooltip { font-family:inherit !important; color:inherit !important; }
-    .topo-tip { background:#10141f; border:1px solid #1e2535; border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 8px 32px rgba(0,0,0,.65); }
-    .topo-tip-name { font-weight:700; color:#f1f5f9; font-size:.85rem; margin-bottom:3px; }
-    .topo-tip-row { font-size:.72rem; color:#8b95a8; margin-top:2px; }
+    .topo-tip { background:rgba(13,17,23,.96); border:1px solid #232c3f; border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 10px 34px rgba(0,0,0,.7); }
+    .topo-tip-name { font-weight:700; color:#f1f5f9; font-size:.84rem; margin-bottom:3px; }
+    .topo-tip-row { font-size:.71rem; color:#8b95a8; margin-top:2px; }
     .topo-tip-mono { font-family:ui-monospace, monospace; }
-    .topo-tip-status { font-size:.7rem; font-weight:700; margin-top:8px; display:flex; align-items:center; gap:6px; letter-spacing:.05em; }
+    .topo-tip-status { font-size:.69rem; font-weight:700; margin-top:8px; display:flex; align-items:center; gap:6px; letter-spacing:.05em; }
     .topo-tip-dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+
+    /* ── Loading / empty states ─────────────────────────────────────────*/
     @keyframes topo-spin { to { transform:rotate(360deg); } }
-    .topo-spinner { width:34px; height:34px; border-radius:50%; border:3px solid #1e2535; border-top-color:#f97316; animation:topo-spin .8s linear infinite; }
-    /* Tier axis strip (hierarchy layout): legend-like vertical rail on the
-       left edge listing the network tiers top-to-bottom. */
-    #topo-tieraxis { right:14px; top:50%; transform:translateY(-50%); display:none; flex-direction:column; align-items:flex-end; gap:38px; border-right:2px solid #1e2535; padding-right:10px; pointer-events:none; z-index:15; }
-    .topo-tier-label { display:flex; align-items:center; gap:7px; font-size:.6rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#64748b; white-space:nowrap; }
-    .topo-tier-label .topo-dot { width:7px; height:7px; }
-    /* Small screens: the absolute overlays collide on a narrow canvas —
-       give the toolbar the full width, drop the duplicate stats strip and
-       the mouse-centric hint, and slim the legend down. Visual only. */
+    .topo-spinner { width:30px; height:30px; border-radius:50%; border:2.5px solid #232c3f; border-top-color:#f97316; animation:topo-spin .8s linear infinite; }
+    .topo-state { inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:28px; text-align:center; background:radial-gradient(circle at 50% 45%, #0b1020 0%, #060a14 70%); }
+    .topo-state-title { font-size:.9rem; font-weight:700; color:#f1f5f9; }
+    .topo-state-body { font-size:.74rem; color:#6b7280; max-width:400px; line-height:1.55; }
+    .topo-state-actions { display:flex; gap:8px; margin-top:4px; }
+
+    /* ── Tier axis (hierarchy layout) ───────────────────────────────────*/
+    #topo-tieraxis { right:12px; top:50%; transform:translateY(-50%); display:none; flex-direction:column; align-items:flex-end; gap:38px; border-right:2px solid #232c3f; padding-right:10px; pointer-events:none; z-index:15; }
+    .topo-tier-label { display:flex; align-items:center; gap:7px; font-size:.58rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#5a677d; white-space:nowrap; }
+    .topo-tier-icon { width:13px; height:13px; flex-shrink:0; display:inline-block; }
+
+    /* ── Focus chip ─────────────────────────────────────────────────────*/
+    .topo-focus-chip { bottom:12px; left:50%; transform:translateX(-50%); background:rgba(249,115,22,.14); border:1px solid rgba(249,115,22,.5); color:#fb923c; border-radius:9999px; padding:6px 16px; font-size:.71rem; font-weight:700; cursor:pointer; backdrop-filter:blur(6px); z-index:25; white-space:nowrap; max-width:70%; overflow:hidden; text-overflow:ellipsis; }
+
+    /* ── List view ──────────────────────────────────────────────────────*/
+    .topo-list-panel { inset:0; z-index:35; background:#060a14; overflow:auto; padding:16px; }
+    .topo-list-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+
+    /* ── Hint ───────────────────────────────────────────────────────────
+       One line, and only the parts the header subtitle does not already
+       say. It used to repeat "drag to rotate / scroll to zoom / click to
+       open" verbatim from the subtitle directly above the canvas. */
+    .topo-hint { right:12px; bottom:52px; font-size:.63rem; color:#3d4759; text-align:right; pointer-events:none; }
+
+    /* Narrow canvas: the absolute overlays collide, so drop the decorative
+       ones and let the toolbar wrap. Visual only. */
     @media (max-width: 767px) {
-        .topo-toolbar { max-width:calc(100% - 28px) !important; }
-        .topo-stats { display:none !important; }
-        .topo-hint { display:none !important; }
-        .topo-legend { padding:8px 11px !important; }
-        .topo-legend .topo-legend-row { font-size:.62rem; gap:6px; margin-top:3px; }
-        .topo-legend-speeds { display:none !important; }
+        .topo-stats, .topo-hint { display:none !important; }
+        .topo-legend { max-width:calc(100% - 24px); }
+        .topo-input { width:150px; }
         #topo-tieraxis { gap:26px; padding-right:8px; }
-        .topo-tier-label { font-size:.54rem; letter-spacing:.1em; }
+        .topo-tier-label { font-size:.53rem; letter-spacing:.1em; }
     }
 </style>
 
@@ -87,25 +154,19 @@
             </select>
         </form>
         {% endif %}
+        {% if site_filter_active %}
+        <span class="topo-badge topo-badge--info">Site: {{ initial_site }}</span>
+        {% endif %}
         {% if port_fail_count %}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
-            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <span class="topo-badge topo-badge--warn">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
             Port data unavailable for {{ port_fail_count }} switch{{ 'es' if port_fail_count != 1 else '' }}
         </span>
         {% endif %}
-        {% if site_filter_active %}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(59,130,246,.1);color:#60a5fa;border:1px solid rgba(59,130,246,.3);">
-            Site: {{ initial_site }}
-        </span>
-        {% endif %}
         {% if device_cap_hit %}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
-            Showing first {{ device_cap }} devices
-        </span>
+        <span class="topo-badge topo-badge--warn">Showing first {{ device_cap }} devices</span>
         {% endif %}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:#10141f;color:#94a3b8;border:1px solid #1e2535;">
-            {{ device_count }} device{{ 's' if device_count != 1 else '' }}
-        </span>
+        <span class="topo-badge">{{ device_count }} device{{ 's' if device_count != 1 else '' }}</span>
     </div>
 </div>
 
@@ -113,40 +174,68 @@
 <div id="topo-wrap">
     <div id="graph-3d"></div>
 
-    <!-- Toolbar -->
-    <div class="topo-overlay topo-toolbar" style="top:14px;left:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:70%;">
-        <div style="position:relative;display:flex;align-items:center;">
+    <!-- Toolbar: search | view state | actions.
+         Every control used to sit in one flat row carrying its state in its
+         own label ("Layout: Hierarchy", "Orbit: on", "View: 3D"), which read
+         as a wall of same-weight text. State now lives in the pressed style,
+         so the labels can be short. -->
+    <div class="topo-overlay topo-toolbar">
+        <div class="topo-group topo-surface topo-search">
+            <svg class="topo-search-icon" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M20 20l-3.5-3.5"/></svg>
             <input id="topo-search" class="topo-input" type="text" placeholder="Search name or IP&hellip;" autocomplete="off" aria-label="Search devices by name or IP">
-            <span id="topo-search-count" style="position:absolute;right:10px;font-size:.62rem;color:#22d3ee;pointer-events:none;"></span>
+            <span id="topo-search-count" aria-live="polite"></span>
         </div>
-        <button id="btn-filters" class="topo-btn" type="button" aria-expanded="false" aria-controls="topo-filters" aria-label="Toggle filters panel">Filters</button>
-        <button id="btn-fit" class="topo-btn" type="button">Fit view</button>
-        <button id="btn-layout" class="topo-btn active" type="button" aria-label="Toggle between hierarchy and free 3D layout">Layout: Hierarchy</button>
-        <button id="btn-dim" class="topo-btn" type="button">View: 3D</button>
-        <button id="btn-list" class="topo-btn" type="button" aria-label="Toggle list view">View: List</button>
-        <button id="btn-orbit" class="topo-btn active" type="button">Orbit: on</button>
-        <button id="btn-export" class="topo-btn" type="button" aria-label="Export topology view as PNG image">Export PNG</button>
+
+        <div class="topo-group topo-surface" role="group" aria-label="Layout and view mode">
+            <button id="btn-layout" class="topo-btn active" type="button" aria-pressed="true" aria-label="Toggle between hierarchy and free 3D layout">Hierarchy</button>
+            <button id="btn-dim" class="topo-btn" type="button" aria-pressed="false" aria-label="Toggle between 3D and 2D projection">3D</button>
+            <button id="btn-orbit" class="topo-btn active" type="button" aria-pressed="true" aria-label="Toggle camera auto-orbit">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/></svg>
+                Orbit
+            </button>
+        </div>
+
+        <div class="topo-spacer"></div>
+
+        <div class="topo-group topo-surface" role="group" aria-label="View actions">
+            <button id="btn-fit" class="topo-btn" type="button" aria-label="Fit all devices in view">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"/></svg>
+                Fit
+            </button>
+            <button id="btn-filters" class="topo-btn" type="button" aria-expanded="false" aria-controls="topo-filters" aria-label="Toggle filters panel">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16M7 12h10M10 19h4"/></svg>
+                Filters
+            </button>
+            <button id="btn-legend" class="topo-btn" type="button" aria-expanded="false" aria-controls="topo-legend" aria-label="Toggle legend">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h6M4 12h6M4 18h6"/><circle cx="17" cy="6" r="1.6"/><circle cx="17" cy="12" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>
+                Legend
+            </button>
+            <button id="btn-list" class="topo-btn" type="button" aria-pressed="false" aria-label="Toggle list view">List</button>
+            <button id="btn-export" class="topo-btn topo-btn--icon" type="button" aria-label="Export topology view as PNG image" title="Export PNG">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+            </button>
+        </div>
     </div>
 
     <!-- Filters panel (collapsible) -->
-    <div id="topo-filters" class="topo-overlay topo-panel" role="region" aria-label="Topology filters"
-         style="top:58px;left:14px;display:none;max-height:calc(100% - 120px);overflow-y:auto;z-index:25;">
+    <div id="topo-filters" class="topo-overlay topo-panel topo-surface" role="region" aria-label="Topology filters" hidden
+         style="top:56px; left:12px; max-height:calc(100% - 130px); overflow-y:auto; z-index:25;">
         <div class="topo-panel-label">Sites</div>
-        <div id="flt-sites" style="max-height:150px;overflow-y:auto;margin-bottom:12px;"></div>
+        <div id="flt-sites" style="max-height:150px; overflow-y:auto; margin-bottom:12px;"></div>
         <div class="topo-panel-label">Status</div>
-        <div role="group" aria-label="Status filter" style="display:flex;gap:6px;margin-bottom:12px;">
-            <button type="button" class="topo-btn flt-status active" data-status="all" aria-pressed="true" style="flex:1;padding:5px 0;text-align:center;">All</button>
-            <button type="button" class="topo-btn flt-status" data-status="online" aria-pressed="false" style="flex:1;padding:5px 0;text-align:center;">Online</button>
-            <button type="button" class="topo-btn flt-status" data-status="offline" aria-pressed="false" style="flex:1;padding:5px 0;text-align:center;">Offline</button>
+        <div class="topo-seg" role="group" aria-label="Status filter" style="margin-bottom:12px;">
+            <button type="button" class="topo-btn flt-status active" data-status="all" aria-pressed="true">All</button>
+            <button type="button" class="topo-btn flt-status" data-status="online" aria-pressed="false">Online</button>
+            <button type="button" class="topo-btn flt-status" data-status="offline" aria-pressed="false">Offline</button>
         </div>
         <div class="topo-panel-label">Device type</div>
-        <div role="group" aria-label="Device type filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+        <div class="topo-seg topo-seg--grid" role="group" aria-label="Device type filter" style="margin-bottom:12px;">
             <button type="button" class="topo-btn flt-type active" data-type="switch" aria-pressed="true">Switches</button>
             <button type="button" class="topo-btn flt-type active" data-type="ap" aria-pressed="true">APs</button>
             <button type="button" class="topo-btn flt-type active" data-type="gateway" aria-pressed="true">Gateways</button>
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #1e2535;padding-top:10px;">
-            <span id="flt-count" style="font-size:.68rem;color:#94a3b8;" aria-live="polite"></span>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border-top:1px solid #232c3f; padding-top:10px;">
+            <span id="flt-count" style="font-size:.67rem; color:#8b95a8;" aria-live="polite"></span>
             <button id="flt-reset" type="button" class="topo-btn" aria-label="Reset all filters">Reset</button>
         </div>
     </div>
@@ -159,69 +248,69 @@
         <div class="topo-tier-label"><img class="topo-tier-icon" src="/static/icons/ap.svg" alt="" aria-hidden="true">Access</div>
     </div>
 
-    <!-- Stats strip (bottom-right, above the hint, clear of the toolbar) -->
-    <div class="topo-overlay topo-stats" style="bottom:58px;right:14px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:46%;">
+    <!-- Stats strip -->
+    <div class="topo-overlay topo-stats">
         <span class="topo-chip"><span class="topo-dot" style="background:#818cf8;"></span><b id="stat-switch">0</b> switches</span>
         <span class="topo-chip"><span class="topo-dot" style="background:#a78bfa;"></span><b id="stat-ap">0</b> APs</span>
         <span class="topo-chip"><span class="topo-dot" style="background:#fbbf24;"></span><b id="stat-gateway">0</b> gateways</span>
-        <span class="topo-chip" style="color:#4ade80;"><b id="stat-online" style="color:#4ade80;">0</b> online</span>
-        <span class="topo-chip" style="color:#f87171;"><b id="stat-offline" style="color:#f87171;">0</b> offline</span>
+        <span class="topo-chip"><span class="topo-dot" style="background:#4ade80;"></span><b id="stat-online">0</b> online</span>
+        <span class="topo-chip"><span class="topo-dot" style="background:#f87171;"></span><b id="stat-offline">0</b> offline</span>
     </div>
 
-    <!-- Legend -->
-    <div class="topo-overlay topo-legend" style="left:14px;bottom:14px;background:rgba(16,20,31,.85);border:1px solid #1e2535;border-radius:10px;padding:11px 14px;backdrop-filter:blur(4px);">
+    <!-- Legend — opens from the toolbar rather than permanently covering the
+         lower-left of the canvas. -->
+    <div id="topo-legend" class="topo-overlay topo-legend topo-surface" role="region" aria-label="Topology legend" hidden>
+        <div class="topo-legend-head">Device</div>
         <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/internet.svg" alt="" aria-hidden="true">Internet</div>
         <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/gateway.svg" alt="" aria-hidden="true">Gateway</div>
         <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/switch.svg" alt="" aria-hidden="true">Switch</div>
-        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/ap.svg" alt="" aria-hidden="true">Access Point</div>
+        <div class="topo-legend-row"><img class="topo-legend-icon" src="/static/icons/ap.svg" alt="" aria-hidden="true">Access point</div>
         <div class="topo-legend-row"><span class="topo-dot" style="background:#f87171;"></span>Offline</div>
-        <div class="topo-legend-speeds" style="border-top:1px solid #1e2535;margin-top:8px;padding-top:8px;">
-            <div class="topo-legend-row" style="font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;">Wired link speed</div>
-            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#64748b;"></span>&lt; 1 Gbps</div>
-            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#22d3ee;"></span>1 Gbps</div>
-            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#a78bfa;"></span>2.5 / 5 Gbps</div>
-            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#f97316;"></span>10 Gbps +</div>
-            <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#0e7490;"></span>Speed unknown</div>
-            <div class="topo-legend-row"><span class="topo-line dashed"></span>Inferred uplink</div>
-        </div>
+        <div class="topo-legend-head">Wired link speed</div>
+        <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#64748b;"></span>&lt; 1 Gbps</div>
+        <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#22d3ee;"></span>1 Gbps</div>
+        <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#a78bfa;"></span>2.5 / 5 Gbps</div>
+        <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#f97316;"></span>10 Gbps +</div>
+        <div class="topo-legend-row"><span class="topo-line" style="border-top-color:#0e7490;"></span>Speed unknown</div>
+        <div class="topo-legend-row"><span class="topo-line dashed"></span>Inferred uplink</div>
     </div>
 
-    <!-- Hint -->
-    <div class="topo-overlay topo-hint" style="right:14px;bottom:14px;font-size:.64rem;color:#3d4759;text-align:right;pointer-events:none;">
-        drag to rotate &middot; scroll to zoom &middot; right-drag to pan &middot; click node to open<br>
-        shift+click node to focus its neighbourhood &middot; esc to exit
+    <!-- Hint: only what the header subtitle does not already say. -->
+    <div class="topo-overlay topo-hint">
+        right-drag to pan &middot; shift+click to focus a neighbourhood &middot; esc to exit
     </div>
 
     <!-- Exit-focus chip -->
-    <button id="btn-exit-focus" class="topo-overlay" type="button" aria-label="Exit focus mode"
-            style="display:none;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(249,115,22,.14);border:1px solid rgba(249,115,22,.55);color:#f97316;border-radius:9999px;padding:6px 16px;font-size:.72rem;font-weight:700;cursor:pointer;backdrop-filter:blur(4px);z-index:25;white-space:nowrap;max-width:70%;overflow:hidden;text-overflow:ellipsis;">
+    <button id="btn-exit-focus" class="topo-overlay topo-focus-chip" type="button" aria-label="Exit focus mode" hidden>
         Focused: <span id="focus-label"></span> &middot; Exit (Esc)
     </button>
 
     <!-- Loading -->
-    <div id="topo-loading" class="topo-overlay" style="inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#060a14;z-index:30;">
+    <div id="topo-loading" class="topo-overlay topo-state" style="z-index:30;">
         <div class="topo-spinner"></div>
-        <p style="font-size:.74rem;color:#6b7280;">Rendering 3D topology&hellip;</p>
+        <p class="topo-state-body">Rendering topology&hellip;</p>
     </div>
 
     <!-- WebGL / library fallback -->
-    <div id="topo-fallback" class="topo-overlay" style="inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#060a14;z-index:40;padding:24px;text-align:center;">
-        <svg width="34" height="34" fill="none" stroke="#fbbf24" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-        <p style="font-size:.92rem;font-weight:700;color:#f1f5f9;">3D view unavailable</p>
-        <p style="font-size:.74rem;color:#6b7280;max-width:420px;">Your browser does not support WebGL (or the 3D graph library failed to load). Use the list view below or browse devices directly.</p>
-        <button id="btn-fallback-list" type="button" class="topo-btn" style="margin-top:6px;">Show list view</button>
-        <a href="/devices/" style="margin-top:6px;padding:7px 16px;background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.5);border-radius:8px;color:#f97316;font-size:.74rem;font-weight:600;text-decoration:none;">Browse devices</a>
+    <div id="topo-fallback" class="topo-overlay topo-state" style="z-index:40;" hidden>
+        <svg width="30" height="30" fill="none" stroke="#fbbf24" stroke-width="1.7" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <p class="topo-state-title">3D view unavailable</p>
+        <p class="topo-state-body">This browser does not support WebGL, or the 3D graph library could not load. The same devices and links are available as a list.</p>
+        <div class="topo-state-actions">
+            <button id="btn-fallback-list" type="button" class="btn-primary">Show device list</button>
+            <a href="/devices/" class="btn-secondary">Browse devices</a>
+        </div>
     </div>
 
     <!-- Mobile / accessibility list fallback (same data as the 3D graph) -->
-    <div id="topo-list-panel" class="topo-overlay" style="inset:0;display:none;z-index:35;background:#060a14;overflow:auto;padding:14px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
-            <p style="font-size:.82rem;font-weight:700;color:#f1f5f9;">Device list</p>
-            <button id="btn-list-close" type="button" class="topo-btn">Back to graph</button>
+    <div id="topo-list-panel" class="topo-overlay topo-list-panel" hidden>
+        <div class="topo-list-head">
+            <p class="text-sm font-semibold text-white">Device list</p>
+            <button id="btn-list-close" type="button" class="btn-secondary btn--sm">Back to graph</button>
         </div>
         <div style="overflow-x:auto;">
-            <table class="tbl" id="topo-list-table">
-                <thead><tr><th>Name</th><th>Type</th><th>Site</th><th>IP</th><th>Status</th></tr></thead>
+            <table class="tbl tbl--wide" id="topo-list-table">
+                <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Site</th><th scope="col">IP</th><th scope="col">Status</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -333,8 +422,8 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     }
 
     if (typeof ForceGraph3D === 'undefined' || !webglAvailable()) {
-        loadingEl.style.display = 'none';
-        fallbackEl.style.display = 'flex';
+        loadingEl.hidden = true;
+        fallbackEl.hidden = false;
         return;
     }
 
@@ -566,8 +655,8 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
 
     // ── Graph ──────────────────────────────────────────────────────────────
     function showFallback() {
-        loadingEl.style.display = 'none';
-        fallbackEl.style.display = 'flex';
+        loadingEl.hidden = true;
+        fallbackEl.hidden = false;
     }
     // Narrow canvases keep the wrapped toolbar overlaid on the scene; a
     // moderate padding there keeps the top (internet) tier clear of it
@@ -628,7 +717,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
                 if (!booted) {
                     booted = true;
                     clearTimeout(bootWatchdog);
-                    loadingEl.style.display = 'none';
+                    loadingEl.hidden = true;
                 }
                 applyGlow();
             })
@@ -924,12 +1013,12 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
             Graph.cameraPosition({ x: dist * Math.sin(angle), y: y, z: dist * Math.cos(angle) });
         }, 40);
         orbitBtn.classList.add('active');
-        orbitBtn.textContent = 'Orbit: on';
+        orbitBtn.setAttribute('aria-pressed', 'true');
     }
     function stopOrbit() {
         if (orbitTimer) { clearInterval(orbitTimer); orbitTimer = null; }
         orbitBtn.classList.remove('active');
-        orbitBtn.textContent = 'Orbit: off';
+        orbitBtn.setAttribute('aria-pressed', 'false');
     }
     orbitBtn.addEventListener('click', function () { orbitTimer ? stopOrbit() : startOrbit(); });
     // Any direct interaction with the scene stops the auto-orbit
@@ -950,7 +1039,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         // z, so fy still produces the classic flat tree diagram.
         if (layoutMode === 'hier') applyHierarchyPins(nodes, links);
         Graph.numDimensions(is2D ? 2 : 3);
-        dimBtn.textContent = is2D ? 'View: 2D' : 'View: 3D';
+        dimBtn.textContent = is2D ? '2D' : '3D';
         dimBtn.classList.toggle('active', is2D);
         setTimeout(function () { Graph.zoomToFit(800, fitPadding()); }, 700);
     });
@@ -960,7 +1049,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     var tierAxis = document.getElementById('topo-tieraxis');
     function syncLayoutUi() {
         var hier = layoutMode === 'hier';
-        layoutBtn.textContent = hier ? 'Layout: Hierarchy' : 'Layout: Free 3D';
+        layoutBtn.textContent = hier ? 'Hierarchy' : 'Free';
         layoutBtn.classList.toggle('active', hier);
         tierAxis.style.display = hier ? 'flex' : 'none';
     }
@@ -1122,12 +1211,12 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
 
     function setListView(on) {
         listOpen = !!on;
-        if (listPanel) listPanel.style.display = listOpen ? 'block' : 'none';
+        if (listPanel) listPanel.hidden = !listOpen;
         if (graphEl) graphEl.style.visibility = listOpen ? 'hidden' : 'visible';
         var listBtn = document.getElementById('btn-list');
         if (listBtn) {
             listBtn.classList.toggle('active', listOpen);
-            listBtn.textContent = listOpen ? 'View: Graph' : 'View: List';
+            listBtn.textContent = listOpen ? 'Graph' : 'List';
         }
         if (listOpen) refreshListPanel();
     }
@@ -1138,7 +1227,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     if (listClose) listClose.addEventListener('click', function () { setListView(false); });
     var fbList = document.getElementById('btn-fallback-list');
     if (fbList) fbList.addEventListener('click', function () {
-        if (fallbackEl) fallbackEl.style.display = 'none';
+        if (fallbackEl) fallbackEl.hidden = true;
         setListView(true);
     });
     if (listTableBody) {
@@ -1162,7 +1251,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         Graph.graphData({ nodes: nodes, links: links });
         applySearch();                          // recompute matches over visible nodes
         updateCount();
-        filtersBtn.classList.toggle('active', filtersDirty() || filtersPanel.style.display !== 'none');
+        filtersBtn.classList.toggle('active', filtersDirty() || !filtersPanel.hidden);
         if (typeof Graph.d3ReheatSimulation === 'function') Graph.d3ReheatSimulation();
         stopOrbit();
         if (refitTimer) clearTimeout(refitTimer);
@@ -1172,13 +1261,31 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     }
 
     function setFiltersOpen(open) {
-        filtersPanel.style.display = open ? 'block' : 'none';
+        filtersPanel.hidden = !open;
         filtersBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
         filtersBtn.classList.toggle('active', open || filtersDirty());
     }
     filtersBtn.addEventListener('click', function () {
-        setFiltersOpen(filtersPanel.style.display === 'none');
+        setFiltersOpen(filtersPanel.hidden);
     });
+
+    // Legend: reference material, so it opens on demand instead of
+    // permanently covering the lower-left of the canvas. The choice is
+    // remembered because someone reading link-speed colours wants it to stay.
+    var legendBtn = document.getElementById('btn-legend');
+    var legendPanel = document.getElementById('topo-legend');
+    function setLegendOpen(open) {
+        legendPanel.hidden = !open;
+        legendBtn.classList.toggle('active', open);
+        legendBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        try { localStorage.setItem('topoLegendOpen', open ? '1' : '0'); } catch (e) { /* private mode */ }
+    }
+    if (legendBtn && legendPanel) {
+        var savedLegend = '0';
+        try { savedLegend = localStorage.getItem('topoLegendOpen') || '0'; } catch (e) { /* private mode */ }
+        setLegendOpen(savedLegend === '1');
+        legendBtn.addEventListener('click', function () { setLegendOpen(legendPanel.hidden); });
+    }
 
     statusBtns.forEach(function (b) {
         b.addEventListener('click', function () {
@@ -1262,7 +1369,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         hoverNode = null;
         highlightLinks.clear();
         focusLabel.textContent = node.label || node.id;
-        exitFocusBtn.style.display = 'block';
+        exitFocusBtn.hidden = false;
         refreshSizes();
         frameNodes(nodes.filter(function (n) { return focusIds.has(n.id); }));
     }
@@ -1272,7 +1379,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
         focusNode = null;
         focusIds = null;
         focusLinkSet = null;
-        exitFocusBtn.style.display = 'none';
+        exitFocusBtn.hidden = true;
         refreshSizes();
         if (!skipFit) Graph.zoomToFit(700, fitPadding());
     }
@@ -1282,7 +1389,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
     window.addEventListener('keydown', function (ev) {
         if (ev.key !== 'Escape') return;
         if (focusIds) exitFocus();
-        else if (filtersPanel.style.display !== 'none') setFiltersOpen(false);
+        else if (!filtersPanel.hidden) setFiltersOpen(false);
     });
 
     // ── PNG export ─────────────────────────────────────────────────────────
