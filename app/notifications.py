@@ -28,18 +28,44 @@ def _parse_thresholds() -> list[int]:
 
 # ── Email sender ─────────────────────────────────────────────────────────────
 
-def _send_email(to: str, subject: str, html_body: str):
-    """Send an email via configured SMTP."""
-    host = db.get_setting("smtp_host")
+def _smtp_config() -> dict | None:
+    """Read the SMTP settings, or None when the database is unreachable.
+
+    Every alert path calls _send_email, and these six reads are the only DB
+    access inside it. Left unguarded, a Postgres blip raised straight through
+    _fire_down_alert into the scheduler job: alerted_at was never recorded and
+    the snapshot never persisted, so once the DB returned the whole fleet was
+    re-mailed every 60 seconds.
+    """
     try:
-        port = int(db.get_setting("smtp_port") or "587")
+        return {
+            "host": db.get_setting("smtp_host"),
+            "port_raw": db.get_setting("smtp_port"),
+            "user": db.get_setting("smtp_user"),
+            "password": db.get_setting("smtp_password"),
+            "from": db.get_setting("smtp_from"),
+            "tls": db.get_setting("smtp_tls"),
+        }
+    except Exception as e:
+        logger.warning("SMTP settings unavailable (database down?): %s", e)
+        return None
+
+
+def _send_email(to: str, subject: str, html_body: str):
+    """Send an email via configured SMTP. Never raises — returns False instead."""
+    cfg = _smtp_config()
+    if cfg is None:
+        return False
+    host = cfg["host"]
+    try:
+        port = int(cfg["port_raw"] or "587")
     except ValueError:
         logger.warning("Invalid smtp_port setting — falling back to 587")
         port = 587
-    user = db.get_setting("smtp_user")
-    password = db.get_setting("smtp_password")
-    from_addr = db.get_setting("smtp_from") or user
-    use_tls = db.get_setting("smtp_tls") != "false"
+    user = cfg["user"]
+    password = cfg["password"]
+    from_addr = cfg["from"] or user
+    use_tls = cfg["tls"] != "false"
 
     if not host or not user:
         logger.warning("SMTP not configured — skipping email to %s: %s", to, subject)
@@ -370,6 +396,34 @@ def _is_online(status) -> bool:
     return str(status or "").strip().lower() in ("online", "up", "connected")
 
 
+def _normalize_devices(devices: list[dict]) -> list[dict]:
+    """Map RAW centralmcp device dicts into this module's key space.
+
+    central_bridge.get_devices() returns serialNumber/deviceName/siteName/
+    deviceType (status uppercase), while everything below reads serial/name/
+    site/type. Without this the serial is always empty, every device is
+    skipped, and the engine tracks nothing at all.
+
+    Applied at the engine's public entry points rather than inside
+    _fetch_devices_sync(), because devices also arrive pre-fetched from
+    routes/notifications.py. _norm_device is idempotent, so an
+    already-normalized list passes through unchanged.
+    """
+    from vendors.aruba_central import _norm_device  # the single normalizer
+
+    out: list[dict] = []
+    for d in devices:
+        if not isinstance(d, dict):
+            continue
+        try:
+            out.append(_norm_device(d))
+        except Exception:
+            # _norm_device lowercases status/type; a non-string there would
+            # raise on a scheduler thread and kill the whole sweep.
+            logger.warning("Skipping unparseable device payload", exc_info=True)
+    return out
+
+
 def _rule_matches(rule: dict, dev: dict) -> bool:
     site_f = str(rule.get("site_filter") or "").strip().lower()
     if site_f and site_f != "all":
@@ -594,6 +648,7 @@ def run_device_status_check(devices: list[dict] | None = None,
     if devices is None:
         logger.warning("Device status check aborted — device fetch failed")
         return []
+    devices = _normalize_devices(devices)
 
     if not _state_seeded:
         _seed_baseline(devices, now)
@@ -607,52 +662,64 @@ def run_device_status_check(devices: list[dict] | None = None,
     events: list[dict] = []
 
     for dev in devices:
-        serial = str(dev.get("serial") or "").strip()
-        if not serial:
-            continue
-        name = dev.get("name") or serial
-        online = _is_online(dev.get("status"))
-        st = _device_state.get(serial)
-
-        if st is None:
-            # New device discovered mid-flight — baseline it without alerting.
-            _device_state[serial] = _new_state(dev, online, now if not online else None)
-            _record_transition_safe(serial, name, "online" if online else "offline")
-            continue
-
-        st["name"] = name
-        st["site"] = dev.get("site") or ""
-        st["type"] = _norm_device_type(dev.get("type"))
-
-        if st["online"] and not online:
-            # online -> offline: start the pending-down timer.
-            st["online"] = False
-            st["offline_since"] = now
-            st["_dirty"] = True
-            _record_transition_safe(serial, name, "offline")
-            events.append({"serial": serial, "event": "went_offline"})
-        elif not st["online"] and online:
-            # offline -> online: recovery notice only if we actually alerted.
-            alerted_for_outage = (
-                st.get("alerted_at") and st.get("offline_since")
-                and st["alerted_at"] >= st["offline_since"]
-            )
-            if alerted_for_outage:
-                _notify_recovery(st, serial, now)
-                events.append({"serial": serial, "event": "recovered"})
-            st["online"] = True
-            st["offline_since"] = None
-            st["_dirty"] = True
-            _record_transition_safe(serial, name, "online")
-        elif not online:
-            # Still offline — alert once threshold is met (cooldown-aware).
-            ev = _maybe_alert_down(st, serial, rules, now)
-            if ev:
-                events.append(ev)
+        # One unparseable device — or a transient DB error raised from inside an
+        # alert — must not abort the sweep for the rest of the fleet.
+        try:
+            events.extend(_process_device(dev, rules, now))
+        except Exception:
+            logger.warning("Device status check: skipping one device", exc_info=True)
 
     _persist_snapshot()
     if events:
         logger.info("Device status check: %d event(s): %s", len(events), events)
+    return events
+
+
+def _process_device(dev: dict, rules: list[dict], now: datetime) -> list[dict]:
+    """Advance one device's state machine. Returns any events it produced."""
+    events: list[dict] = []
+    serial = str(dev.get("serial") or "").strip()
+    if not serial:
+        return events
+    name = dev.get("name") or serial
+    online = _is_online(dev.get("status"))
+    st = _device_state.get(serial)
+
+    if st is None:
+        # New device discovered mid-flight — baseline it without alerting.
+        _device_state[serial] = _new_state(dev, online, now if not online else None)
+        _record_transition_safe(serial, name, "online" if online else "offline")
+        return events
+
+    st["name"] = name
+    st["site"] = dev.get("site") or ""
+    st["type"] = _norm_device_type(dev.get("type"))
+
+    if st["online"] and not online:
+        # online -> offline: start the pending-down timer.
+        st["online"] = False
+        st["offline_since"] = now
+        st["_dirty"] = True
+        _record_transition_safe(serial, name, "offline")
+        events.append({"serial": serial, "event": "went_offline"})
+    elif not st["online"] and online:
+        # offline -> online: recovery notice only if we actually alerted.
+        alerted_for_outage = (
+            st.get("alerted_at") and st.get("offline_since")
+            and st["alerted_at"] >= st["offline_since"]
+        )
+        if alerted_for_outage:
+            _notify_recovery(st, serial, now)
+            events.append({"serial": serial, "event": "recovered"})
+        st["online"] = True
+        st["offline_since"] = None
+        st["_dirty"] = True
+        _record_transition_safe(serial, name, "online")
+    elif not online:
+        # Still offline — alert once threshold is met (cooldown-aware).
+        ev = _maybe_alert_down(st, serial, rules, now)
+        if ev:
+            events.append(ev)
     return events
 
 
@@ -747,6 +814,9 @@ def run_summary_report(force: bool = False, devices: list[dict] | None = None,
 
     if devices is None:
         devices = _fetch_devices_sync() or []
+    # Raw when injected by /notifications/reports/test, raw when self-fetched —
+    # normalize here or every row renders "?" / blank serial / "unknown" type.
+    devices = _normalize_devices(devices)
     if subs is None:
         subs = _fetch_subscriptions_sync()
 
