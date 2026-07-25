@@ -7,10 +7,8 @@ classes was a no-op in production: pages carried by the inline design system
 (.card, .btn-*, .tbl) looked right and pages using surface-* panels did not.
 That is the failure this file exists to catch.
 """
-import json
 import pathlib
 import re
-import subprocess
 
 import pytest
 

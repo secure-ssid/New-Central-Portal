@@ -85,10 +85,10 @@ table.tbl { width:100%; border-collapse:collapse; }
 .tbl--wide { min-width:820px; }
 
 /* ── Buttons ───────────────────────────────────────────────────── */
-.btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 16px; border:none; border-radius:8px; background:#f97316; color:#fff; font-size:.78rem; font-weight:600; cursor:pointer; transition:all .15s ease; box-shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 14px -6px rgba(249,115,22,.55); white-space:nowrap; }
+.btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:6px; font-family:inherit; padding:7px 16px; border:none; border-radius:8px; background:#f97316; color:#fff; font-size:.78rem; font-weight:600; cursor:pointer; transition:all .15s ease; box-shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 14px -6px rgba(249,115,22,.55); white-space:nowrap; }
 .btn-primary:hover { background:#ea580c; }
 .btn-primary:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
-.btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border:1px solid #2a3347; border-radius:8px; background:#161b27; color:#94a3b8; font-size:.78rem; font-weight:500; cursor:pointer; transition:all .15s ease; white-space:nowrap; }
+.btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:6px; font-family:inherit; padding:7px 14px; border:1px solid #2a3347; border-radius:8px; background:#161b27; color:#94a3b8; font-size:.78rem; font-weight:500; cursor:pointer; transition:all .15s ease; white-space:nowrap; }
 .btn-secondary:hover { border-color:#3b465e; color:#e2e8f0; background:#1a2030; }
 .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
 /* Compact button — pagination Prev/Next and inline table actions. Replaces the
@@ -98,7 +98,7 @@ table.tbl { width:100%; border-collapse:collapse; }
 .btn--wide { padding-left:24px; padding-right:24px; }
 
 /* ── Inputs / selects ──────────────────────────────────────────── */
-.input, .select { width:100%; padding:8px 12px; background:#0d1117; border:1px solid #1e2535; border-radius:8px; color:#e2e8f0; font-size:.84rem; outline:none; transition:border-color .15s ease, box-shadow .15s ease; }
+.input, .select { width:100%; font-family:inherit; padding:8px 12px; background:#0d1117; border:1px solid #1e2535; border-radius:8px; color:#e2e8f0; font-size:.84rem; outline:none; transition:border-color .15s ease, box-shadow .15s ease; }
 .input::placeholder { color:#4b5563; }
 .input:focus, .select:focus { border-color:#f97316; box-shadow:0 0 0 3px rgba(249,115,22,.14); }
 .select { cursor:pointer; }
@@ -247,6 +247,15 @@ body.noc-mode .stat-card .text-3xl { font-size: 2.75rem; }
    Tailwind at all, so scope an equivalent reset to them. */
 .page-centered, .page-centered *, .page-centered *::before, .page-centered *::after { box-sizing:border-box; }
 .page-centered h1, .page-centered p, .page-centered form, .page-centered label { margin:0; padding:0; }
+/* ...then restore the spacing the components actually specify. The reset is
+   more specific than a bare .subtitle/.foot-note selector, so these have to be
+   scoped too or the cards render visually flattened. */
+.page-centered .login-card h1 { margin-top:2px; }
+.page-centered .subtitle { margin-top:4px; }
+.page-centered .foot-note { margin-top:18px; }
+.page-centered .brand-eyebrow { margin:0; }
+.page-centered .error-page-card h1 { margin-bottom:8px; }
+.page-centered .error-msg { margin-bottom:28px; }
 
 /* Login */
 .login-card { width:100%; max-width:380px; background:linear-gradient(180deg, #161b27 0%, #10141f 100%); border:1px solid #1e2535; border-radius:12px; padding:32px 28px 28px; box-shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 32px -18px rgba(0,0,0,.6); }
