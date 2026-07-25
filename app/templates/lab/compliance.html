@@ -3,10 +3,12 @@
 {% block title %}Compliance Board - Lab - New Central Portal{% endblock %}
 
 {% block content %}
+{# Eyebrow, not a Lab breadcrumb: this page is reached from the Operations nav
+   now, so a trail claiming you came from Lab would be a lie for most visits. #}
 {{ page_header(
      "Compliance Board",
      subtitle="Firmware drift, config health, and Central's own recommendations",
-     crumbs=[{"label": "Lab", "url": "/lab/"}, {"label": "Compliance Board"}]) }}
+     eyebrow="Operations") }}
 
 {% if load_error %}
 <div class="card mb-6" style="border-color:rgba(239,68,68,.35);">

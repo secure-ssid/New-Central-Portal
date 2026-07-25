@@ -51,6 +51,12 @@
             <p class="text-slate-400 uppercase tracking-wider text-xs">{{ device.type }} · {{ device.model }}{% if health_label %} · <span class="text-amber-400">{{ health_label }}</span>{% endif %}</p>
         </div>
         <div class="flex gap-2 flex-shrink-0">
+            {# The deep-dive is the only place with trends, PoE budget, VLANs and
+               interface error counters. It was reachable solely from the Lab
+               menu, which is not where anyone looking at a device is standing. #}
+            <a href="/lab/device-scope?serial={{ device.serial }}" class="btn-secondary">
+                Deep-dive &rarr;
+            </a>
             <a href="#quick-ops"
                class="btn-secondary">
                 Reboot

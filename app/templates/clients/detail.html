@@ -39,12 +39,19 @@
             {% if client.hostname %}<p class="text-sm text-slate-400">{{ client.hostname }}</p>{% endif %}
             {% if client.vendor %}<p class="text-xs text-slate-500 mt-0.5">{{ client.vendor }}{% if client.os %} &middot; {{ client.os }}{% endif %}</p>{% endif %}
         </div>
-        {% if client.connected_at %}
-        <div class="text-right">
-            <p class="section-label">Connected Since</p>
-            <p class="text-xs text-slate-400 mt-1">{{ client.connected_at[:19].replace('T',' ') }}</p>
+        <div class="flex flex-col items-end gap-2">
+            {# ?client= preselects and renders this client's drilldown server-side,
+               so the link lands on the answer rather than on a dropdown. #}
+            <a href="/lab/app-visibility?client={{ client.mac }}" class="btn-secondary text-xs">
+                Applications &rarr;
+            </a>
+            {% if client.connected_at %}
+            <div class="text-right">
+                <p class="section-label">Connected Since</p>
+                <p class="text-xs text-slate-400 mt-1">{{ client.connected_at[:19].replace('T',' ') }}</p>
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 </div>
 

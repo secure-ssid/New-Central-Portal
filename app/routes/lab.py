@@ -948,8 +948,11 @@ async def compliance_board(request: Request):
 
     insight_rows = [i for i in insights if isinstance(i, dict)]
 
+    # Nav-promoted out of the Lab section, so it highlights itself rather than
+    # Lab — same arrangement GreenLake already uses: main-nav entry, route and
+    # template still under /lab, still listed on the Lab menu.
     return templates.TemplateResponse(request, "lab/compliance.html", {
-        "active": "lab", "load_error": load_error,
+        "active": "compliance", "load_error": load_error,
         "firmware": rows, "health": health_rows, "insights": insight_rows,
         "drift_count": sum(1 for r in rows if r["drift"]),
         "unsynced_count": sum(1 for r in health_rows if not r["synced"]),
@@ -1157,7 +1160,8 @@ async def _app_site(site_param: str) -> tuple[list[dict], dict | None]:
 
 
 @router.get("/app-visibility")
-async def app_visibility(request: Request, hours: int = 24, site: str = ""):
+async def app_visibility(request: Request, hours: int = 24, site: str = "",
+                         client: str = ""):
     """What is talking on this network, and does Aruba's DPI trust it?
 
     Nothing else in the portal attributes a byte to an application or surfaces
@@ -1212,6 +1216,26 @@ async def app_visibility(request: Request, hours: int = 24, site: str = ""):
                 key=lambda c: (c.get("hostname") or c.get("mac") or "").lower(),
             )
 
+    # Arriving from a client page (/clients/{mac} links here with ?client=)
+    # should land on a loaded drilldown, not on a dropdown you have to operate.
+    # This is the ONLY path that costs an extra upstream call, and only when the
+    # parameter is present.
+    client_mac = (client or "").strip()
+    client_rows: list = []
+    client_error = None
+    if client_mac and chosen is not None and load_error is None:
+        try:
+            raw_client = await list_applications(
+                chosen["id"], start_iso, end_iso, client_id=client_mac)
+            if raw_client is None:
+                client_error = "Central did not return application data for this client."
+            else:
+                client_rows = app_risk.normalize_apps(raw_client)[:25]
+        except Exception as exc:
+            logger.exception("[app-visibility] preselected client %s failed: %s",
+                             client_mac, exc)
+            client_error = "The client lookup failed."
+
     unknown, known = app_risk.watchlist(apps)
     # Over a 7-day window "flagged but recognised" is ~135 rows, which is a wall
     # of table rather than a watchlist. Cap it — and render the count that was
@@ -1239,6 +1263,10 @@ async def app_visibility(request: Request, hours: int = 24, site: str = ""):
         "categories": [(c, _app_share_meter(c["total"], largest_category))
                        for c in categories],
         "clients": clients,
+        "client_mac": client_mac,
+        "client_error": client_error,
+        "client_rows": [(a, _app_share_meter(a["total"], client_rows[0]["total"]))
+                        for a in client_rows],
         "bytes_caveat": _APP_BYTES_CAVEAT,
     })
 
