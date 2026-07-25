@@ -10,6 +10,7 @@ from config import settings
 import db
 import security
 from routes import assistant as assistant_routes
+from routes.devices import _parse_show_commands
 from templates_shared import templates
 
 logger = logging.getLogger(__name__)
@@ -725,7 +726,16 @@ async def config_fetch(request: Request, serial: str = Form(...), command: str =
     device = devices.get(serial)
     if not device:
         return HTMLResponse("<p class='text-red-400'>Device not found.</p>")
-    cmds = [c.strip() for c in command.split(";") if c.strip()]
+
+    # This ran whatever was typed, split on ';', straight at the switch — while
+    # /devices/{serial}/show, the same capability reached from the Devices page,
+    # validated it. Reuse that validator rather than write a second one: it caps
+    # the count and length, allows only a conservative character set (no quotes,
+    # pipes, backticks, redirects or newlines) and requires each command to
+    # start with "show".
+    cmds, err = _parse_show_commands(command)
+    if err:
+        return HTMLResponse(f"<p class='text-red-400'>{escape(err)}</p>")
     try:
         result = await run_show(serial, device["type"], cmds)
         outputs = result.get("output", {}).get("results", [])
@@ -912,9 +922,27 @@ async def greenlake_page(request: Request):
     })
 
 
+async def _json_body(request: Request) -> tuple[dict | None, JSONResponse | None]:
+    """Parse a JSON request body, or return a 400 instead of raising.
+
+    An unparseable or non-object body used to propagate straight out of the
+    handler as an unhandled 500 — a malformed request reported as a server
+    fault, and a stack trace in the log for something the caller got wrong.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return None, JSONResponse({"error": "Request body must be valid JSON."}, status_code=400)
+    if not isinstance(body, dict):
+        return None, JSONResponse({"error": "Request body must be a JSON object."}, status_code=400)
+    return body, None
+
+
 @router.post("/greenlake/assign-subscription")
 async def assign_subscription(request: Request):
-    body = await request.json()
+    body, err = await _json_body(request)
+    if err:
+        return err
     serial = body.get("serial_number", "").strip()
     sub_id = body.get("subscription_id", "").strip()
     if not serial or not sub_id:
@@ -930,7 +958,9 @@ async def assign_subscription(request: Request):
 
 @router.post("/greenlake/unassign-subscription")
 async def unassign_subscription(request: Request):
-    body = await request.json()
+    body, err = await _json_body(request)
+    if err:
+        return err
     serial = body.get("serial_number", "").strip()
     if not serial:
         return JSONResponse({"ok": False, "error": "serial_number is required"}, status_code=400)
@@ -945,7 +975,9 @@ async def unassign_subscription(request: Request):
 
 @router.post("/greenlake/add-device")
 async def add_device(request: Request):
-    body = await request.json()
+    body, err = await _json_body(request)
+    if err:
+        return err
     serial = body.get("serial_number", "").strip()
     mac = body.get("mac_address", "").strip()
     if not serial or not mac:
@@ -992,7 +1024,9 @@ async def add_devices_csv(request: Request, file: UploadFile = File(...)):
 
 @router.post("/greenlake/assign-to-central")
 async def assign_to_central(request: Request):
-    body = await request.json()
+    body, err = await _json_body(request)
+    if err:
+        return err
     serials = body.get("serial_numbers", [])
     if not serials:
         serial = body.get("serial_number", "").strip()

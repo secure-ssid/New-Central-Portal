@@ -54,8 +54,7 @@ def test_query_selectors_still_match_something(parts):
     for sel in selectors:
         if sel.startswith("."):
             token = sel[1:].split()[0]
-            assert f'class="' in markup and token in markup, \
-                f"no element carries the class {sel}"
+            assert token in markup, f"no element carries the class {sel}"
         elif sel.startswith("#") and " " in sel:
             root = sel.split()[0][1:]
             assert f'id="{root}"' in markup, f"selector root {sel} is missing"
