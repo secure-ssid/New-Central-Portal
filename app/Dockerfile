@@ -26,4 +26,11 @@ COPY --from=tailwind /build/static/dist/tailwind.css static/dist/tailwind.css
 
 ENV USE_BUILT_TAILWIND=1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production default: multiple workers, no --reload. --reload forces uvicorn
+# into single-worker mode and runs a watchfiles observer over the bind-mounted
+# source tree, so any blocking call in a handler stalls every other request.
+# For local development override the command with:
+#   command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+ENV UVICORN_WORKERS=2
+
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS}"]

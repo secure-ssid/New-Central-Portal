@@ -246,6 +246,10 @@ def stub_db(monkeypatch, bell_store):
     }
     monkeypatch.setattr(db_module, "get_setting",
                         lambda key: setting_defaults.get(key, ""))
+    # Batched read used by the notifications page — must be stubbed alongside
+    # get_setting, or that page falls through to a real connection.
+    monkeypatch.setattr(db_module, "get_settings",
+                        lambda keys: {k: setting_defaults.get(k, "") for k in keys})
     monkeypatch.setattr(db_module, "get_recipients",
                         lambda: [{"email": "ops@example.com", "active": True,
                                   "created_at": NOW.isoformat()}])

@@ -3,6 +3,7 @@ from html import escape
 
 from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 import httpx
 import json
 from config import settings
@@ -76,11 +77,15 @@ async def lab_menu(request: Request):
     )
 
 
-def _assistant_ctx(request: Request, **extra) -> dict:
+async def _assistant_ctx(request: Request, **extra) -> dict:
+    # Both resolvers do a blocking psycopg2 read; one threadpool hop for the pair.
+    backend, model = await run_in_threadpool(
+        lambda: (assistant_routes._resolve_backend(), assistant_routes._resolve_model())
+    )
     ctx = {
         "active": "lab",
-        "backend": assistant_routes._resolve_backend(),
-        "model": assistant_routes._resolve_model(),
+        "backend": backend,
+        "model": model,
         "backends": assistant_routes.VALID_BACKENDS,
         "labels": assistant_routes.BACKEND_LABELS,
     }
@@ -94,7 +99,7 @@ async def assistant_settings(request: Request):
     return templates.TemplateResponse(
         request,
         "lab/assistant.html",
-        _assistant_ctx(request, saved=request.query_params.get("saved") == "1"),
+        await _assistant_ctx(request, saved=request.query_params.get("saved") == "1"),
     )
 
 
@@ -110,15 +115,18 @@ async def assistant_settings_save(
     model = (model or "").strip()
     if model.startswith("-"):  # never let a model value be parsed as a CLI flag
         model = ""
-    try:
+    def _save():
         db.set_setting("assistant_backend", backend)
         db.set_setting("assistant_model", model)
+
+    try:
+        await run_in_threadpool(_save)
     except Exception as exc:
         logger.error("Failed to save assistant settings: %s", exc)
         return templates.TemplateResponse(
             request,
             "lab/assistant.html",
-            _assistant_ctx(
+            await _assistant_ctx(
                 request, backend=backend, model=model,
                 error="Could not save — the database is unavailable.",
             ),

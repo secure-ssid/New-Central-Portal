@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 
 from pagination import filter_items, paginate as _paginate
 
@@ -133,10 +134,11 @@ async def _load_alerts_context(
         logger.warning("Central alerts unavailable: %s", exc)
 
     try:
+        # This page polls itself every 60s, so keep the blocking psycopg2 read
+        # off the event loop.
+        raw_history = await run_in_threadpool(db.get_notification_history, limit=50)
         portal_history = [
-            _normalize_portal_alert(h)
-            for h in db.get_notification_history(limit=50)
-            if isinstance(h, dict)
+            _normalize_portal_alert(h) for h in raw_history if isinstance(h, dict)
         ]
         if q:
             portal_history = filter_items(portal_history, q, "title", "body", "device", "device_serial")
