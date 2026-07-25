@@ -181,5 +181,12 @@ def test_lifespan_starts_degraded_with_dead_db(dead_db, monkeypatch):
     monkeypatch.setattr(settings, "portal_password", "")
     # Entering the context manager runs the lifespan (DB init, scheduler).
     with TestClient(main.app) as c:
+        # /health is the unconditional liveness probe.
         assert c.get("/health").json() == {"status": "ok"}
-        assert c.get("/healthz").json() .items() >= {"status": "ok", "db": "fail"}.items()
+        # /healthz is liveness + dependency state. With the DB down the
+        # scheduler cannot be elected, so background jobs (alerting, expiry
+        # checks) are not running — the probe must fail so an unhealthy portal
+        # does not read as Up. raise_for_status stays off; we inspect the body.
+        hz = c.get("/healthz")
+        assert hz.status_code == 503
+        assert hz.json().items() >= {"db": "fail", "scheduler": "unelected"}.items()

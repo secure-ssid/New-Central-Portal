@@ -11,9 +11,21 @@ logger = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory="templates")
 templates.env.globals["auth_enabled"] = security.auth_enabled
-templates.env.globals["use_built_tailwind"] = os.environ.get(
-    "USE_BUILT_TAILWIND", ""
-).lower() in ("1", "true", "yes")
+
+# The built stylesheet is not tracked in git (only in a machine-local
+# .git/info/exclude) and the ./app bind mount shadows the copy baked into the
+# image, so a fresh clone or a plain rebuild can ship with dist/tailwind.css
+# absent. Requiring the file to actually exist means that case falls back to
+# the Play-CDN branch and renders styled, instead of emitting a link to a 404
+# and rendering the whole portal unstyled with no other signal.
+_want_built = os.environ.get("USE_BUILT_TAILWIND", "").lower() in ("1", "true", "yes")
+_built_present = os.path.exists(os.path.join("static", "dist", "tailwind.css"))
+if _want_built and not _built_present:
+    logger.warning(
+        "USE_BUILT_TAILWIND is set but static/dist/tailwind.css is missing; "
+        "falling back to the Tailwind Play CDN so the portal still renders styled."
+    )
+templates.env.globals["use_built_tailwind"] = _want_built and _built_present
 
 
 def asset_url(path: str) -> str:

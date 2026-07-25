@@ -593,6 +593,38 @@ async def find_site(name: str) -> dict | None:
 
 # ── Devices ──────────────────────────────────────────────────────────────────
 
+# Central 400s on the siteId and deviceType query filters (verified live on
+# this tenant: both `?siteId=…` and `?deviceType=…` return 400, so the unwrap
+# yields []). The fields ARE present on every unfiltered record, so the filter
+# has to happen client-side. The fleet is tiny, and delegating to the
+# unfiltered get_devices reuses its cache entry rather than issuing a second
+# upstream request.
+_DEVICE_TYPE_ALIASES = {
+    "ap": "ACCESS_POINT", "iap": "ACCESS_POINT", "access_point": "ACCESS_POINT",
+    "access point": "ACCESS_POINT", "gateway": "GATEWAY", "gw": "GATEWAY",
+    "switch": "SWITCH", "aos_cx": "SWITCH", "aos-cx": "SWITCH", "cx": "SWITCH",
+}
+
+
+def _canonical_device_type(value: str) -> str:
+    key = str(value or "").strip().lower()
+    return _DEVICE_TYPE_ALIASES.get(key, key.upper())
+
+
+def _filter_devices(records: list[dict], *, site_id: str | None,
+                    device_type: str | None) -> list[dict]:
+    out = records
+    if site_id:
+        want = str(site_id)
+        out = [d for d in out if isinstance(d, dict)
+               and (str(d.get("siteId")) == want or d.get("siteName") == site_id)]
+    if device_type:
+        want_dt = _canonical_device_type(device_type)
+        out = [d for d in out if isinstance(d, dict)
+               and _canonical_device_type(d.get("deviceType")) == want_dt]
+    return out
+
+
 @_cached()
 async def get_devices(
     device_type: str | None = None,
@@ -601,12 +633,12 @@ async def get_devices(
     offset: int = 0,
 ) -> list[dict]:
     from mcp_servers.monitoring import list_devices
-    kwargs: dict[str, Any] = {"limit": limit, "offset": offset}
-    if device_type:
-        kwargs["device_type"] = device_type
-    if site_id:
-        kwargs["site_id"] = site_id
-    return _unwrap(await _run(list_devices, **kwargs))
+    if site_id or device_type:
+        # Fetch unfiltered (shares the get_devices(limit=200) cache entry that
+        # get_all_devices already populates) and filter in Python.
+        records = await get_devices(limit=max(limit, 200))
+        return _filter_devices(records, site_id=site_id, device_type=device_type)[:limit]
+    return _unwrap(await _run(list_devices, limit=limit, offset=offset))
 
 
 @_cached()
@@ -1168,11 +1200,19 @@ async def get_firmware_compliance(limit: int = 50) -> dict:
         items = result.get("items", []) if isinstance(result, dict) else []
         for it in items:
             if isinstance(it, dict) and "complianceStatus" not in it:
-                current = it.get("firmwareVersion") or it.get("softwareVersion") or ""
-                target = it.get("recommendedVersion") or ""
-                it["complianceStatus"] = (
-                    "compliant" if (not target or current == target) else "non-compliant"
-                )
+                current = (it.get("firmwareVersion") or it.get("softwareVersion") or "").strip()
+                target = (it.get("recommendedVersion") or "").strip()
+                # Same rule /lab/compliance uses (lab.py). A blank on either
+                # side is "unknown" — no advice, not drift. The old
+                # `current == target` marked a device with NO data at all as
+                # compliant and a device with a known target but null current
+                # as non-compliant, so the two firmware pages disagreed 2x.
+                if not current or not target:
+                    it["complianceStatus"] = "unknown"
+                elif target in current or current in target:
+                    it["complianceStatus"] = "compliant"
+                else:
+                    it["complianceStatus"] = "non-compliant"
         return {"items": items[:limit]}
 
     return await _run(_fetch)
@@ -1194,7 +1234,16 @@ async def list_mac_registrations(limit: int = 50, offset: int = 0) -> list[dict]
 async def list_glp_service_offers(limit: int = 50) -> list[dict]:
     from mcp_servers.glp import list_glp_service_offers
     result = await _run(list_glp_service_offers, limit=limit)
-    return result.get("items", []) if isinstance(result, dict) else []
+    if not isinstance(result, dict):
+        return []
+    # This GLP tool nests its rows under data.items (count/items/next/total),
+    # unlike the other four GLP wrappers which put items at the top level. The
+    # old top-level read always returned [] and the page blamed "missing API
+    # access" for a call that actually succeeds.
+    data = result.get("data")
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        return data["items"]
+    return result.get("items", []) if isinstance(result.get("items"), list) else []
 
 
 async def invoke_tool_router(tool_name: str, params: dict) -> dict:

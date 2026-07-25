@@ -22,6 +22,9 @@
             {% if compliance.summary.non_compliant %}
             <span class="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400">{{ compliance.summary.non_compliant }} need attention</span>
             {% endif %}
+            {% if compliance.summary.unknown %}
+            <span class="px-2.5 py-1 rounded-full bg-surface-800 text-slate-400">{{ compliance.summary.unknown }} no data</span>
+            {% endif %}
         </div>
     </div>
     <div class="overflow-x-auto">
@@ -58,6 +61,8 @@
                         {% set st = row.status | lower %}
                         {% if st in ['compliant', 'ok', 'up to date', 'uptodate', 'current', 'yes', 'true', 'up-to-date'] %}
                         <span class="status-badge-online">{{ row.status or 'compliant' }}</span>
+                        {% elif st == 'unknown' %}
+                        <span class="text-xs text-slate-500">No data</span>
                         {% elif row.status %}
                         <span class="status-badge-offline">{{ row.status }}</span>
                         {% else %}

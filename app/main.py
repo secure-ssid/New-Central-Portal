@@ -420,8 +420,19 @@ def healthz():
     """
     import db
     db_ok = db.ping()
-    return {
+    role = _scheduler_state["role"]
+    body = {
         "status": "ok",
         "db": "ok" if db_ok else "fail",
-        "scheduler": _scheduler_state["role"],
+        "scheduler": role,
     }
+    # "unelected" means this worker knows of no leader anywhere — background
+    # jobs (device-down alerting, expiry checks, reports) are not running. Fail
+    # the probe so an unhealthy portal does not read as Up. A follower still
+    # returns 200: a peer is running the jobs. (This catches "nobody was ever
+    # elected"; it cannot catch a leader whose scheduler thread died but whose
+    # role string is stale — see db.scheduler_lock_healthy for that gap.)
+    if role == "unelected":
+        body["status"] = "degraded"
+        return JSONResponse(body, status_code=503)
+    return body
