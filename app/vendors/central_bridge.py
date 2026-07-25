@@ -127,13 +127,27 @@ def _ops_error(message: str) -> dict:
     return {"status": None, "errors": [message]}
 
 
-def _unwrap(result: list | dict | None) -> list[dict]:
-    """Flatten paginated centralmcp responses to a plain list."""
+def _unwrap(result: list | dict | None, *keys: str) -> list[dict]:
+    """Flatten paginated centralmcp responses to a plain list.
+
+    ``keys`` names collection keys tried before the usual "items" — e.g.
+    ``_unwrap(result, "wlan-ssid")`` for mcp_servers.config.list_ssids, which
+    does not use "items". Keys are explicit on purpose: a "first list value
+    found" fallback would happily return the ``errors`` list that most
+    centralmcp tools include, silently turning an error envelope into data.
+    """
     if isinstance(result, list):
         return result
     if isinstance(result, dict):
-        items = result.get("items", [])
-        return items if isinstance(items, list) else []
+        for key in (*keys, "items"):
+            value = result.get(key)
+            if isinstance(value, list):
+                return value
+        logger.warning(
+            "centralmcp response had no list under %s — keys present: %s",
+            (*keys, "items"), sorted(result)[:8],
+        )
+        return []
     if result is not None:
         logger.warning("Unexpected centralmcp response shape: %s", type(result).__name__)
     return []
@@ -197,7 +211,9 @@ async def get_device(serial: str) -> dict | None:
 async def get_switch_ports(serial: str) -> list[dict]:
     from mcp_servers.monitoring import list_switch_ports
     result = await _run(list_switch_ports, serial)
-    return result.get("interfaces", []) if isinstance(result, dict) else []
+    # list_switch_ports returns {"interfaces": None} on total failure — the
+    # key exists, so .get(key, []) would leak None to list-typed callers.
+    return (result.get("interfaces") or []) if isinstance(result, dict) else []
 
 
 # In-module TTL cache for switch-port lookups used by uplink resolution.
@@ -328,6 +344,9 @@ async def run_traceroute(serial: str, device_type: str, destination: str) -> dic
     if dtype == "aos-s":
         from mcp_servers.ops import aos_s_traceroute
         return await _run(aos_s_traceroute, serial, destination)
+    if dtype == "aps":
+        from mcp_servers.ops import ap_traceroute
+        return await _run(ap_traceroute, serial, destination)
     return _ops_error(f"Traceroute is not supported for this device type on {serial}.")
 
 
@@ -368,7 +387,7 @@ async def get_ap_rf_neighbors(serial: str) -> list[dict]:
         result = await _run(_fn, serial)
     except Exception:
         result = await invoke_tool_router(
-            "get_ap_neighbors", {"serial": serial, "serialNumber": serial}
+            "get_ap_neighbors", {"serial_number": serial}
         )
     if isinstance(result, list):
         return [r for r in result if isinstance(r, dict)]
@@ -392,13 +411,35 @@ async def detect_ssh_brute_force(serial: str, hours: int = 24) -> dict:
 
 async def list_wlans(limit: int = 50) -> list[dict]:
     from mcp_servers.config import list_ssids
-    result = await _run(list_ssids, limit=limit)
-    return _unwrap(result) if not isinstance(result, list) else result
+    # list_ssids returns {"wlan-ssid": [...]}, not the usual {"items": [...]} —
+    # reading only "items" is why the WLAN page rendered "No WLANs".
+    return _unwrap(await _run(list_ssids, limit=limit), "wlan-ssid")
 
 
 async def get_firmware_compliance(limit: int = 50) -> dict:
-    from mcp_servers.config import get_firmware_compliance as _fn
-    return await _run(_fn, limit=limit)
+    """Fleet firmware table from /network-services/v1alpha1/firmware-details.
+
+    centralmcp v0.4.0 changed its get_firmware_compliance into a per-scope
+    POLICY read (scope_id + device_function required) — no longer a fleet
+    listing. The portal's compliance table wants per-device rows, so query
+    the underlying firmware-details endpoint directly and synthesize the
+    complianceStatus the normalizer expects.
+    """
+    from mcp_servers.shared import get_client
+
+    def _fetch() -> dict:
+        result = get_client().get("/network-services/v1alpha1/firmware-details")
+        items = result.get("items", []) if isinstance(result, dict) else []
+        for it in items:
+            if isinstance(it, dict) and "complianceStatus" not in it:
+                current = it.get("firmwareVersion") or it.get("softwareVersion") or ""
+                target = it.get("recommendedVersion") or ""
+                it["complianceStatus"] = (
+                    "compliant" if (not target or current == target) else "non-compliant"
+                )
+        return {"items": items[:limit]}
+
+    return await _run(_fetch)
 
 
 async def get_device_running_config(serial: str) -> dict:
@@ -422,7 +463,10 @@ async def invoke_tool_router(tool_name: str, params: dict) -> dict:
     """Fallback dispatch via centralmcp tool_router when not in _TOOL_MAP."""
     try:
         from mcp_servers.tool_router import invoke_read_tool
-        return await _run(invoke_read_tool, tool_name=tool_name, params=params)
+        # v0.4.0 signature: invoke_read_tool(ctx, name, arguments). ctx is only
+        # used for FastMCP context injection on ctx-requiring (write) tools —
+        # read-only dispatch tolerates None.
+        return await _run(invoke_read_tool, None, name=tool_name, arguments=params)
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -543,9 +587,10 @@ async def run_show(serial: str, device_type: str, commands: list[str]) -> dict:
     """Run show commands — picks the right function by device type."""
     dtype = _resolve_troubleshoot_type(serial, device_type)
     if dtype == "aps":
-        return _ops_error(
-            "Show commands are not supported on Access Points via the Central troubleshooting API."
-        )
+        # Supported since centralmcp v0.4.0 — this used to return a refusal,
+        # which made the detail page's "View Config" button dead on every AP.
+        from mcp_servers.ops import ap_show
+        return await _run(ap_show, serial, commands)
     if dtype == "cx":
         from mcp_servers.ops import cx_show
         return await _run(cx_show, serial, commands)
@@ -561,9 +606,9 @@ async def run_show(serial: str, device_type: str, commands: list[str]) -> dict:
 async def run_ping(serial: str, device_type: str, destination: str, count: int = 5) -> dict:
     dtype = _resolve_troubleshoot_type(serial, device_type)
     if dtype == "aps":
-        return _ops_error(
-            "Ping is not supported on Access Points via the Central troubleshooting API."
-        )
+        # v0.4.0 ships ap_ping; the old refusal broke the button on all 9 APs.
+        from mcp_servers.ops import ap_ping
+        return await _run(ap_ping, serial, destination, count=count)
     if dtype == "cx":
         from mcp_servers.ops import cx_ping
         return await _run(cx_ping, serial, destination, count=count)
@@ -571,7 +616,9 @@ async def run_ping(serial: str, device_type: str, destination: str, count: int =
         from mcp_servers.ops import aos_s_ping
         return await _run(aos_s_ping, serial, destination)
     if dtype == "gateways":
-        return _ops_error("Ping is not supported on gateways.")
+        # Gateways have no dedicated ping tool; route through the gateway CLI.
+        from mcp_servers.ops import gateway_show
+        return await _run(gateway_show, serial, [f"ping {destination}"])
     return _ops_error(f"Could not determine device type for ping on {serial}.")
 
 
