@@ -538,8 +538,12 @@ async function runCheckNow() {
         const r = await fetch('/notifications/check-now', {method: 'POST'});
         const j = await r.json();
         const alerts = j.alerts || [];
-        btn.textContent = j.ok ? `Done — ${alerts.length} alerts` : 'Error';
-        setTimeout(() => { if (j.ok && alerts.length > 0) location.reload(); }, 1500);
+        // Count what was actually emailed, not what was merely considered:
+        // an entry is appended even when SMTP declines, so alerts.length
+        // reported "Done — 3 alerts" for zero delivered mail.
+        const sent = alerts.filter(a => a && a.sent).length;
+        btn.textContent = j.ok ? `Done — ${sent} sent, ${alerts.length} due` : 'Error';
+        setTimeout(() => { if (j.ok && sent > 0) location.reload(); }, 1500);
     } catch (e) { btn.textContent = 'Error'; }
     setTimeout(() => { btn.textContent = 'Run Check Now'; btn.disabled = false; }, 3000);
 }
