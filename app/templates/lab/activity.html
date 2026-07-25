@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_header %}
+{% block title %}Activity &amp; History - Lab - New Central Portal{% endblock %}
+
+{% block content %}
+{{ page_header(
+     "Activity & History",
+     subtitle="What changed, what the portal did, and what Central already resolved",
+     crumbs=[{"label": "Lab", "url": "/lab/"}, {"label": "Activity & History"}]) }}
+
+{% if db_error %}
+<div class="card mb-6" style="border-color:rgba(239,68,68,.35);">
+    <p class="text-sm text-red-400">{{ db_error }}</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <p class="section-label mb-1">Transitions</p>
+        <p class="text-3xl font-bold text-white">{{ transitions|length }}</p>
+        <p class="text-xs text-slate-600 mt-1">device up/down</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Resolved alerts</p>
+        <p class="text-3xl font-bold text-brand-500">{{ alert_summary.total }}</p>
+        <p class="text-xs text-slate-600 mt-1">{{ alert_summary.critical }} critical</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Onboarding events</p>
+        <p class="text-3xl font-bold text-white">{{ onboarding|length }}</p>
+        <p class="text-xs text-slate-600 mt-1">last {{ hours }}h</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Portal actions</p>
+        <p class="text-3xl font-bold text-white">{{ audit|length }}</p>
+        <p class="text-xs text-slate-600 mt-1">audited requests</p>
+    </div>
+</div>
+
+{# ── Cleared alerts ── the main alerts page filters these out entirely ── #}
+<div class="card card--flush mb-6">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700 gap-3 flex-wrap">
+        <div>
+            <p class="text-sm font-semibold text-white">Resolved alerts</p>
+            <p class="text-xs text-slate-600 mt-0.5">
+                Central keeps these after clearing them; the Alerts page shows only active ones.
+            </p>
+        </div>
+        <a href="/alerts/" class="text-xs text-brand-500 hover:text-brand-400 no-underline">Active alerts &rarr;</a>
+    </div>
+    {% if alerts %}
+    <div class="divide-y divide-surface-700/60">
+        {% for a in alerts[:25] %}
+        <details class="px-5 py-3">
+            <summary class="flex items-start gap-3 cursor-pointer">
+                <span class="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0
+                    {% if a.severity == 'critical' %}bg-red-400{% elif a.severity == 'major' %}bg-amber-400{% else %}bg-slate-500{% endif %}"
+                    aria-hidden="true"></span>
+                <span class="flex-1 min-w-0">
+                    <span class="text-sm text-slate-200">{{ a.name }}</span>
+                    {% if a.summary %}
+                    <span class="block text-xs text-slate-500 mt-0.5">{{ a.summary }}</span>
+                    {% endif %}
+                    <span class="block text-[11px] text-slate-600 mt-1">
+                        {{ a.severity_raw }}{% if a.category %} &middot; {{ a.category }}{% endif %}
+                        {% if a.device_type %} &middot; {{ a.device_type }}{% endif %}
+                        {% if a.site %} &middot; {{ a.site }}{% endif %}
+                    </span>
+                </span>
+            </summary>
+            {% if a.root_cause or a.solution %}
+            <div class="pl-6 mt-3">
+                {% if a.root_cause %}
+                <p class="section-label mb-1">Root cause</p>
+                <ul class="text-xs text-slate-400 list-disc pl-4 mb-3">
+                    {% for t in a.root_cause %}<li>{{ t }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+                {% if a.solution %}
+                <p class="section-label mb-1">Recommended action</p>
+                <ul class="text-xs text-slate-400 list-disc pl-4">
+                    {% for t in a.solution %}<li>{{ t }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="pl-6 mt-2 text-xs text-slate-600">Central recorded no root-cause detail for this alert.</p>
+            {% endif %}
+        </details>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"><p>No alert history returned by Central.</p></div>
+    {% endif %}
+</div>
+
+{# ── Device timeline ── empty is the NORMAL state on a stable fleet ── #}
+<div class="card card--flush mb-6">
+    <div class="px-5 py-4 border-b border-surface-700">
+        <p class="text-sm font-semibold text-white">Device up/down timeline</p>
+    </div>
+    {% if transitions %}
+    <div class="overflow-x-auto">
+        <table class="tbl">
+            <thead><tr>
+                <th scope="col">When</th><th scope="col">Device</th><th scope="col">Went</th>
+            </tr></thead>
+            <tbody>
+                {% for t in transitions %}
+                <tr class="tbl-row">
+                    <td class="text-xs font-mono text-slate-500">{{ t.changed_at }}</td>
+                    <td>
+                        <a href="/devices/{{ t.serial }}" class="text-slate-200 hover:text-brand-400">{{ t.name or t.serial }}</a>
+                    </td>
+                    <td>
+                        <span class="{% if t.status == 'online' %}status-badge-online{% else %}status-badge-offline{% endif %}">
+                            {{ t.status|upper }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif db_error %}
+    <div class="empty-state">
+        <p>Timeline unavailable</p>
+        <p class="text-xs text-slate-600">The database could not be read — this is not the same as having no transitions.</p>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>No transitions recorded yet</p>
+        <p class="text-xs text-slate-600">
+            A row is written the moment a device changes between online and offline.
+            An empty timeline means the fleet has been stable since monitoring started.
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+{# ── Client onboarding ── #}
+<div class="card card--flush mb-6">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700 gap-3 flex-wrap">
+        <div>
+            <p class="text-sm font-semibold text-white">Client onboarding</p>
+            <p class="text-xs text-slate-600 mt-0.5">
+                From {{ switch_count }} switch{{ 'es' if switch_count != 1 }} &middot; access points report none.
+            </p>
+        </div>
+        <form method="get" class="flex items-center gap-2">
+            <label for="act-hours" class="text-xs text-slate-500">Window</label>
+            <select id="act-hours" name="hours" class="select select--auto text-xs"
+                    onchange="this.form.submit()">
+                {% for h in [6, 24, 72] %}
+                <option value="{{ h }}" {% if h == hours %}selected{% endif %}>{{ h }}h</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    {% if flapping %}
+    <div class="px-5 py-3 border-b border-surface-700 bg-amber-500/5">
+        <p class="text-xs text-amber-400">
+            {{ flapping|length }} client{{ 's' if flapping|length != 1 }} re-onboarding repeatedly:
+            {% for mac, count in flapping %}<span class="font-mono">{{ mac }}</span> ({{ count }}×){% if not loop.last %}, {% endif %}{% endfor %}
+        </p>
+    </div>
+    {% endif %}
+
+    {% if onboarding %}
+    <div class="overflow-x-auto">
+        <table class="tbl tbl--wide">
+            <thead><tr>
+                <th scope="col">When</th><th scope="col">Client</th>
+                <th scope="col">Type</th><th scope="col">Switch</th><th scope="col">Detail</th>
+            </tr></thead>
+            <tbody>
+                {% for e in onboarding %}
+                <tr class="tbl-row">
+                    <td class="text-xs font-mono text-slate-500">{{ e.timeAt }}</td>
+                    <td class="font-mono text-xs">{{ e.clientMacAddress or '—' }}</td>
+                    <td class="text-xs text-slate-500">{{ e.sourceType or '—' }}</td>
+                    <td class="text-xs">{{ e._device }}</td>
+                    <td class="text-xs text-slate-500">{{ e.description or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><p>No onboarding events in the last {{ hours }} hours.</p></div>
+    {% endif %}
+</div>
+
+{# ── Portal audit trail ── #}
+<div class="card card--flush">
+    <div class="px-5 py-4 border-b border-surface-700">
+        <p class="text-sm font-semibold text-white">Portal audit trail</p>
+        <p class="text-xs text-slate-600 mt-0.5">Every state-changing request made through this portal.</p>
+    </div>
+    {% if audit %}
+    <div class="overflow-x-auto">
+        <table class="tbl">
+            <thead><tr>
+                <th scope="col">When</th><th scope="col">Method</th>
+                <th scope="col">Path</th><th scope="col">From</th>
+            </tr></thead>
+            <tbody>
+                {% for a in audit %}
+                <tr class="tbl-row">
+                    <td class="text-xs font-mono text-slate-500">{{ a.created_at }}</td>
+                    <td class="text-xs font-semibold text-brand-500">{{ a.method }}</td>
+                    <td class="text-xs font-mono">{{ a.path }}</td>
+                    <td class="text-xs font-mono text-slate-600">{{ a.client_ip or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif db_error %}
+    <div class="empty-state"><p>Audit trail unavailable — the database could not be read.</p></div>
+    {% else %}
+    <div class="empty-state"><p>No state-changing requests recorded yet.</p></div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+<p class="section-label mb-3">VLANs</p>
+{% if not vlans %}
+<div class="empty-state"><p>No VLANs reported.</p></div>
+{% else %}
+<div class="overflow-x-auto">
+  <table class="tbl tbl--wide">
+    <thead><tr>
+      <th scope="col">VLAN</th><th scope="col">Name</th><th scope="col">Type</th>
+      <th scope="col">Status</th><th scope="col">Tagged</th><th scope="col">Untagged</th>
+    </tr></thead>
+    <tbody>
+      {% for v in vlans %}
+      <tr class="tbl-row">
+        <td class="font-mono">{{ v.id }}</td>
+        <td>{{ v.name or '—' }}</td>
+        <td class="text-slate-500">{{ v.type or '—' }}</td>
+        <td>
+          {% if (v.status or '')|lower == 'up' %}
+          <span class="status-badge-online">Up</span>
+          {% else %}<span class="status-badge-offline">{{ v.status or 'Unknown' }}</span>{% endif %}
+        </td>
+        {# untaggedPorts can be present and null — render a dash, not "None". #}
+        <td class="font-mono text-xs">{{ (v.taggedPorts or [])|join(', ') or '—' }}</td>
+        <td class="font-mono text-xs">{{ (v.untaggedPorts or [])|join(', ') or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

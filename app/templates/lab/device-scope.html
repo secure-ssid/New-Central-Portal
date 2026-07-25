@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_header %}
+{% from "_charts.html" import line_chart, meter %}
+{% block title %}Device Deep-Dive - Lab - New Central Portal{% endblock %}
+
+{% block content %}
+{{ page_header(
+     "Device Deep-Dive",
+     subtitle="Resource trends for any device, plus the physical layer on switches",
+     crumbs=[{"label": "Lab", "url": "/lab/"}, {"label": "Device Deep-Dive"}]) }}
+
+{% if load_error %}
+<div class="card mb-6" style="border-color:rgba(239,68,68,.35);">
+    <p class="text-sm text-red-400">{{ load_error }}</p>
+</div>
+{% endif %}
+
+{# One filter row above everything, never per-card filters. #}
+<form method="get" class="card mb-6 flex flex-wrap items-end gap-3">
+    <div>
+        <label for="ds-device" class="section-label block mb-1">Device</label>
+        <select id="ds-device" name="serial" class="select select--auto select--site text-xs">
+            <option value="">Choose a device&hellip;</option>
+            {% for d in devices %}
+            <option value="{{ d.serial }}" {% if d.serial == serial %}selected{% endif %}>
+                {{ d.name or d.serial }} — {{ d.type|replace('_', ' ') }}{% if d.status != 'online' %} (offline){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="ds-window" class="section-label block mb-1">Window</label>
+        <select id="ds-window" name="hours" class="select select--auto text-xs">
+            {% for h, label in windows %}
+            <option value="{{ h }}" {% if h == hours %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit" class="btn-primary">Show</button>
+</form>
+
+{% if not device %}
+<div class="card">
+    <div class="empty-state">
+        <p>Choose a device to see its trends.</p>
+        <p class="text-xs text-slate-600">
+            Switches additionally report temperature, PoE budget, VLAN membership
+            and per-interface error counters.
+        </p>
+    </div>
+</div>
+{% else %}
+
+<div class="card mb-6">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+            <div class="flex items-center gap-3 flex-wrap">
+                <h2 class="text-lg font-semibold text-white truncate">{{ device.name or device.serial }}</h2>
+                <span class="{% if device.status == 'online' %}status-badge-online{% else %}status-badge-offline{% endif %}">
+                    {{ device.status|upper }}
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+                <span class="font-mono">{{ device.serial }}</span>
+                {% if device.model %} &middot; {{ device.model }}{% endif %}
+                {% if device.site %} &middot; {{ device.site }}{% endif %}
+                {% if details and details.firmwareVersion %} &middot; {{ details.firmwareVersion }}{% endif %}
+            </p>
+        </div>
+        <a href="/devices/{{ device.serial }}" class="btn-secondary btn--sm no-underline">Device page &rarr;</a>
+    </div>
+
+    {% if snapshot and snapshot.cpu is not none %}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
+        <div class="panel">
+            <p class="section-label mb-1">CPU</p>
+            <p class="text-xl font-bold text-white">{{ snapshot.cpu|round|int }}%</p>
+        </div>
+        <div class="panel">
+            <p class="section-label mb-1">Memory</p>
+            <p class="text-xl font-bold text-white">{{ snapshot.memory|round|int }}%</p>
+        </div>
+        <div class="panel">
+            <p class="section-label mb-1">Temperature</p>
+            <p class="text-xl font-bold text-white">{{ snapshot.temperature }}&deg;C</p>
+        </div>
+        <div class="panel">
+            <p class="section-label mb-1">Power</p>
+            <p class="text-xl font-bold text-white">{{ snapshot.power_total|round(1) }} W</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if details and details.lastRestartReason %}
+    <p class="text-xs text-slate-600 mt-4">Last restart: {{ details.lastRestartReason }}</p>
+    {% endif %}
+</div>
+
+{% if poe_meter and poe_meter.tone != 'unknown' %}
+<div class="card mb-6">{{ meter(poe_meter, "PoE budget") }}</div>
+{% endif %}
+
+{% if trend_error %}
+<div class="card mb-6">
+    <div class="empty-state">
+        <p>No trend data for this device</p>
+        <p class="text-xs text-slate-600">{{ trend_error }}</p>
+    </div>
+</div>
+{% elif charts %}
+<div class="chart-grid-2 mb-6">
+    {% for chart in charts %}
+    <div class="card">{{ line_chart(chart) }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if is_switch %}
+{# Tier 1: secondary panels load on their own so a failure here cannot blank
+   the charts above. #}
+<div class="card mb-6" hx-get="/lab/device-scope/{{ device.serial }}/poe"
+     hx-trigger="load" hx-swap="innerHTML">
+    <p class="section-label mb-3">Per-port PoE</p>
+    <div class="empty-state"><span class="spinner"></span></div>
+</div>
+
+<div class="card mb-6" hx-get="/lab/device-scope/{{ device.serial }}/vlans"
+     hx-trigger="load" hx-swap="innerHTML">
+    <p class="section-label mb-3">VLANs</p>
+    <div class="empty-state"><span class="spinner"></span></div>
+</div>
+
+<div class="card mb-6" id="iface-panel"
+     hx-get="/lab/device-scope/{{ device.serial }}/interface?hours={{ hours }}"
+     hx-trigger="load" hx-swap="innerHTML">
+    <p class="section-label mb-3">Interface error counters</p>
+    <div class="empty-state"><span class="spinner"></span></div>
+</div>
+
+{# Tier 2: these poll an async job and centralmcp sleeps 5s before its first
+   poll, so each costs 5-60s. Click to run — never on load. #}
+<div class="card">
+    <p class="section-label mb-1">Diagnostics</p>
+    <p class="text-xs text-slate-600 mb-4">
+        These run a live command on the switch and take 5&ndash;60 seconds.
+    </p>
+    <div class="flex gap-2 flex-wrap">
+        {% for kind, label in [("stp", "Spanning tree"), ("arp", "ARP table")] %}
+        <form hx-post="/lab/device-scope/{{ device.serial }}/diagnostic"
+              hx-target="#diag-output" hx-indicator="#diag-spinner"
+              hx-disabled-elt="find button">
+            <input type="hidden" name="kind" value="{{ kind }}">
+            <button type="submit" class="btn-secondary">{{ label }}</button>
+        </form>
+        {% endfor %}
+        <span id="diag-spinner" class="htmx-indicator"><span class="spinner"></span></span>
+    </div>
+    <div id="diag-output" class="mt-4"></div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

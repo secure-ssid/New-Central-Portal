@@ -1,0 +1,12 @@
+{% if not buckets %}
+<p class="text-xs text-slate-600">Central reports no open configuration issues for this device.</p>
+{% else %}
+{% for b in buckets %}
+<p class="text-[11px] font-semibold text-amber-400 mt-2">{{ b.label }}</p>
+<ul class="text-xs text-slate-500 list-disc pl-4">
+  {% for e in b.entries %}
+  <li>{{ e if e is string else (e.get('description') or e.get('message') or e) }}</li>
+  {% endfor %}
+</ul>
+{% endfor %}
+{% endif %}

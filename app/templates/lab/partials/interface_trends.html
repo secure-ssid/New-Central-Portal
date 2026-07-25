@@ -1,0 +1,36 @@
+{% from "_charts.html" import bar_chart %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <p class="section-label">Interface error counters</p>
+  {% if ports %}
+  <form hx-get="/lab/device-scope/{{ serial }}/interface" hx-target="#iface-panel"
+        hx-swap="innerHTML" class="flex items-center gap-2">
+    <input type="hidden" name="hours" value="{{ hours }}">
+    <label for="iface-port" class="text-xs text-slate-500">Port</label>
+    <select id="iface-port" name="port" class="select select--auto text-xs"
+            hx-get="/lab/device-scope/{{ serial }}/interface" hx-target="#iface-panel"
+            hx-swap="innerHTML" hx-include="closest form" hx-trigger="change">
+      {% for p in ports %}
+      <option value="{{ p }}" {% if p == chosen %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  {% endif %}
+</div>
+
+{% if trends.error %}
+<div class="empty-state"><p>{{ trends.error }}</p></div>
+{% elif charts %}
+<div class="chart-grid-2">
+  {% for chart in charts %}{{ bar_chart(chart) }}{% endfor %}
+</div>
+<p class="text-xs text-slate-600 mt-4">
+  Showing only counters with a non-zero value on {{ chosen }} in this window.
+</p>
+{% else %}
+<div class="empty-state">
+  <p>No errors on {{ chosen }} in this window</p>
+  <p class="text-xs text-slate-600">
+    All {{ clean_count }} error counters read zero. That is the healthy result.
+  </p>
+</div>
+{% endif %}

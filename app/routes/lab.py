@@ -22,9 +22,11 @@ router = APIRouter()
 async def lab_menu(request: Request):
     """Lab home - menu of experiments."""
     experiments = [
+        # Badged requires-token, not live: GITHUB_TOKEN is the literal
+        # placeholder your_token_here, so this can only answer "not configured".
         {"slug": "chat", "name": "Network Chatbot",
-         "desc": "Ask Claude about your network. Uses MCP + RAG.",
-         "status": "active", "color": "green", "badge": "live"},
+         "desc": "Ask Claude about your network. Uses MCP + RAG. Needs a GitHub token.",
+         "status": "active", "color": "green", "badge": "requires-token"},
         {"slug": "rag", "name": "Doc Search",
          "desc": "Hybrid search across network docs (LanceDB). No AI.",
          "status": "active", "color": "blue", "badge": "live"},
@@ -37,12 +39,12 @@ async def lab_menu(request: Request):
         {"slug": "mcp-tester", "name": "MCP Tool Tester",
          "desc": "Poke at MCP tools to see what they return.",
          "status": "active", "color": "purple", "badge": "live"},
-        {"slug": "self-heal", "name": "Self-Healing Sim",
-         "desc": "Auto-remediation in dry-run mode.",
-         "status": "active", "color": "amber", "badge": "demo"},
-        {"slug": "juniper", "name": "Juniper Corner",
-         "desc": "Notes and experiments as I learn Junos.",
-         "status": "active", "color": "teal", "badge": "demo"},
+        {"slug": "device-scope", "name": "Device Deep-Dive",
+         "desc": "CPU, memory and throughput trends; plus temperature, PoE budget, VLANs and interface errors on switches.",
+         "status": "new", "color": "blue", "badge": "live"},
+        {"slug": "compliance", "name": "Compliance Board",
+         "desc": "Firmware drift, config sync state, and Central's own recommendations.",
+         "status": "new", "color": "amber", "badge": "live"},
         {"slug": "health-report", "name": "Network Health Report",
          "desc": "AI-generated summary of device/alert/client health using live data.",
          "status": "new", "color": "green", "badge": "requires-token"},
@@ -64,6 +66,9 @@ async def lab_menu(request: Request):
         {"slug": "assistant", "name": "AI Assistant",
          "desc": "Choose the AI backend (Claude subscription or GitHub Models), pick a model, and test it.",
          "status": "new", "color": "purple", "badge": "requires-token"},
+        {"slug": "activity", "name": "Activity & History",
+         "desc": "Device up/down timeline, portal audit trail, client onboarding events, and cleared-alert post-mortems.",
+         "status": "new", "color": "sky", "badge": "live"},
         {"slug": "securessid", "name": "Vendor CLI Translator",
          "desc": "Side-by-side equivalent CLI commands across Aruba AOS-CX/AOS-S, Juniper, Cisco, Ruckus, and Mist.",
          "status": "new", "color": "teal", "badge": "demo"},
@@ -534,73 +539,6 @@ async def mcp_tool_run(request: Request, tool: str = Form(...), params: str = Fo
     )
 
 
-@router.get("/self-heal")
-async def self_heal_page(request: Request):
-    """Self-healing simulation - auto-remediation in dry-run mode."""
-    issues = [
-        {
-            "id": 1,
-            "device": "BY-AP763",
-            "issue": "High CPU usage (85%)",
-            "remediation": "Restart AP services",
-            "status": "detected",
-        },
-        {
-            "id": 2,
-            "device": "CX6300-CORE",
-            "issue": "Port 1/1/12 flapping",
-            "remediation": "Disable/re-enable port",
-            "status": "detected",
-        },
-    ]
-    return templates.TemplateResponse(
-        request,
-        "lab/self-heal.html",
-        {"issues": issues, "active": "lab"},
-    )
-
-
-@router.post("/self-heal/{issue_id}/remediate")
-async def self_heal_remediate(request: Request, issue_id: int):
-    """Simulate auto-remediation action."""
-    return HTMLResponse(
-        f"""
-        <div class="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-sm">
-            ✓ Remediation #{issue_id} completed (dry-run mode - no actual changes made)
-        </div>
-        """
-    )
-
-
-@router.get("/juniper")
-async def juniper_page(request: Request):
-    """Juniper learning corner - notes and experiments."""
-    notes = [
-        {
-            "title": "Junos CLI Basics",
-            "content": "Configuration mode: `configure`, commit changes with `commit`, rollback with `rollback`",
-            "date": "2026-04-15",
-        },
-        {
-            "title": "Static Routes",
-            "content": "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1",
-            "date": "2026-04-10",
-        },
-        {
-            "title": "Interface Configuration",
-            "content": "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/24",
-            "date": "2026-04-05",
-        },
-    ]
-    return templates.TemplateResponse(
-        request,
-        "lab/juniper.html",
-        {"notes": notes, "active": "lab"},
-    )
-
-
-# ── Health Report ─────────────────────────────────────────────────────────────
-
 @router.get("/health-report")
 async def health_report_page(request: Request):
     return templates.TemplateResponse(request, "lab/health-report.html", {"active": "lab"})
@@ -695,6 +633,470 @@ Write a structured health report with sections: Overall Status, Issues Requiring
 
 
 # ── Config Viewer ─────────────────────────────────────────────────────────────
+
+# ── Device Deep-Dive ──────────────────────────────────────────────────────────
+#
+# Loading is tiered by cost, because these calls are not equal:
+#   Tier 0 (first paint)  cached trend + detail reads, gathered — this is the
+#                         page's reason for existing, so deferring it to HTMX
+#                         would buy an extra round trip for nothing.
+#   Tier 1 (hx on load)   secondary switch panels, so a 404 on VLANs cannot
+#                         blank the CPU chart.
+#   Tier 2 (click only)   ops show-commands. These poll an async job and
+#                         centralmcp sleeps 5s BEFORE its first poll, so each
+#                         costs 5-60s while holding a thread-pool worker and an
+#                         upstream semaphore slot. Auto-firing them would do
+#                         that on every page view, forever, uncached.
+
+TREND_WINDOWS = ((6, "6 hours"), (12, "12 hours"), (24, "24 hours"))
+
+
+def _device_scope_error(message: str) -> HTMLResponse:
+    return HTMLResponse(
+        f'<div class="card" style="border-color:rgba(239,68,68,.35);">'
+        f'<p class="text-sm text-red-400">{escape(message)}</p></div>'
+    )
+
+
+@router.get("/device-scope")
+async def device_scope(request: Request, serial: str = "", hours: int = 6):
+    """Trends for any device, plus the physical layer for switches."""
+    import asyncio
+
+    from svg_chart import DEFAULT_GEOM, build_chart, build_meter
+    from timeseries import (
+        merge, normalize_device_trends, switch_snapshot, to_bits_per_second, window,
+    )
+    from vendors.aruba_central import _norm_device
+    from vendors.central_bridge import (
+        get_ap_trends, get_devices, get_switch_details, get_switch_hardware_trends,
+    )
+
+    hours = hours if hours in {h for h, _ in TREND_WINDOWS} else 6
+    load_error = None
+    devices: list[dict] = []
+    try:
+        devices = [_norm_device(d) for d in await get_devices(limit=200)]
+    except Exception as exc:
+        logger.exception("[device-scope] device list failed: %s", exc)
+        load_error = "Could not load the device list — Aruba Central appears to be unavailable."
+
+    devices.sort(key=lambda d: (d.get("type") or "", (d.get("name") or "").lower()))
+    device = next((d for d in devices if d.get("serial") == serial), None)
+
+    ctx: dict = {
+        "active": "lab", "devices": devices, "device": device, "serial": serial,
+        "hours": hours, "windows": TREND_WINDOWS, "load_error": load_error,
+        "charts": [], "snapshot": None, "poe_meter": None, "trend_error": None,
+    }
+    if device is None:
+        return templates.TemplateResponse(request, "lab/device-scope.html", ctx)
+
+    start_iso, end_iso = window(hours)
+    is_switch = device.get("type") == "switch"
+    ctx["is_switch"] = is_switch
+
+    if is_switch:
+        # ONE call carries cpu, memory, temperature, PoE and power: centralmcp
+        # maps the cpu, memory and hardware metrics to the same endpoint.
+        raw_trends, raw_details = await asyncio.gather(
+            get_switch_hardware_trends(serial, start_iso, end_iso),
+            get_switch_details(serial),
+            return_exceptions=True,
+        )
+        trends = normalize_device_trends(
+            None if isinstance(raw_trends, BaseException) else raw_trends,
+            serial=serial, kind="switch")
+        details = None if isinstance(raw_details, BaseException) else raw_details
+        ctx["snapshot"] = switch_snapshot(details)
+        ctx["details"] = details if isinstance(details, dict) else {}
+        snap = ctx["snapshot"]
+        ctx["poe_meter"] = build_meter(snap.get("poe_consumption"), snap.get("poe_available"))
+    else:
+        cpu, memory, throughput = await asyncio.gather(
+            get_ap_trends(serial, "cpu", start_iso, end_iso),
+            get_ap_trends(serial, "memory", start_iso, end_iso),
+            get_ap_trends(serial, "throughput", start_iso, end_iso),
+            return_exceptions=True,
+        )
+        trends = merge(*[
+            normalize_device_trends(None if isinstance(r, BaseException) else r,
+                                    serial=serial, kind="ap")
+            for r in (cpu, memory, throughput)
+        ])
+
+    if not trends.ok:
+        ctx["trend_error"] = trends.error or "No trend data available for this device."
+        return templates.TemplateResponse(request, "lab/device-scope.html", ctx)
+
+    charts = []
+    # CPU and memory share a 0-100% axis. Temperature and power get their own
+    # charts rather than riding along: mixing % with degrees or watts on one
+    # axis is a dual-axis chart in disguise, and it only looks harmless here
+    # because this switch happens to sit at 21% / 25.5C.
+    if trends.has("cpu") or trends.has("memory"):
+        charts.append(build_chart(trends.pick("cpu", "memory"),
+                                  title="CPU and memory", y_min=0, y_max=100))
+    if trends.has("temperature"):
+        charts.append(build_chart(trends.pick("temperature"), title="Temperature",
+                                  baseline_zero=False))
+    if trends.has("poe_consumption") or trends.has("poe_available"):
+        charts.append(build_chart(trends.pick("poe_consumption", "poe_available"),
+                                  title="PoE draw against budget", y_min=0))
+    if trends.has("power") or trends.has("power_total"):
+        charts.append(build_chart(trends.pick("power", "power_total"),
+                                  title="Power draw", y_min=0))
+    if trends.has("tx") or trends.has("rx"):
+        # Bytes-per-bucket is meaningless on an axis without the bucket width.
+        rate = [to_bits_per_second(s, trends.bucket_seconds)
+                for s in trends.pick("tx", "rx")]
+        charts.append(build_chart(rate, title="Throughput", y_min=0))
+
+    ctx["charts"] = charts
+    ctx["geom"] = DEFAULT_GEOM
+    return templates.TemplateResponse(request, "lab/device-scope.html", ctx)
+
+
+@router.get("/device-scope/{serial}/poe")
+async def device_scope_poe(request: Request, serial: str):
+    """Tier 1 fragment: per-port PoE draw."""
+    from vendors.central_bridge import get_switch_interface_poe
+    try:
+        ports = await get_switch_interface_poe(serial)
+    except Exception as exc:
+        logger.exception("[device-scope] PoE fetch failed for %s: %s", serial, exc)
+        return _device_scope_error("Could not read per-port PoE from this switch.")
+    if ports is None:
+        return _device_scope_error("This switch did not return PoE data.")
+    return templates.TemplateResponse(
+        request, "lab/partials/poe_table.html", {"ports": ports})
+
+
+@router.get("/device-scope/{serial}/vlans")
+async def device_scope_vlans(request: Request, serial: str):
+    """Tier 1 fragment: VLAN membership."""
+    from vendors.central_bridge import get_switch_vlans
+    try:
+        vlans = await get_switch_vlans(serial)
+    except Exception as exc:
+        logger.exception("[device-scope] VLAN fetch failed for %s: %s", serial, exc)
+        return _device_scope_error("Could not read VLANs from this switch.")
+    if vlans is None:
+        return _device_scope_error("This switch did not return VLAN data.")
+    return templates.TemplateResponse(
+        request, "lab/partials/vlan_table.html", {"vlans": vlans})
+
+
+@router.get("/device-scope/{serial}/interface")
+async def device_scope_interface(request: Request, serial: str, port: str = "",
+                                 hours: int = 6):
+    """Tier 1 fragment: per-interface error counters as real series.
+
+    Preferred over the ops `show interface statistics` path, which this switch
+    refuses outright and which would cost 5-60s besides.
+    """
+    from svg_chart import SMALL_GEOM, build_bars
+    from timeseries import downsample, error_counter_series, normalize_interface_trends, window
+    from vendors.central_bridge import get_switch_interface_trends, get_switch_ports
+
+    hours = hours if hours in {h for h, _ in TREND_WINDOWS} else 6
+    start_iso, end_iso = window(hours)
+    try:
+        ports = await get_switch_ports(serial)
+    except Exception:
+        ports = []
+    names = [p.get("name") or p.get("id") for p in ports if isinstance(p, dict)]
+    names = [n for n in names if n]
+    chosen = port or (names[0] if names else "")
+    if not chosen:
+        return _device_scope_error("No interfaces reported for this switch.")
+
+    try:
+        raw = await get_switch_interface_trends(serial, start_iso, end_iso,
+                                                interface_id=chosen)
+    except Exception as exc:
+        logger.exception("[device-scope] interface trends failed for %s: %s", serial, exc)
+        return _device_scope_error("Could not read interface counters from this switch.")
+
+    trends = normalize_interface_trends(raw, serial=serial, interface_id=chosen)
+    counters = error_counter_series(trends)
+    charts = [build_bars(downsample(s, 120, how="max"), geom=SMALL_GEOM,
+                         title=s.label) for s in counters]
+    return templates.TemplateResponse(request, "lab/partials/interface_trends.html", {
+        "serial": serial, "ports": names, "chosen": chosen, "hours": hours,
+        "charts": charts, "trends": trends,
+        "clean_count": len([k for k in trends.series if k.endswith(
+            ("errors", "discards", "fcs", "collision", "runts", "giants", "fragmented"))]),
+    })
+
+
+@router.post("/device-scope/{serial}/diagnostic")
+async def device_scope_diagnostic(request: Request, serial: str,
+                                  kind: str = Form(...)):
+    """Tier 2: an explicitly-requested show command. 5-60s, uncached."""
+    from ops_format import format_ops_response
+    from vendors.central_bridge import get_cx_arp_table, get_switch_spanning_tree
+
+    runners = {"stp": get_switch_spanning_tree, "arp": get_cx_arp_table}
+    runner = runners.get(kind)
+    if runner is None:
+        return _device_scope_error("Unknown diagnostic.")
+    try:
+        result = await runner(serial)
+    except Exception as exc:
+        logger.exception("[device-scope] %s failed on %s: %s", kind, serial, exc)
+        return _device_scope_error(f"The {kind.upper()} command failed on this device.")
+    # Already an HTMLResponse — reuses the shared ops renderer rather than
+    # hand-rolling another <pre> block.
+    return format_ops_response(result)
+
+
+# ── Compliance Board ─────────────────────────────────────────────────────────
+
+@router.get("/compliance")
+async def compliance_board(request: Request):
+    """Firmware drift, config health, and Central's own recommendations.
+
+    The honest replacement for the Self-Healing Sim: it says what is actually
+    wrong and what Central recommends, rather than remediating invented faults.
+    """
+    import asyncio
+
+    from vendors.aruba_central import _norm_device
+    from vendors.central_bridge import (
+        get_devices, list_devices_config_health, list_firmware_upgrades, list_insights,
+    )
+
+    load_error = None
+    firmware: list = []
+    health: list = []
+    insights: list = []
+    raw_devices: list = []
+    try:
+        firmware, health, insights, raw_devices = await asyncio.gather(
+            list_firmware_upgrades(),
+            list_devices_config_health(),
+            list_insights(),
+            get_devices(limit=200),
+            return_exceptions=True,
+        )
+    except Exception as exc:
+        logger.exception("[compliance] fetch failed: %s", exc)
+        load_error = "Could not reach Aruba Central."
+
+    def _ok(value) -> list:
+        """asyncio.gather(return_exceptions=True) hands back the exception."""
+        return value if isinstance(value, list) else []
+
+    firmware, health, insights = _ok(firmware), _ok(health), _ok(insights)
+    if not (firmware or health or insights) and load_error is None:
+        load_error = "Aruba Central returned no compliance data."
+
+    # Running version comes from the device inventory; the recommendation comes
+    # from the upgrade list. Neither one alone shows drift.
+    running = {}
+    for raw in _ok(raw_devices):
+        if not isinstance(raw, dict):
+            continue
+        device = _norm_device(raw)
+        if device.get("serial"):
+            running[device["serial"]] = raw.get("firmwareVersion") or ""
+
+    rows = []
+    for item in firmware:
+        if not isinstance(item, dict):
+            continue
+        serial = item.get("serialNumber") or ""
+        recommended = (item.get("recommendedVersion") or "").strip()
+        current = (running.get(serial) or item.get("firmwareVersion") or "").strip()
+        classification = item.get("firmwareClassification") or ""
+        rows.append({
+            "serial": serial,
+            "name": item.get("deviceName") or serial,
+            "current": current,
+            "recommended": recommended,
+            "classification": classification,
+            # Compare only when both are known; a blank recommendation is not drift.
+            "drift": bool(recommended and current and
+                          recommended not in current and current not in recommended),
+            "status": item.get("upgradeStatus") or "",
+            "last": item.get("lastUpgradedTimeAt") or "",
+        })
+    rows.sort(key=lambda r: (not r["drift"], r["name"].lower()))
+
+    health_rows = []
+    for item in health:
+        if not isinstance(item, dict):
+            continue
+        issues = [i for i in (item.get("activeIssues") or []) if i]
+        health_rows.append({
+            # The real serial is in "serial"; this payload's serialNumber is null.
+            "serial": item.get("serial") or "",
+            "name": item.get("name") or item.get("serial") or "",
+            "type": item.get("type") or "",
+            "config_status": item.get("configStatus") or "",
+            "synced": (item.get("configStatus") or "").upper() == "SYNCHRONIZED",
+            "issues": issues,
+            "top_issue": item.get("topPriorityIssue") or "",
+            "action": item.get("recommendedAction") or "",
+            "group": item.get("deviceGroupName") or "",
+        })
+    health_rows.sort(key=lambda r: (r["synced"], r["name"].lower()))
+
+    insight_rows = [i for i in insights if isinstance(i, dict)]
+
+    return templates.TemplateResponse(request, "lab/compliance.html", {
+        "active": "lab", "load_error": load_error,
+        "firmware": rows, "health": health_rows, "insights": insight_rows,
+        "drift_count": sum(1 for r in rows if r["drift"]),
+        "unsynced_count": sum(1 for r in health_rows if not r["synced"]),
+    })
+
+
+@router.get("/compliance/{serial}/issues")
+async def compliance_issues(request: Request, serial: str):
+    """On-demand detail for a device flagged with active config issues."""
+    from vendors.central_bridge import get_device_config_issues
+    try:
+        issues = await get_device_config_issues(serial)
+    except Exception as exc:
+        logger.exception("[compliance] issue fetch failed for %s: %s", serial, exc)
+        return HTMLResponse(
+            f'<p class="text-sm text-red-400">{escape("Could not read config issues.")}</p>')
+    buckets = []
+    for key, label in (("invalidConfig", "Invalid configuration"),
+                       ("configPushFailures", "Push failures"),
+                       ("configPullFailures", "Pull failures"),
+                       ("filteredConfig", "Filtered configuration")):
+        entries = (issues or {}).get(key) or []
+        if entries:
+            buckets.append({"label": label, "entries": entries})
+    return templates.TemplateResponse(request, "lab/partials/config_issues.html",
+                                      {"buckets": buckets, "serial": serial})
+
+
+# ── Activity & History ───────────────────────────────────────────────────────
+
+_ALERT_KIND_ICON = {"Critical": "critical", "Major": "major", "Minor": "minor"}
+
+
+def _alert_texts(alert: dict, field: str) -> list[str]:
+    """Pull rootCause / solution text out of Central's action[] payload.
+
+    Each entry is a JSON-encoded string containing {text, subTextItems, and a
+    navigation deep-link}. Decode defensively — a payload change should cost a
+    missing explanation, not a 500.
+    """
+    import json as _json
+
+    out: list[str] = []
+    for action in alert.get("action") or []:
+        if not isinstance(action, dict):
+            continue
+        for raw in action.get(field) or []:
+            if isinstance(raw, dict):
+                text = raw.get("text")
+            else:
+                try:
+                    text = (_json.loads(raw) or {}).get("text")
+                except Exception:
+                    text = str(raw)
+            if text:
+                out.append(str(text).strip())
+    return out
+
+
+@router.get("/activity")
+async def activity_page(request: Request, hours: int = 24):
+    """Device transitions, portal audit trail, client onboarding, and the
+    cleared alerts the main alerts page filters out."""
+    import asyncio
+
+    from alert_severity import count_severities, normalize_severity
+    from vendors.aruba_central import _norm_device
+    from vendors.central_bridge import (
+        get_devices, list_all_alerts, list_client_onboarding_events,
+    )
+
+    hours = hours if hours in (6, 24, 72) else 24
+
+    # The DB reads are blocking psycopg2; keep them off the event loop. Track
+    # failure separately from emptiness — "no transitions recorded yet" is the
+    # normal state on a stable fleet and must not look like "database down".
+    def _load_db():
+        return db.get_device_status_history(limit=100), db.get_audit_log(limit=100)
+
+    db_error = None
+    transitions: list = []
+    audit: list = []
+    try:
+        transitions, audit = await run_in_threadpool(_load_db)
+    except Exception as exc:
+        logger.exception("[activity] database read failed: %s", exc)
+        db_error = "The database is unavailable, so portal history cannot be shown."
+
+    alerts_raw, raw_devices = await asyncio.gather(
+        list_all_alerts(limit=100), get_devices(limit=200), return_exceptions=True,
+    )
+    alerts_raw = alerts_raw if isinstance(alerts_raw, list) else []
+    devices = [_norm_device(d) for d in (raw_devices if isinstance(raw_devices, list) else [])]
+
+    alerts = []
+    for a in alerts_raw:
+        if not isinstance(a, dict):
+            continue
+        alerts.append({
+            "id": a.get("id") or a.get("key") or "",
+            "name": a.get("name") or "Alert",
+            "summary": a.get("summary") or "",
+            "severity": normalize_severity(a.get("severity")),
+            "severity_raw": a.get("severity") or "",
+            "status": a.get("status") or "",
+            "category": a.get("category") or "",
+            "priority": a.get("priority") or "",
+            "device_type": a.get("deviceType") or "",
+            "site": a.get("siteName") or "",
+            "time": a.get("createdAt") or a.get("updatedAt") or "",
+            "root_cause": _alert_texts(a, "rootCause"),
+            "solution": _alert_texts(a, "solution"),
+        })
+    alerts.sort(key=lambda x: x.get("time") or "", reverse=True)
+
+    # Onboarding events come from the switches — APs return none.
+    switches = [d for d in devices if d.get("type") == "switch" and d.get("serial")]
+    onboarding: list = []
+    for switch in switches[:3]:
+        try:
+            rows = await list_client_onboarding_events(switch["serial"], hours=hours)
+        except Exception as exc:
+            logger.debug("[activity] onboarding fetch failed for %s: %s",
+                         switch["serial"], exc)
+            continue
+        for row in rows:
+            if isinstance(row, dict):
+                row = dict(row)
+                row["_device"] = switch.get("name") or switch["serial"]
+                onboarding.append(row)
+    onboarding.sort(key=lambda r: r.get("timeAt") or "", reverse=True)
+
+    # Which clients are re-onboarding repeatedly? Same idea as
+    # detect_client_flapping, computed from rows already fetched.
+    repeat: dict[str, int] = {}
+    for row in onboarding:
+        mac = row.get("clientMacAddress") or ""
+        if mac:
+            repeat[mac] = repeat.get(mac, 0) + 1
+    flapping = sorted(((m, c) for m, c in repeat.items() if c >= 5),
+                      key=lambda pair: pair[1], reverse=True)
+
+    return templates.TemplateResponse(request, "lab/activity.html", {
+        "active": "lab", "hours": hours, "db_error": db_error,
+        "transitions": transitions, "audit": audit,
+        "alerts": alerts, "alert_summary": count_severities(alerts),
+        "onboarding": onboarding[:60], "flapping": flapping,
+        "switch_count": len(switches),
+    })
+
 
 @router.get("/config")
 async def config_page(request: Request):

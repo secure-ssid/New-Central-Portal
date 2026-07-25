@@ -141,16 +141,39 @@ def _si(value: float, suffix: str) -> str:
     return f"{value:.0f} {suffix}"
 
 
-def _nice_ceiling(value: float) -> float:
-    """Round up to 1/2/2.5/5 x 10^n so ticks read 0/25/50/75/100."""
-    if value <= 0:
+def _nice_step(rough: float) -> float:
+    """Round a raw tick interval up to 1/2/2.5/5 x 10^n."""
+    if rough <= 0:
         return 1.0
-    exponent = math.floor(math.log10(value))
-    base = 10 ** exponent
-    for step in (1.0, 2.0, 2.5, 5.0, 10.0):
-        if value <= step * base * 1.0000001:
+    exponent = math.floor(math.log10(rough))
+    base = 10.0 ** exponent
+    for step in (1.0, 2.0, 2.5, 5.0):
+        if rough <= step * base * 1.0000001:
             return step * base
     return 10.0 * base
+
+
+def _nice_bounds(lo: float, hi: float, ticks: int) -> tuple[float, float, float]:
+    """Snap an axis to a round tick interval derived from the RANGE.
+
+    Returns (lo, hi, step) so the tick loop can walk the same interval — snap
+    the bounds but then divide the range into N equal parts and the labels come
+    out at 7.5 and 22.5, which defeats the point.
+
+    Deriving the interval from the absolute value instead of the range is the
+    obvious approach and it wastes most of the plot: a 25.5-28C temperature
+    series would round up to a 0-50C axis, drawing real variation as a flat
+    line near the bottom.
+    """
+    span = hi - lo
+    if span <= 0:
+        return lo, hi, max(abs(hi) * 0.1, 1.0)
+    step = _nice_step(span / max(ticks, 1))
+    snapped_lo = math.floor(lo / step) * step
+    snapped_hi = math.ceil(hi / step) * step
+    if snapped_hi <= snapped_lo:
+        snapped_hi = snapped_lo + step
+    return snapped_lo, snapped_hi, step
 
 
 # ── The builder ──────────────────────────────────────────────────────────────
@@ -187,16 +210,19 @@ def build_chart(
     hi = y_max if y_max is not None else max(values)
     if baseline_zero and y_min is None and lo > 0:
         lo = 0.0
-    padded_flat = hi == lo
-    if padded_flat:
+    step: float | None = None
+    if hi == lo:
         # NOT `range = max - min || 1` (home.html:589). That pins a constant
         # 740W series to the bottom of the plot, which reads as zero. Pad
-        # symmetrically so a flat series draws through the middle — and skip
-        # the nice-ceiling step below, which would push it back off centre.
+        # symmetrically so a flat series draws through the middle, and skip the
+        # snapping below, which would push it back off centre.
         pad = max(abs(hi) * 0.1, 1.0)
         lo, hi = hi - pad, hi + pad
-    elif y_max is None:
-        hi = max(_nice_ceiling(hi), lo + 1e-9)
+    elif y_min is None or y_max is None:
+        snapped_lo, snapped_hi, snapped_step = _nice_bounds(lo, hi, y_ticks)
+        lo = lo if y_min is not None else snapped_lo
+        hi = hi if y_max is not None else snapped_hi
+        step = snapped_step
     if hi <= lo:                                    # belt and braces
         hi = lo + 1.0
 
@@ -220,10 +246,18 @@ def build_chart(
             last_s=value_format(one.last, one.unit),
         ))
 
+    # Walk the snapped step so labels are round numbers; fall back to equal
+    # division when the axis was clamped by the caller (y_min/y_max).
     ticks_y = []
-    for i in range(y_ticks + 1):
-        value = lo + (hi - lo) * i / y_ticks
-        ticks_y.append((round(to_y(value), 1), value_format(value, series[0].unit)))
+    if step and step > 0 and (hi - lo) / step <= 12:
+        value = lo
+        while value <= hi + step * 1e-9:
+            ticks_y.append((round(to_y(value), 1), value_format(value, series[0].unit)))
+            value += step
+    else:
+        for i in range(y_ticks + 1):
+            value = lo + (hi - lo) * i / y_ticks
+            ticks_y.append((round(to_y(value), 1), value_format(value, series[0].unit)))
 
     ticks_x = []
     long_window = span > 86400
@@ -304,7 +338,8 @@ def build_bars(series: Series, *, geom: ChartGeom = SMALL_GEOM, title: str = "",
         return Chart(geom=geom, empty=True, note=empty_note, title=title,
                      aria_label=title or "chart")
 
-    hi = _nice_ceiling(max(p.v for p in points) or 1.0)
+    peak = max(p.v for p in points) or 1.0
+    _, hi, _step = _nice_bounds(0.0, peak, 2)
     count = max(len(series.points), 1)
     slot_w = geom.plot_w / count
     bar_w = max(slot_w - 2.0, 1.0)      # 2px surface gap between adjacent bars

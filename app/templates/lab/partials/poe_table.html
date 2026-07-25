@@ -1,0 +1,24 @@
+<p class="section-label mb-3">Per-port PoE</p>
+{% if not ports %}
+<div class="empty-state"><p>No ports are drawing power.</p></div>
+{% else %}
+<div class="overflow-x-auto">
+  <table class="tbl">
+    <thead><tr><th scope="col">Port</th><th scope="col">Drawn</th><th scope="col">Denied</th></tr></thead>
+    <tbody>
+      {% for p in ports %}
+      <tr class="tbl-row">
+        <td class="font-mono">{{ p.interfaceId or p.id }}</td>
+        <td>{{ '%.1f'|format(p.powerDrawnInWatts or 0) }} W</td>
+        <td>
+          {% if (p.powerDeniedCount or 0) > 0 %}
+          <span class="text-amber-400">{{ p.powerDeniedCount|int }}</span>
+          {% else %}<span class="text-slate-600">0</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-xs text-slate-600 mt-3">{{ ports|length }} port{{ 's' if ports|length != 1 }} drawing power.</p>
+{% endif %}
