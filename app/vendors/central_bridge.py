@@ -853,6 +853,139 @@ async def get_wireless_metrics(serial: str) -> dict:
     return await _run(_fn, serial)
 
 
+# ── Device trends and switch physical layer ──────────────────────────────────
+#
+# Every wrapper below returns the UNWRAPPED payload, never the envelope. That is
+# load-bearing, not tidiness: _is_low_confidence() treats any dict carrying a
+# truthy "errors" key as a possible upstream failure and drops its TTL from 60s
+# to _LOW_CONFIDENCE_TTL_SECONDS (5s). These monitoring envelopes ALWAYS carry a
+# non-empty errors[] on success — it logs the 404s from endpoint candidates
+# tried before the one that worked — so returning the envelope would silently
+# make these the most frequently refetched calls in the portal, walking straight
+# back toward the rate limit this cache exists to stay under.
+#
+# None means "the fetch failed" (5s TTL, retried soon); an empty list means
+# "genuinely nothing here" and the page renders an empty state.
+
+def _payload(result: Any, key: str) -> Any | None:
+    """result[key], or None. A non-empty errors[] is NOT a failure signal."""
+    if not isinstance(result, dict):
+        return None
+    return result.get(key)
+
+
+@_cached()
+async def get_ap_trends(serial: str, metric: str, start_iso: str, end_iso: str,
+                        site_id: str | None = None) -> dict | None:
+    """AP cpu | memory | throughput trends.
+
+    device_type is always passed: without it centralmcp resolves the type with
+    an extra get_device_by_serial inventory call per invocation, and the page
+    asks for three metrics.
+    """
+    from mcp_servers.monitoring import get_device_trends as _fn
+    kwargs: dict[str, Any] = {"device_type": "AP"}
+    if site_id:
+        kwargs["site_id"] = site_id
+    return _payload(
+        await _run(_fn, serial, metric, start_iso, end_iso, **kwargs), "trends")
+
+
+@_cached()
+async def get_switch_hardware_trends(serial: str, start_iso: str, end_iso: str,
+                                     site_id: str | None = None) -> dict | None:
+    """One call, seven series: cpu, memory, temperature, PoE and power.
+
+    Named distinctly because centralmcp maps metric "cpu", "memory" AND
+    "hardware" to the same /switches/{serial}/hardware-trends endpoint —
+    requesting cpu and memory separately is two byte-identical upstream GETs
+    under two cache keys.
+    """
+    from mcp_servers.monitoring import get_device_trends as _fn
+    kwargs: dict[str, Any] = {"device_type": "SWITCH"}
+    if site_id:
+        kwargs["site_id"] = site_id
+    return _payload(
+        await _run(_fn, serial, "cpu", start_iso, end_iso, **kwargs), "trends")
+
+
+@_cached()
+async def get_switch_interface_trends(serial: str, start_iso: str, end_iso: str,
+                                      interface_id: str | None = None,
+                                      site_id: str | None = None) -> dict | None:
+    """Per-interface byte counters and ten error counters, as real series.
+
+    Preferred over the ops `show interface statistics` path: structured, fast,
+    cacheable — and that command is refused outright by this switch.
+    """
+    from mcp_servers.monitoring import get_switch_interface_trends as _fn
+    kwargs: dict[str, Any] = {}
+    if interface_id:
+        kwargs["interface_id"] = interface_id
+    if site_id:
+        kwargs["site_id"] = site_id
+    return _payload(
+        await _run(_fn, serial, start_iso, end_iso, **kwargs), "trends")
+
+
+@_cached()
+async def get_switch_details(serial: str) -> dict | None:
+    """Switch header: model, firmware, uptime, temperature, PoE budget, power.
+
+    Carries an instantaneous switchTrends[0] row, so the stat tiles need no
+    time-series call at all.
+    """
+    from mcp_servers.monitoring import get_switch_details as _fn
+    return _payload(await _run(_fn, serial), "details")
+
+
+@_cached()
+async def get_switch_interface_poe(serial: str) -> list[dict] | None:
+    """Per-port PoE draw. Payload nests as {"response": {"items": [...]}}."""
+    from mcp_servers.monitoring import get_switch_interface_poe as _fn
+    poe = _payload(await _run(_fn, serial), "poe")
+    if not isinstance(poe, dict):
+        return None
+    response = poe.get("response")
+    if not isinstance(response, dict):
+        return None
+    # `items` can be present and null — the get_switch_ports lesson.
+    return [i for i in (response.get("items") or []) if isinstance(i, dict)]
+
+
+@_cached()
+async def get_switch_vlans(serial: str, limit: int = 100) -> list[dict] | None:
+    """VLANs with tagged/untagged port membership.
+
+    centralmcp returns data.get("vlans", data.get("items", data)), so the value
+    may be a list OR the whole response dict — isinstance-guard both.
+    """
+    from mcp_servers.monitoring import get_switch_vlans as _fn
+    vlans = _payload(await _run(_fn, serial, limit=limit), "vlans")
+    if isinstance(vlans, list):
+        return [v for v in vlans if isinstance(v, dict)]
+    if isinstance(vlans, dict):
+        inner = vlans.get("items")
+        if isinstance(inner, list):
+            return [v for v in inner if isinstance(v, dict)]
+    return None
+
+
+# Diagnostics: deliberately NOT cached. These poll an async job and
+# mcp_servers/shared.py sleeps 5s BEFORE its first poll, so each costs 5-60s
+# while holding a thread-pool worker and an upstream semaphore slot. They are
+# click-to-run only — never fire them on page load.
+
+async def get_switch_spanning_tree(serial: str, interface: str | None = None) -> dict:
+    from mcp_servers.ops import get_switch_spanning_tree as _fn
+    return await _run(_fn, serial, interface=interface)
+
+
+async def get_cx_arp_table(serial: str) -> dict:
+    from mcp_servers.ops import get_cx_arp_table as _fn
+    return await _run(_fn, serial)
+
+
 @_cached()
 async def get_ap_radios(serial: str) -> dict:
     from mcp_servers.monitoring import get_ap_radios as _fn
@@ -903,6 +1036,72 @@ async def list_wlans(limit: int = 50) -> list[dict]:
     # list_ssids returns {"wlan-ssid": [...]}, not the usual {"items": [...]} —
     # reading only "items" is why the WLAN page rendered "No WLANs".
     return _unwrap(await _run(list_ssids, limit=limit), "wlan-ssid")
+
+
+@_cached()
+async def list_firmware_upgrades() -> list[dict]:
+    """Per-device upgrade state with the version Central recommends.
+
+    Distinct from get_firmware_compliance below, which reads the *policy*.
+    This is what actually shows drift: recommendedVersion against what the
+    device is running.
+    """
+    from mcp_servers.config import list_firmware_upgrades as _fn
+    return _unwrap(await _run(_fn), "devices", "upgrades")
+
+
+@_cached()
+async def list_devices_config_health(limit: int = 200) -> list[dict]:
+    """Fleet config sync state and active issues.
+
+    Note the real serial is in "serial"; this payload's "serialNumber" is
+    always null.
+    """
+    from mcp_servers.monitoring import list_devices_config_health as _fn
+    return _unwrap(await _run(_fn, limit=limit), "devices")
+
+
+@_cached()
+async def get_device_config_issues(serial: str) -> dict | None:
+    from mcp_servers.monitoring import get_device_config_issues as _fn
+    result = await _run(_fn, serial)
+    return result if isinstance(result, dict) else None
+
+
+@_cached()
+async def list_insights() -> list[dict]:
+    """Central's own recommendations — firmware advice, onboarding assessment."""
+    from mcp_servers.monitoring import list_insights as _fn
+    return _unwrap(await _run(_fn))
+
+
+@_cached()
+async def list_client_onboarding_events(serial: str, hours: int = 24) -> list[dict]:
+    from mcp_servers.monitoring import list_client_onboarding_events as _fn
+    return _unwrap(await _run(_fn, serial, hours=hours), "events")
+
+
+@_cached()
+async def list_all_alerts(limit: int = 100) -> list[dict]:
+    """Alerts of EVERY status, including Cleared.
+
+    Neither centralmcp entry point can do this: list_active_alerts applies an
+    OData `status ne Cleared` filter, and MCPClient.get_alerts — which
+    list_alerts delegates to — hardcodes `status eq 'Active'`. Every alert on
+    this tenant is Cleared, so both return nothing while 30 real records sit
+    behind them, each carrying the rootCause and solution text the portal has
+    never shown. Query the endpoint directly, the same way
+    get_firmware_compliance below already does for the same class of reason.
+    """
+    from mcp_servers.shared import get_client
+
+    def _fetch() -> list[dict]:
+        result = get_client().get("/network-notifications/v1/alerts",
+                                  params={"limit": limit})
+        items = result.get("items", []) if isinstance(result, dict) else []
+        return [a for a in items if isinstance(a, dict)]
+
+    return await _run(_fetch)
 
 
 @_cached()

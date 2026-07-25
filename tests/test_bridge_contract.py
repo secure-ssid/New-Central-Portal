@@ -83,3 +83,149 @@ def test_norm_device_is_idempotent():
 def test_norm_device_handles_uppercase_access_point():
     d = _norm_device({"serialNumber": "X", "deviceType": "ACCESS_POINT", "status": "ONLINE"})
     assert d["type"] == "access_point"
+
+
+# ── Trend wrappers: the caching contract ─────────────────────────────────────
+#
+# These wrappers exist under a trap. _is_low_confidence() treats any dict with a
+# truthy "errors" key as a possible upstream failure and cuts its TTL from 60s
+# to 5s — and every monitoring envelope carries a non-empty errors[] on success,
+# logging the 404s from candidates tried before the one that worked. A wrapper
+# that returned the envelope would look correct, pass a naive cache test, and
+# silently become the most refetched call in the portal.
+
+TRENDS_ENVELOPE = {
+    "serial_number": "SG30LMR164",
+    "endpoint_used": "/network-monitoring/v1/switches/SG30LMR164/hardware-trends",
+    "errors": ["404 at /network-monitoring/v1alpha1/switch/SG30LMR164/hardware-trends"],
+    "trends": {"response": {"metric": "SwitchDeviceTrends", "keys": ["cpuUtilization"],
+        "switchMetrics": [{"serialNumber": "SG30LMR164", "samples": [
+            {"timestamp": 1784982600000, "data": ["21"]}]}]}},
+}
+
+NOT_FOUND_ENVELOPE = {
+    "serial_number": "X", "trends": None, "endpoint_used": None,
+    "errors": ["404 at /a", "404 at /b"],
+}
+
+
+class _Recorder:
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = 0
+        self.last_kwargs: dict = {}
+
+    def __call__(self, *args, **kwargs):
+        self.calls += 1
+        self.last_kwargs = kwargs
+        return self.payload
+
+
+def _install(monkeypatch, **fns):
+    monitoring = types.ModuleType("mcp_servers.monitoring")
+    for name, fn in fns.items():
+        setattr(monitoring, name, fn)
+    pkg = types.ModuleType("mcp_servers")
+    pkg.monitoring = monitoring
+    monkeypatch.setitem(sys.modules, "mcp_servers", pkg)
+    monkeypatch.setitem(sys.modules, "mcp_servers.monitoring", monitoring)
+    return monitoring
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    cb.clear_bridge_cache()
+    yield
+    cb.clear_bridge_cache()
+
+
+def test_trend_wrapper_unwraps_the_envelope_so_it_keeps_the_full_ttl(monkeypatch):
+    rec = _Recorder(TRENDS_ENVELOPE)
+    _install(monkeypatch, get_device_trends=rec)
+
+    out = asyncio.run(cb.get_switch_hardware_trends("SG30LMR164", "S", "E"))
+
+    assert "response" in out, "must return the inner payload, not the envelope"
+    assert "errors" not in out
+    assert cb._is_low_confidence(out) is False, (
+        "returning the envelope would drop this to a 5s TTL because its "
+        "errors[] is non-empty even on success")
+
+
+def test_a_missing_payload_becomes_None(monkeypatch):
+    _install(monkeypatch, get_device_trends=_Recorder(NOT_FOUND_ENVELOPE))
+    out = asyncio.run(cb.get_ap_trends("X", "cpu", "S", "E"))
+    assert out is None
+    assert cb._is_low_confidence(out) is True, "a failure should be retried soon"
+
+
+def test_switch_trends_are_fetched_once_not_once_per_metric(monkeypatch):
+    """centralmcp maps cpu, memory and hardware to the same endpoint."""
+    rec = _Recorder(TRENDS_ENVELOPE)
+    _install(monkeypatch, get_device_trends=rec)
+
+    async def run():
+        return await asyncio.gather(
+            cb.get_switch_hardware_trends("SG30LMR164", "S", "E"),
+            cb.get_switch_hardware_trends("SG30LMR164", "S", "E"),
+        )
+
+    asyncio.run(run())
+    assert rec.calls == 1
+
+
+def test_ap_trends_always_pass_device_type(monkeypatch):
+    """Omitting it makes centralmcp resolve the type with an extra inventory
+    call, on every metric, on every request."""
+    rec = _Recorder(TRENDS_ENVELOPE)
+    _install(monkeypatch, get_device_trends=rec)
+    asyncio.run(cb.get_ap_trends("PHQHKZ21HK", "cpu", "S", "E"))
+    assert rec.last_kwargs.get("device_type") == "AP"
+
+
+def test_poe_tolerates_a_null_items_list(monkeypatch):
+    """`items` can be present and null — the get_switch_ports lesson."""
+    _install(monkeypatch, get_switch_interface_poe=_Recorder(
+        {"poe": {"response": {"count": 0, "items": None}}, "errors": []}))
+    assert asyncio.run(cb.get_switch_interface_poe("SG30LMR164")) == []
+
+
+def test_vlans_accept_either_payload_shape(monkeypatch):
+    """centralmcp returns data.get("vlans", data.get("items", data)), so the
+    value may be a list or the whole dict."""
+    _install(monkeypatch, get_switch_vlans=_Recorder(
+        {"vlans": {"items": [{"id": "1"}]}, "errors": []}))
+    assert asyncio.run(cb.get_switch_vlans("SG30LMR164")) == [{"id": "1"}]
+
+
+# Diagnostics that poll an async job: mcp_servers/shared.py sleeps 5s BEFORE
+# its first poll, so each costs 5-60s while holding a thread-pool worker and an
+# upstream semaphore slot. Caching them would be wrong (the user asked to run it
+# now), which is exactly why they must never be auto-fired on page load.
+DELIBERATELY_UNCACHED = {
+    "get_switch_port_errors", "get_cx_mac_table", "find_mac_on_switch",
+    "get_switch_spanning_tree", "get_cx_arp_table", "get_device_running_config",
+    "get_classic_client", "get_glp_subscriptions_raw",
+}
+
+
+def test_every_read_wrapper_is_cached():
+    """Mechanises the rule for wrappers that do not exist yet.
+
+    An undecorated read path bypasses stale-while-revalidate and blocks the
+    request on a cold upstream fetch — the defect that left the dashboard at 6s
+    after every cache expiry.
+    """
+    import inspect
+
+    offenders = []
+    for name, fn in vars(cb).items():
+        if not name.startswith(("get_", "list_", "find_")):
+            continue
+        if not inspect.iscoroutinefunction(fn) or name in DELIBERATELY_UNCACHED:
+            continue
+        if getattr(fn, "__wrapped__", None) is None:
+            offenders.append(name)
+    assert not offenders, (
+        f"{offenders} bypass the response cache — add @_cached(), or add the "
+        f"name to DELIBERATELY_UNCACHED with a reason")
