@@ -7,11 +7,11 @@
         <span class="text-slate-700">/</span>
         <span class="text-slate-400">Doc Q&A</span>
     </div>
-    <h1 class="text-2xl font-bold text-white">Documentation Q&A</h1>
+    <h1 class="text-2xl font-semibold text-white tracking-tight">Documentation Q&A</h1>
     <p class="text-sm text-slate-500 mt-0.5">Compact cited answers from local docs — tries OpenAPI lookup first for API-shaped questions</p>
 </div>
 
-<div class="max-w-4xl">
+<div>
     <div class="card mb-6">
         <form hx-post="/lab/doc-ask" hx-target="#ask-results" hx-indicator="#ask-spinner" hx-disabled-elt="#ask-btn" class="flex gap-2">
             <input type="text" name="question" required autocomplete="off"

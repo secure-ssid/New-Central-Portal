@@ -7,11 +7,11 @@
         <span class="text-slate-700">/</span>
         <span class="text-slate-400">API Lookup</span>
     </div>
-    <h1 class="text-2xl font-bold text-white">OpenAPI Lookup</h1>
+    <h1 class="text-2xl font-semibold text-white tracking-tight">OpenAPI Lookup</h1>
     <p class="text-sm text-slate-500 mt-0.5">Exact field, enum, endpoint, and schema answers from the centralmcp specs index</p>
 </div>
 
-<div class="max-w-4xl">
+<div>
     <div class="card mb-6">
         <form hx-post="/lab/doc-api" hx-target="#search-results" hx-indicator="#api-spinner" hx-disabled-elt="#api-btn" class="flex gap-2">
             <input type="text" name="query" required autocomplete="off"

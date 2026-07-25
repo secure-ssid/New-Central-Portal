@@ -4,13 +4,15 @@
 FROM node:20-alpine AS tailwind
 WORKDIR /build
 COPY static/input.css static/input.css
+COPY static/tailwind-theme.js static/tailwind-theme.js
+COPY tailwind.config.js tailwind.config.js
 COPY templates templates
 RUN mkdir -p static/dist \
     && npx --yes tailwindcss@3.4.10 \
          -i static/input.css \
          -o static/dist/tailwind.css \
          --minify \
-         --content "templates/**/*.html"
+         --config tailwind.config.js
 
 FROM python:3.12-slim
 

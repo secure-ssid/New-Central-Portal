@@ -1,0 +1,281 @@
+/* New Central Portal design system.
+ *
+ * Was a 168-line inline <style> in base.html: re-parsed and re-sent with
+ * every page load, and impossible to cache. It defines the components the
+ * templates actually rely on (.card, .btn-*, .tbl, .input, .nav-link, ...),
+ * so it is the real design system, not a supplement to Tailwind.
+ *
+ * Served with a short max-age (see CachedStaticFiles in app/main.py).
+ */
+
+:root { color-scheme: dark; }
+
+/* ── Base / typography ─────────────────────────────────────────── */
+body {
+  background:
+    radial-gradient(1000px 620px at 88% -12%, rgba(249,115,22,.055), transparent 60%),
+    radial-gradient(900px 650px at -12% 108%, rgba(34,211,238,.045), transparent 60%),
+    #060a14;
+  background-attachment: fixed;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: 'cv02','cv03','cv04','cv11';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+[x-cloak] { display: none !important; }
+
+/* ── Thin themed scrollbars ────────────────────────────────────── */
+* { scrollbar-width: thin; scrollbar-color: #1e2535 transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e2535; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3347; }
+
+/* ── Sidebar navigation ────────────────────────────────────────── */
+.nav-link { display:flex; align-items:center; gap:10px; margin:1px 8px; padding:7px 10px; border-radius:8px; border-left:2px solid transparent; color:#8b96ab; font-size:.82rem; font-weight:500; transition:all .15s ease; text-decoration:none; }
+.nav-link svg { opacity:.7; flex-shrink:0; transition:opacity .15s ease; }
+.nav-link:hover { background:#141a28; color:#e2e8f0; }
+.nav-link:hover svg { opacity:1; }
+.nav-link.active { background:rgba(249,115,22,.09); color:#fb923c; border-left:2px solid #f97316; }
+.nav-link.active svg { opacity:1; }
+.nav-section { font-size:.62rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#475569; padding:18px 20px 6px; }
+
+/* ── Cards ─────────────────────────────────────────────────────── */
+/* .card and .stat-card were byte-identical apart from the padding (20px vs
+   18px 20px), which is exactly the kind of drift that made panels look
+   subtly different from section to section. One definition, one padding. */
+.card, .stat-card { background:linear-gradient(180deg, #161b27 0%, #10141f 100%); border:1px solid #1e2535; border-radius:12px; padding:20px; box-shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 32px -18px rgba(0,0,0,.6); transition:border-color .15s ease; }
+.card:hover, .stat-card:hover { border-color:#283149; }
+/* Card that wraps a full-bleed table — was repeated as
+   style="padding:0;overflow:hidden" on Lab pages while Devices/Clients kept the
+   20px inset, so table edges did not line up between sections. */
+.card--flush { padding:0; overflow:hidden; }
+/* Panel nested inside a card. Replaces the hand-rolled
+   `rounded-lg border border-surface-700 bg-surface-900 p-3` variants that had
+   drifted to three different paddings and two radii. */
+.panel { background:#0d1117; border:1px solid #1e2535; border-radius:8px; padding:12px 14px; }
+
+/* ── Status badges (pill + dot) ────────────────────────────────── */
+.status-badge-online { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:9999px; font-size:.7rem; font-weight:600; background:rgba(34,197,94,.1); color:#4ade80; box-shadow:inset 0 0 0 1px rgba(34,197,94,.3); }
+.status-badge-offline { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:9999px; font-size:.7rem; font-weight:600; background:rgba(239,68,68,.1); color:#f87171; box-shadow:inset 0 0 0 1px rgba(239,68,68,.3); }
+
+/* ── Page shell ────────────────────────────────────────────────── */
+/* Opt-in for pages whose main element should fill the viewport (topology's 3D
+   canvas). Beats measuring the chrome above it with a magic calc(). */
+.page-shell--fill { display:flex; flex-direction:column; min-height:calc(100vh - 3.5rem); }
+.page-shell--fill > .page-header { flex:0 0 auto; }
+
+/* ── Page header / section labels ──────────────────────────────── */
+.page-header { border-bottom:1px solid #1e2535; padding-bottom:18px; margin-bottom:24px; }
+.section-label { font-size:.65rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#64748b; }
+
+/* ── Tables ────────────────────────────────────────────────────── */
+table.tbl { width:100%; border-collapse:collapse; }
+.tbl thead th { padding:10px 16px; text-align:left; font-size:.65rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#64748b; background:rgba(13,17,23,.85); border-bottom:1px solid #1e2535; white-space:nowrap; }
+.tbl thead th.sortable { cursor:pointer; user-select:none; }
+.tbl thead th.sortable:hover { color:#94a3b8; }
+.tbl tbody td { padding:11px 16px; font-size:.84rem; color:#94a3b8; }
+.tbl-row { border-bottom:1px solid rgba(30,37,53,.6); transition:background .15s ease; cursor:pointer; }
+.tbl-row:last-child { border-bottom:none; }
+.tbl-row:hover { background:rgba(30,37,53,.45); }
+/* Data tables with enough columns to need horizontal scrolling. Replaces
+   per-page inline min-widths that ranged 600-900px, with six tables setting
+   none at all — so each collapsed differently on a narrow viewport. Pair with
+   .card--flush or an overflow-x-auto wrapper. */
+.tbl--wide { min-width:820px; }
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 16px; border:none; border-radius:8px; background:#f97316; color:#fff; font-size:.78rem; font-weight:600; cursor:pointer; transition:all .15s ease; box-shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 14px -6px rgba(249,115,22,.55); white-space:nowrap; }
+.btn-primary:hover { background:#ea580c; }
+.btn-primary:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
+.btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border:1px solid #2a3347; border-radius:8px; background:#161b27; color:#94a3b8; font-size:.78rem; font-weight:500; cursor:pointer; transition:all .15s ease; white-space:nowrap; }
+.btn-secondary:hover { border-color:#3b465e; color:#e2e8f0; background:#1a2030; }
+.btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
+/* Compact button — pagination Prev/Next and inline table actions. Replaces the
+   `style="padding:5px 12px"` override repeated on every paginated page. */
+.btn--sm { padding:5px 12px; font-size:.72rem; }
+/* Wide button — form submits that used px-5 / px-6 / py-2.5 inline. */
+.btn--wide { padding-left:24px; padding-right:24px; }
+
+/* ── Inputs / selects ──────────────────────────────────────────── */
+.input, .select { width:100%; padding:8px 12px; background:#0d1117; border:1px solid #1e2535; border-radius:8px; color:#e2e8f0; font-size:.84rem; outline:none; transition:border-color .15s ease, box-shadow .15s ease; }
+.input::placeholder { color:#4b5563; }
+.input:focus, .select:focus { border-color:#f97316; box-shadow:0 0 0 3px rgba(249,115,22,.14); }
+.select { cursor:pointer; }
+/* .input/.select are width:100%, which is wrong for filter bars — nearly every
+   one overrode it inline. These are the two shapes that were actually used. */
+.select--auto, .input--auto { width:auto; padding:5px 8px; }
+/* Site filters need a floor so long site names do not collapse the control. */
+.select--site { min-width:140px; }
+.input--search { padding-left:32px; }
+/* Anchors styled as buttons — the shared button classes assume <button>. */
+a.btn-primary, a.btn-secondary, .no-underline { text-decoration:none; }
+
+/* ── Connection-type badges ────────────────────────────────────── */
+/* Duplicated as ~200 characters of inline CSS in four places across the client
+   list and detail pages. */
+/* Colours match the previous inline versions; only the padding and font-size
+   are unified (the list used 3px 9px/.68rem, the detail page 3px 10px/.7rem). */
+.badge-wireless, .badge-wired { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:9999px; font-size:.7rem; font-weight:600; }
+.badge-wireless { background:rgba(59,130,246,.1); color:#60a5fa; box-shadow:inset 0 0 0 1px rgba(59,130,246,.3); }
+.badge-wired { background:rgba(168,85,247,.1); color:#c084fc; box-shadow:inset 0 0 0 1px rgba(168,85,247,.3); }
+
+/* ── Summary pills ─────────────────────────────────────────────── */
+/* Tinted count pill. GreenLake built these from ~90 characters of inline CSS
+   per pill; the colour is the only thing that actually varies, so it comes in
+   as a custom property. */
+.stat-pill { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:9999px; font-size:.72rem; font-weight:700; color:var(--pill-color, #94a3b8); background:color-mix(in srgb, var(--pill-color, #94a3b8) 9%, transparent); border:1px solid color-mix(in srgb, var(--pill-color, #94a3b8) 25%, transparent); }
+
+/* ── Modals ────────────────────────────────────────────────────── */
+/* Shared sizing for dialog panels. The command palette and shortcuts overlay
+   already used Tailwind max-w-* utilities; the device modal hard-coded
+   width:460px, so pair this with a max-w-* class instead. */
+.modal-panel { padding:24px; max-height:calc(100dvh - 2rem); overflow-y:auto; }
+
+/* ── Tabs (filter bars above tables) ───────────────────────────── */
+.tabs { display:flex; align-items:stretch; border-bottom:1px solid #1e2535; }
+.tab-btn { display:inline-flex; align-items:center; gap:8px; padding:10px 0; font-size:.82rem; font-weight:600; background:none; border:none; cursor:pointer; transition:color .15s ease; white-space:nowrap; color:#6b7280; }
+.tab-sep { width:1px; background:#1e2535; margin:8px 20px; }
+.tab-count { padding:2px 8px; border-radius:20px; font-size:.68rem; font-weight:700; line-height:1.4; }
+
+/* ── Empty states ──────────────────────────────────────────────── */
+.empty-state { display:flex; flex-direction:column; align-items:center; gap:10px; padding:48px 20px; text-align:center; color:#64748b; font-size:.85rem; }
+.empty-state svg { color:#334155; }
+
+/* ── HTMX loading indicators ───────────────────────────────────── */
+.htmx-indicator { display:none; }
+.htmx-request .htmx-indicator, .htmx-indicator.htmx-request { display:inline-block; }
+.spinner { width:14px; height:14px; border:2px solid rgba(249,115,22,.25); border-top-color:#f97316; border-radius:50%; animation:spin .7s linear infinite; display:inline-block; vertical-align:middle; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── Accessibility: visible focus rings (brand orange) ─────────── */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.input:focus-visible, .select:focus-visible { outline-offset: 0; }
+
+/* ── Accessibility: respect reduced-motion preference ──────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-ping, .animate-pulse { display: none !important; }
+}
+
+/* ── Toast (HTMX error feedback) ───────────────────────────────── */
+#toast-container { position: fixed; bottom: 16px; right: 16px; z-index: 200; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 2rem); }
+.toast { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: linear-gradient(180deg, #1c1117 0%, #150d12 100%); border: 1px solid rgba(239,68,68,.4); color: #fca5a5; font-size: .8rem; font-weight: 500; box-shadow: 0 8px 28px -10px rgba(0,0,0,.7); }
+.toast button { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 2px 4px; font-size: .9rem; line-height: 1; border-radius: 4px; }
+.toast button:hover { color: #e2e8f0; }
+
+/* ── Command palette (Ctrl+K) ──────────────────────────────────── */
+.kbd-hint { display:inline-flex; align-items:center; padding:2px 6px; border:1px solid #2a3347; border-radius:5px; background:#0d1117; color:#64748b; font-size:.62rem; font-weight:600; letter-spacing:.04em; line-height:1.3; white-space:nowrap; }
+.cp-option { display:flex; align-items:center; gap:10px; width:100%; padding:8px 12px; border-radius:8px; color:#94a3b8; text-decoration:none; font-size:.82rem; transition:background .1s ease; }
+.cp-option[aria-selected="true"] { background:rgba(249,115,22,.1); color:#e2e8f0; }
+.cp-group-label { font-size:.62rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#475569; padding:10px 12px 4px; }
+
+/* ── AI assistant drawer ───────────────────────────────────────── */
+.chat-bubble { max-width:85%; padding:8px 12px; border-radius:12px; font-size:.82rem; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
+.chat-bubble-assistant { margin-right:auto; background:#161b27; border:1px solid #1e2535; border-bottom-left-radius:4px; color:#cbd5e1; }
+.chat-bubble-user { margin-left:auto; background:rgba(249,115,22,.13); border:1px solid rgba(249,115,22,.32); border-bottom-right-radius:4px; color:#fde8d7; }
+.chat-bubble-error { margin-right:auto; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.35); border-bottom-left-radius:4px; color:#fca5a5; }
+.typing-dot { width:6px; height:6px; border-radius:9999px; background:#94a3b8; display:inline-block; animation:typing-bounce 1.2s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay:.15s; }
+.typing-dot:nth-child(3) { animation-delay:.3s; }
+@keyframes typing-bounce { 0%, 60%, 100% { opacity:.35; transform:translateY(0); } 30% { opacity:1; transform:translateY(-3px); } }
+
+/* ── Notification bell & panel ─────────────────────────────────── */
+.notif-badge { position:absolute; top:1px; right:1px; min-width:15px; height:15px; padding:0 4px; border-radius:9999px; background:#ef4444; color:#fff; font-size:.58rem; font-weight:700; line-height:15px; text-align:center; box-shadow:0 0 0 2px #0d1117; pointer-events:none; }
+/* Mobile: full-width sheet under the top bar (top set via --notif-top, measured at open). */
+.notif-panel { position:fixed; z-index:75; left:0; right:0; top:var(--notif-top, 57px); display:flex; flex-direction:column; max-height:calc(100vh - var(--notif-top, 57px) - 12px); max-height:calc(100dvh - var(--notif-top, 57px) - 12px); background:linear-gradient(180deg, #161b27 0%, #10141f 100%); border:1px solid #1e2535; border-top:none; border-radius:0 0 12px 12px; box-shadow:0 18px 48px -12px rgba(0,0,0,.7); }
+/* Desktop: popover flyout anchored beside the sidebar-footer bell. */
+@media (min-width: 768px) {
+  .notif-panel { left:240px; right:auto; top:auto; bottom:12px; width:380px; max-height:min(540px, calc(100vh - 24px)); border-top:1px solid #1e2535; border-radius:12px; }
+}
+.notif-item { display:flex; align-items:flex-start; gap:10px; width:100%; text-align:left; padding:10px 14px 10px 12px; background:none; border:none; border-left:2px solid transparent; cursor:pointer; font:inherit; color:inherit; transition:background .12s ease; }
+.notif-item:hover { background:rgba(30,37,53,.5); }
+.notif-item.unread { background:rgba(249,115,22,.055); border-left-color:#f97316; }
+.notif-item.unread:hover { background:rgba(249,115,22,.1); }
+.notif-body-text { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+/* ── Portal status banner ──────────────────────────────────────── */
+.status-banner { display:flex; align-items:center; gap:10px; padding:8px 14px; font-size:.78rem; font-weight:500; border-bottom:1px solid transparent; }
+.status-banner-ok { background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.25); color:#86efac; }
+.status-banner-warn { background:rgba(251,191,36,.08); border-color:rgba(251,191,36,.3); color:#fcd34d; }
+.status-banner-error { background:rgba(239,68,68,.08); border-color:rgba(239,68,68,.3); color:#fca5a5; }
+.conn-pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#64748b; }
+.conn-dot { width:8px; height:8px; border-radius:9999px; flex-shrink:0; }
+.conn-dot-ok { background:#4ade80; box-shadow:0 0 6px rgba(74,222,128,.5); }
+.conn-dot-warn { background:#fbbf24; box-shadow:0 0 6px rgba(251,191,36,.45); }
+.conn-dot-error { background:#f87171; box-shadow:0 0 6px rgba(248,113,113,.45); }
+.lab-badge { font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 8px; border-radius:9999px; flex-shrink:0; }
+.lab-badge-live { background:rgba(34,197,94,.12); color:#4ade80; box-shadow:inset 0 0 0 1px rgba(34,197,94,.35); }
+.lab-badge-demo { background:rgba(148,163,184,.1); color:#94a3b8; box-shadow:inset 0 0 0 1px rgba(148,163,184,.25); }
+.lab-badge-token { background:rgba(249,115,22,.1); color:#fb923c; box-shadow:inset 0 0 0 1px rgba(249,115,22,.35); }
+
+/* ── NOC wallboard mode ─────────────────────────────────────────── */
+body.noc-mode #app-sidebar { transform: translateX(-100%) !important; }
+/* Target the shell wrapper, not the literal .max-w-7xl utility: the old rule
+   also widened any nested max-w-7xl on the page, and missed pages that set a
+   different inner width. */
+body.noc-mode .page-shell { max-width: none; padding-left: 1.5rem; padding-right: 1.5rem; }
+body.noc-mode #assistant-fab { display: none !important; }
+/* Wallboard typography scale — previously only defined on the dashboard, so
+   every other page kept body-sized text on a wall display. */
+body.noc-mode .page-header h1 { font-size: 2rem; }
+body.noc-mode .stat-card .text-3xl { font-size: 2.75rem; }
+
+/* ── Shortcuts overlay ──────────────────────────────────────────── */
+.shortcuts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(13,17,23,.6); border: 1px solid #1e2535; font-size: .8rem; color: #94a3b8; }
+
+/* ── Standalone pages (login, 404, 500) ─────────────────────────────────────
+   These do not extend base.html — no sidebar, no Alpine — and each used to
+   restate the whole theme in its own inline <style>, with the values slowly
+   drifting: the login input had 9px 12px padding against base's 8px 12px, and
+   the error pages redefined .card at 48px 40px. They now share this file, so
+   there is one definition of the palette, the card, the button and the input.
+   ------------------------------------------------------------------------ */
+.page-centered { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:24px 16px; color:#cbd5e1; }
+/* base.html gets its reset from Tailwind Preflight; these pages do not load
+   Tailwind at all, so scope an equivalent reset to them. */
+.page-centered, .page-centered *, .page-centered *::before, .page-centered *::after { box-sizing:border-box; }
+.page-centered h1, .page-centered p, .page-centered form, .page-centered label { margin:0; padding:0; }
+
+/* Login */
+.login-card { width:100%; max-width:380px; background:linear-gradient(180deg, #161b27 0%, #10141f 100%); border:1px solid #1e2535; border-radius:12px; padding:32px 28px 28px; box-shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 32px -18px rgba(0,0,0,.6); }
+.login-card h1 { font-size:1.15rem; font-weight:700; color:#fff; letter-spacing:-.01em; margin-top:2px; }
+.login-card label { display:block; font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#94a3b8; margin-bottom:7px; }
+.logo-row { display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:26px; text-align:center; }
+.logo-mark { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #fb923c 0%, #ea580c 100%); box-shadow:0 0 22px rgba(249,115,22,.35); }
+.brand-eyebrow { font-size:.68rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#64748b; }
+.subtitle { font-size:.78rem; color:#64748b; margin-top:4px; }
+.foot-note { margin-top:18px; text-align:center; font-size:.7rem; color:#475569; }
+/* Full-width submit built on the shared .btn-primary. */
+.btn-block { width:100%; margin-top:16px; }
+.error-box { display:flex; align-items:center; gap:8px; margin-bottom:16px; padding:9px 12px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.35); border-radius:8px; color:#fca5a5; font-size:.8rem; font-weight:500; animation:shake .4s ease; }
+.error-box svg { flex-shrink:0; }
+@keyframes shake {
+  10%, 90% { transform:translateX(-1px); }
+  20%, 80% { transform:translateX(2px); }
+  30%, 50%, 70% { transform:translateX(-3px); }
+  40%, 60% { transform:translateX(3px); }
+}
+
+/* 404 / 500 */
+.error-page-card { max-width:440px; width:100%; text-align:center; padding:48px 40px; }
+.error-page-card h1 { font-size:1.05rem; font-weight:600; color:#f1f5f9; margin-bottom:8px; }
+.error-code { font-size:4.75rem; font-weight:800; line-height:1; letter-spacing:-.03em; color:#475569; }
+.error-code .accent { color:#f97316; }
+.error-rule { width:48px; height:3px; border:none; border-radius:2px; background:#f97316; margin:18px auto 20px; opacity:.85; }
+.error-msg { font-size:.84rem; line-height:1.6; color:#64748b; margin-bottom:28px; }
+
+/* Flush card that sits directly under a tab bar — squares off the top corners
+   so the two read as one surface. */
+.card--joined-top { border-top-left-radius:0; border-top-right-radius:0; }

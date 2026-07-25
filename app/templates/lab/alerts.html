@@ -7,7 +7,7 @@
         <span class="text-slate-700">/</span>
         <span class="text-slate-400">Alert Dashboard</span>
     </div>
-    <h1 class="text-2xl font-bold text-white">Alert Dashboard</h1>
+    <h1 class="text-2xl font-semibold text-white tracking-tight">Alert Dashboard</h1>
     <p class="text-sm text-slate-500 mt-0.5">{{ alerts | default([]) | length }} alerts across all sites</p>
 </div>
 
@@ -38,7 +38,7 @@
 {% endif %}
 
 <!-- Alert table -->
-<div x-data="{search:''}" class="card" style="padding:0;overflow:hidden;">
+<div x-data="{search:''}" class="card card--flush">
     <div class="flex items-center gap-3 px-5 py-4 border-b border-surface-700">
         <p class="section-label flex-1">All Alerts</p>
         <div class="relative">
