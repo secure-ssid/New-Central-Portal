@@ -4,6 +4,7 @@ import re
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from templates_shared import templates
 from datetime import datetime, timezone
 import db
@@ -14,6 +15,47 @@ router = APIRouter()
 
 # Simple server-side email validation (pragmatic, not RFC-exhaustive).
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+def _check_ssl_hosts_blocking(ssl_hosts_str: str) -> list[dict]:
+    """Blocking TLS certificate expiry probe for the dashboard cards.
+
+    Called via run_in_threadpool — up to 5s of socket/TLS work per host.
+    """
+    import ssl as _ssl
+    import socket
+
+    upcoming_certs: list[dict] = []
+    for host in [h.strip() for h in ssl_hosts_str.split(",") if h.strip()]:
+        hostname = host.split(":")[0]
+        try:
+            port = int(host.split(":")[1]) if ":" in host else 443
+        except ValueError:
+            port = 443
+        try:
+            ctx = _ssl.create_default_context()
+            with socket.create_connection((hostname, port), timeout=5) as sock:
+                with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
+                    cert = ssock.getpeercert()
+            not_after_str = cert.get("notAfter", "")
+            not_after = datetime.strptime(not_after_str, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            days_left = (not_after - now).days
+            if days_left <= 90:
+                upcoming_certs.append({
+                    "hostname": f"{hostname}:{port}",
+                    "end_date": not_after.strftime("%Y-%m-%d"),
+                    "days_left": days_left,
+                })
+        except Exception as exc:
+            logger.warning("SSL dashboard check failed for %s:%s: %s", hostname, port, exc)
+            upcoming_certs.append({
+                "hostname": f"{hostname}:{port}",
+                "end_date": "ERROR",
+                "days_left": -1,
+            })
+    upcoming_certs.sort(key=lambda x: x["days_left"])
+    return upcoming_certs
+
 
 _SETTING_KEYS = (
     "thresholds", "smtp_host", "smtp_port", "smtp_user", "smtp_password",
@@ -161,41 +203,13 @@ async def notifications_page(request: Request):
     except Exception as exc:
         logger.warning("Notifications page: could not fetch GLP subscriptions: %s", exc)
 
-    # Check SSL certs for the dashboard
+    # Check SSL certs for the dashboard. Raw socket + TLS handshakes are
+    # blocking (up to 5s per host) — run the whole loop in a worker thread so
+    # a slow/blackholed host can't freeze every other request on the loop.
     upcoming_certs = []
     ssl_hosts_str = settings.get("ssl_hosts", "")
     if ssl_hosts_str.strip():
-        import ssl as _ssl
-        import socket
-        for host in [h.strip() for h in ssl_hosts_str.split(",") if h.strip()]:
-            hostname = host.split(":")[0]
-            try:
-                port = int(host.split(":")[1]) if ":" in host else 443
-            except ValueError:
-                port = 443
-            try:
-                ctx = _ssl.create_default_context()
-                with socket.create_connection((hostname, port), timeout=5) as sock:
-                    with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
-                        cert = ssock.getpeercert()
-                not_after_str = cert.get("notAfter", "")
-                not_after = datetime.strptime(not_after_str, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
-                now = datetime.now(timezone.utc)
-                days_left = (not_after - now).days
-                if days_left <= 90:
-                    upcoming_certs.append({
-                        "hostname": f"{hostname}:{port}",
-                        "end_date": not_after.strftime("%Y-%m-%d"),
-                        "days_left": days_left,
-                    })
-            except Exception as exc:
-                logger.warning("SSL dashboard check failed for %s:%s: %s", hostname, port, exc)
-                upcoming_certs.append({
-                    "hostname": f"{hostname}:{port}",
-                    "end_date": "ERROR",
-                    "days_left": -1,
-                })
-        upcoming_certs.sort(key=lambda x: x["days_left"])
+        upcoming_certs = await run_in_threadpool(_check_ssl_hosts_blocking, ssl_hosts_str)
 
     return templates.TemplateResponse(
         request,
@@ -267,7 +281,8 @@ async def test_email(request: Request):
         return JSONResponse({"ok": False, "error": "Invalid email"}, status_code=400)
     from notifications import _send_email
     try:
-        ok = _send_email(to, "🔔 Test — New Central Portal Notifications", """
+        # SMTP send is blocking (15s timeout) — keep it off the event loop.
+        ok = await run_in_threadpool(_send_email, to, "🔔 Test — New Central Portal Notifications", """
         <div style="font-family:system-ui,sans-serif;padding:24px;max-width:500px;margin:0 auto;">
             <h2 style="color:#f97316;margin:0 0 12px;">Test Email ✓</h2>
             <p style="color:#555;">If you received this, your SMTP settings are configured correctly.</p>
@@ -294,7 +309,8 @@ async def check_now(request: Request):
     except Exception as exc:
         logger.warning("check-now: could not fetch GLP subscriptions: %s", exc)
     try:
-        alerts = run_expiry_check(subs=subs)
+        # Sync SSL probes + SMTP sends inside — run off the event loop.
+        alerts = await run_in_threadpool(run_expiry_check, subs=subs)
     except Exception as exc:
         logger.error("Manual expiry check failed: %s", exc)
         return JSONResponse({"ok": False, "error": "Expiry check failed — see server logs"}, status_code=500)
@@ -469,7 +485,8 @@ async def send_test_report():
         logger.warning("reports/test: could not fetch GLP subscriptions: %s", exc)
     from notifications import run_summary_report
     try:
-        result = run_summary_report(force=True, devices=devices, subs=subs)
+        # SMTP send per recipient inside — run off the event loop.
+        result = await run_in_threadpool(run_summary_report, force=True, devices=devices, subs=subs)
     except Exception as exc:
         logger.error("Test summary report failed: %s", exc)
         return JSONResponse({"ok": False, "error": "Report failed — see server logs"}, status_code=500)
