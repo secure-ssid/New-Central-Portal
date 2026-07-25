@@ -84,7 +84,7 @@ def engine(monkeypatch):
         monkeypatch.setattr(db_module, name, getattr(fake, name))
     outbox: list[tuple] = []
     monkeypatch.setattr(notif, "_send_email",
-                        lambda to, subject, html: outbox.append((to, subject)) or True)
+                        lambda to, subject, html: outbox.append((to, subject, html)) or True)
     fake.outbox = outbox
     yield fake
     notif._reset_engine_state_for_tests()
@@ -340,7 +340,7 @@ def report_db(monkeypatch):
         monkeypatch.setattr(db_module, name, getattr(fake, name))
     outbox = []
     monkeypatch.setattr(notif, "_send_email",
-                        lambda to, subject, html: outbox.append((to, subject)) or True)
+                        lambda to, subject, html: outbox.append((to, subject, html)) or True)
     fake.outbox = outbox
     return fake
 
@@ -409,3 +409,92 @@ class TestSummaryReport:
         result = notif.run_summary_report(devices=DEVICES, subs=[], now=T0)
         assert result["ok"] is False and result["sent"] == 0
         assert report_db.last_sent_marked is None
+
+
+# ── Raw bridge payloads (the boundary that shipped broken) ───────────────────
+# central_bridge.get_devices() returns RAW centralmcp keys (serialNumber /
+# deviceName / siteName / deviceType, uppercase status). Every test above
+# injects ALREADY-NORMALIZED dicts via devices=, which is precisely why a
+# permanently dead engine coexisted with a green suite. These tests drive the
+# real _fetch_devices_sync() path with live-shaped payloads.
+
+RAW_ONLINE = {"serialNumber": "SG30LMR164", "deviceName": "CX6300-CORE",
+              "deviceType": "SWITCH", "status": "ONLINE", "siteName": "HQ"}
+RAW_OFFLINE = {**RAW_ONLINE, "status": "OFFLINE"}
+
+
+def _patch_bridge(monkeypatch, payload):
+    """Point central_bridge.get_devices at a raw payload (async, as the real one is)."""
+    from vendors import central_bridge as cb
+
+    async def _get_devices(*a, **k):
+        return [dict(d) for d in payload]
+
+    monkeypatch.setattr(cb, "get_devices", _get_devices)
+
+
+class TestRawBridgePayloads:
+    def test_baseline_seeds_real_serials_from_raw_payload(self, engine, monkeypatch):
+        _patch_bridge(monkeypatch, [RAW_ONLINE])
+        assert run(devices=None, now=T0) == []
+        # Was set() — every device was skipped because dev.get("serial") was None.
+        assert set(engine.snapshot) == {"SG30LMR164"}
+
+    def test_down_alert_fires_from_raw_payload(self, engine, monkeypatch):
+        _patch_bridge(monkeypatch, [RAW_ONLINE])
+        run(devices=None, now=T0)                      # baseline
+        _patch_bridge(monkeypatch, [RAW_OFFLINE])
+        run(devices=None, now=at(1))                   # goes offline
+        events = run(devices=None, now=at(7))          # past offline_minutes=5
+        assert [e["event"] for e in events] == ["down_alert"]
+        assert len(engine.outbox) == 1
+
+    def test_alert_email_carries_name_and_site_not_placeholders(self, engine, monkeypatch):
+        _patch_bridge(monkeypatch, [RAW_ONLINE])
+        run(devices=None, now=T0)
+        _patch_bridge(monkeypatch, [RAW_OFFLINE])
+        run(devices=None, now=at(1))
+        run(devices=None, now=at(7))
+        _to, subject, html = engine.outbox[0]
+        assert "CX6300-CORE" in subject
+        assert "CX6300-CORE" in html and "HQ" in html
+
+    def test_summary_report_rows_are_not_placeholders(self, report_db):
+        """run_summary_report is handed raw devices by /notifications/reports/test."""
+        result = notif.run_summary_report(force=True, devices=[dict(RAW_OFFLINE)],
+                                          subs=[], now=T0)
+        assert result["ok"] is True
+        _to, _subject, html = report_db.outbox[0]
+        assert "CX6300-CORE" in html          # was "?" — deviceName never read
+        assert "SG30LMR164" in html           # was blank — serialNumber never read
+        assert "unknown" not in html.lower()  # was the type for every device
+
+
+class TestDbOutageResilience:
+    """A Postgres blip must not kill the sweep or cause a 60s email storm."""
+
+    def test_send_email_returns_false_when_db_is_down(self, engine, monkeypatch):
+        # Use the REAL _send_email (the fixture stubs it out by default), so the
+        # six db.get_setting reads inside it actually run against a dead DB.
+        monkeypatch.undo()
+        import db as db_local
+        def boom(*a, **k):
+            raise RuntimeError("database down (test)")
+        monkeypatch.setattr(db_local, "get_setting", boom)
+        assert notif._send_email("ops@example.com", "subject", "<p>body</p>") is False
+
+    def test_one_bad_device_does_not_abort_the_sweep(self, engine, monkeypatch):
+        run(devices=[dev("A1"), dev("B2")], now=T0)
+        calls = []
+        real = notif._process_device
+
+        def flaky(d, rules, now):
+            if d.get("serial") == "A1":
+                raise RuntimeError("unparseable device (test)")
+            calls.append(d["serial"])
+            return real(d, rules, now)
+
+        monkeypatch.setattr(notif, "_process_device", flaky)
+        # B2 must still be processed even though A1 blew up.
+        run(devices=[dev("A1", status="offline"), dev("B2", status="offline")], now=at(1))
+        assert calls == ["B2"]
