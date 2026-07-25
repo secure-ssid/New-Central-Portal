@@ -19,12 +19,6 @@
        each overlay declaring its own background/blur/border inline. */
     .topo-surface { background:rgba(13,17,23,.88); border:1px solid #232c3f; border-radius:10px; backdrop-filter:blur(8px); box-shadow:0 8px 28px -12px rgba(0,0,0,.8); }
 
-    /* ── Header badges ──────────────────────────────────────────────────
-       Four hand-styled inline variants (device count, site filter, port
-       warning, device cap) collapsed onto one shape with tone modifiers. */
-    .topo-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 11px; border-radius:6px; font-size:.7rem; font-weight:600; background:#10141f; color:#94a3b8; border:1px solid #1e2535; white-space:nowrap; }
-    .topo-badge--warn { background:rgba(251,191,36,.1); color:#fbbf24; border-color:rgba(251,191,36,.3); }
-    .topo-badge--info { background:rgba(59,130,246,.1); color:#60a5fa; border-color:rgba(59,130,246,.3); }
 
     /* ── Toolbar ────────────────────────────────────────────────────────
        Grouped into search | view state | actions, with hairline dividers.
@@ -155,18 +149,18 @@
         </form>
         {% endif %}
         {% if site_filter_active %}
-        <span class="topo-badge topo-badge--info">Site: {{ initial_site }}</span>
+        <span class="badge badge--info">Site: {{ initial_site }}</span>
         {% endif %}
         {% if port_fail_count %}
-        <span class="topo-badge topo-badge--warn">
+        <span class="badge badge--warn">
             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
             Port data unavailable for {{ port_fail_count }} switch{{ 'es' if port_fail_count != 1 else '' }}
         </span>
         {% endif %}
         {% if device_cap_hit %}
-        <span class="topo-badge topo-badge--warn">Showing first {{ device_cap }} devices</span>
+        <span class="badge badge--warn">Showing first {{ device_cap }} devices</span>
         {% endif %}
-        <span class="topo-badge">{{ device_count }} device{{ 's' if device_count != 1 else '' }}</span>
+        <span class="badge">{{ device_count }} device{{ 's' if device_count != 1 else '' }}</span>
     </div>
 </div>
 

@@ -110,10 +110,17 @@ def test_toolbar_labels_are_not_restated_by_the_script(parts):
 
 
 def test_header_badges_use_the_shared_class(parts):
-    """Four hand-styled inline chips previously; one shape with modifiers now."""
+    """Four hand-styled inline chips previously; one shape with modifiers now.
+
+    The badge moved to app/static/app.css after the compliance board borrowed
+    it and rendered unstyled text — a page-scoped <style> block is invisible to
+    every other page.
+    """
     markup, _ = parts
-    assert markup.count("topo-badge") >= 4
-    assert ".topo-badge {" in markup, "the class must actually be defined"
+    assert markup.count('class="badge') >= 4
+    shared = (TEMPLATE.parent.parent / "static" / "app.css").read_text()
+    assert ".badge {" in shared, "the badge must live in the shared stylesheet"
+    assert ".topo-badge" not in markup, "the page-scoped copy should be gone"
 
 
 def test_no_orphaned_style_classes_in_the_canvas_chrome(parts):

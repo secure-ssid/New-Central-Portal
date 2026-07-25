@@ -62,7 +62,7 @@
                     </td>
                     <td class="text-xs">
                         {% if r.drift %}
-                        <span class="topo-badge topo-badge--warn">Update available</span>
+                        <span class="badge badge--warn">Update available</span>
                         {% else %}
                         <span class="text-slate-600">{{ r.classification or 'Up to date' }}</span>
                         {% endif %}
@@ -134,7 +134,7 @@
             <div class="flex items-start justify-between gap-3 flex-wrap">
                 <p class="text-sm font-semibold text-slate-100">{{ i.title or 'Insight' }}</p>
                 {% if i.category %}
-                <span class="topo-badge">{{ i.category }}</span>
+                <span class="badge">{{ i.category }}</span>
                 {% endif %}
             </div>
             {% if i.description %}
