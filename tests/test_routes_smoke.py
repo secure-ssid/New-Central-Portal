@@ -27,6 +27,7 @@ import pytest
     ("/lab/device-scope", ["Device Deep-Dive"]),
     ("/lab/compliance", ["Compliance Board"]),
     ("/lab/activity", ["Activity &amp; History"]),
+    ("/lab/app-visibility", ["Application Visibility", "Watchlist"]),
 ])
 def test_page_renders(client, mock_central, stub_db, path, markers):
     r = client.get(path)

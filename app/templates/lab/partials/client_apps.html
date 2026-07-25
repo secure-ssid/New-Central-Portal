@@ -1,0 +1,37 @@
+{# Applications for one client. HTMX fragment — no page chrome. #}
+{% if error %}
+<p class="text-sm text-red-400">{{ error }}</p>
+{% elif rows %}
+<p class="text-xs text-slate-600 mb-3">
+    <span class="font-mono">{{ mac }}</span> &middot; last {{ hours }}h
+</p>
+<div class="overflow-x-auto">
+    <table class="tbl">
+        <thead><tr>
+            <th scope="col">Application</th><th scope="col">Share</th><th scope="col">Risk</th>
+        </tr></thead>
+        <tbody>
+            {% for a, m in rows %}
+            <tr class="tbl-row">
+                <td class="text-xs text-slate-200">{{ a.name }}</td>
+                <td style="min-width:140px;">
+                    <div class="meter-track" role="img"
+                         aria-label="{{ a.name }}: {{ a.total|filesizeformat }}">
+                        <div class="meter-fill meter-fill--{{ m.tone }}" style="width: {{ m.fill_pct }}%"></div>
+                    </div>
+                    <p class="text-[11px] font-mono text-slate-500 mt-1">{{ a.total|filesizeformat }}</p>
+                </td>
+                <td><span class="badge {{ a.risk_tone }}">{{ a.risk_label }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>Nothing attributed to <span class="font-mono">{{ mac }}</span> in this window.</p>
+    <p class="text-xs text-slate-600">
+        Wired infrastructure and idle clients normally return nothing here.
+    </p>
+</div>
+{% endif %}

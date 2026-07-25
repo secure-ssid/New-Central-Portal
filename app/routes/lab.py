@@ -42,6 +42,9 @@ async def lab_menu(request: Request):
         {"slug": "device-scope", "name": "Device Deep-Dive",
          "desc": "CPU, memory and throughput trends; plus temperature, PoE budget, VLANs and interface errors on switches.",
          "status": "new", "color": "blue", "badge": "live"},
+        {"slug": "app-visibility", "name": "Application Visibility",
+         "desc": "What is consuming the network, how Aruba's DPI rates it, and which client talked to what.",
+         "status": "new", "color": "purple", "badge": "live"},
         {"slug": "compliance", "name": "Compliance Board",
          "desc": "Firmware drift, config sync state, and Central's own recommendations.",
          "status": "new", "color": "amber", "badge": "live"},
@@ -1095,6 +1098,191 @@ async def activity_page(request: Request, hours: int = 24):
         "alerts": alerts, "alert_summary": count_severities(alerts),
         "onboarding": onboarding[:60], "flapping": flapping,
         "switch_count": len(switches),
+    })
+
+
+# ── Application Visibility ───────────────────────────────────────────────────
+#
+# Windows the selector offers, in hours. The endpoint rejects any span wider
+# than 7 days with a 400, so 168 is the ceiling and is verified to be accepted
+# at exactly 168.
+_APP_WINDOWS = ((1, "1h"), (6, "6h"), (24, "24h"), (72, "3d"), (168, "7d"))
+
+# How many "flagged but recognised" rows to show before truncating. The
+# unclassified group is never capped — it is short by nature and is the whole
+# reason the watchlist is split in two.
+_APP_WATCH_CAP = 25
+
+# The byte figures come from DPI attribution, not from an interface counter,
+# and on this tenant they do not survive scrutiny: one application is credited
+# with ~8.6 GB received in a single hour, and the same row is byte-identical at
+# 6h, 24h and 72h. The windowing is genuine (widen the window and totals only
+# grow) so the RANKING is usable, but an absolute "you transferred N GB"
+# headline would be a fabrication. Every byte figure on this page is therefore
+# framed as relative, and this caveat renders on the page itself rather than
+# living only in this comment.
+_APP_BYTES_CAVEAT = (
+    "Byte totals are deep-packet-inspection estimates, not interface counters. "
+    "Spot-checks on this tenant found single applications credited with more "
+    "traffic than the link plausibly carried, so read these as a ranking rather "
+    "than as a measurement."
+)
+
+
+def _app_share_meter(value: int, largest: int) -> dict:
+    """A share-of-largest bar for one table row.
+
+    warn_at/crit_at are pushed above 1.0 deliberately. build_meter's defaults
+    turn a bar red past 90% of its total, which is the right read for a PoE
+    budget and the wrong one here — it would paint the single biggest talker
+    red on every page load, implying a threshold that does not exist.
+    """
+    from svg_chart import build_meter
+    return build_meter(float(value), float(largest or 1), unit="bytes",
+                       warn_at=2.0, crit_at=3.0)
+
+
+async def _app_site(site_param: str) -> tuple[list[dict], dict | None]:
+    """(all sites, the selected one). site_id is a required argument upstream."""
+    from vendors.central_bridge import get_sites
+    from vendors.aruba_central import site_display_name, site_id_of
+
+    raw = await get_sites(limit=100)
+    sites = [{"id": site_id_of(s), "name": site_display_name(s) or site_id_of(s)}
+             for s in (raw or []) if isinstance(s, dict) and site_id_of(s)]
+    if not sites:
+        return [], None
+    chosen = next((s for s in sites if s["id"] == site_param), sites[0])
+    return sites, chosen
+
+
+@router.get("/app-visibility")
+async def app_visibility(request: Request, hours: int = 24, site: str = ""):
+    """What is talking on this network, and does Aruba's DPI trust it?
+
+    Nothing else in the portal attributes a byte to an application or surfaces
+    the risk classification — /lab/device-scope stops at per-device throughput.
+    """
+    import asyncio
+
+    import app_risk
+    from timeseries import window
+    from vendors.central_bridge import list_applications, get_clients
+    from vendors.aruba_central import _norm_client
+
+    valid_hours = [h for h, _ in _APP_WINDOWS]
+    hours = hours if hours in valid_hours else 24
+
+    load_error = None
+    apps: list[dict] = []
+    clients: list[dict] = []
+    sites: list[dict] = []
+    chosen: dict | None = None
+
+    try:
+        sites, chosen = await _app_site(site)
+    except Exception as exc:
+        logger.exception("[app-visibility] site lookup failed: %s", exc)
+        load_error = "Could not reach Aruba Central to list sites."
+
+    if chosen is None and load_error is None:
+        load_error = "Central returned no sites, and this view is scoped to one."
+
+    if chosen is not None:
+        start_iso, end_iso = window(hours=hours)
+        raw_apps, raw_clients = await asyncio.gather(
+            list_applications(chosen["id"], start_iso, end_iso),
+            get_clients(limit=200),
+            return_exceptions=True,
+        )
+        if isinstance(raw_apps, BaseException) or raw_apps is None:
+            if isinstance(raw_apps, BaseException):
+                logger.exception("[app-visibility] fetch failed: %s", raw_apps)
+            # None is the wrapper's explicit "the fetch failed" — distinct from
+            # an empty list, which means the window really was quiet.
+            load_error = "Aruba Central did not return application data for this window."
+        else:
+            apps = app_risk.normalize_apps(raw_apps)
+        if isinstance(raw_clients, list):
+            # client_id is keyed on MAC upstream, so a client without one
+            # cannot be looked up and does not belong in the picker.
+            clients = sorted(
+                (c for c in (_norm_client(c) for c in raw_clients
+                             if isinstance(c, dict)) if c.get("mac")),
+                key=lambda c: (c.get("hostname") or c.get("mac") or "").lower(),
+            )
+
+    unknown, known = app_risk.watchlist(apps)
+    # Over a 7-day window "flagged but recognised" is ~135 rows, which is a wall
+    # of table rather than a watchlist. Cap it — and render the count that was
+    # cut, because a silently truncated list reads as a complete one.
+    known_total, known = len(known), known[:_APP_WATCH_CAP]
+    talkers = app_risk.top_talkers(apps, limit=25)
+    categories = app_risk.category_rollup(apps, limit=12)
+    largest = talkers[0]["total"] if talkers else 0
+    largest_category = categories[0]["total"] if categories else 0
+
+    return templates.TemplateResponse(request, "lab/app-visibility.html", {
+        "active": "lab",
+        "load_error": load_error,
+        "hours": hours,
+        "windows": _APP_WINDOWS,
+        "sites": sites,
+        "site_id": chosen["id"] if chosen else "",
+        "site_name": chosen["name"] if chosen else "",
+        "apps": apps,
+        "risk_strip": app_risk.risk_strip(apps),
+        "watch_unknown": unknown,
+        "watch_known": known,
+        "watch_known_total": known_total,
+        "talkers": [(a, _app_share_meter(a["total"], largest)) for a in talkers],
+        "categories": [(c, _app_share_meter(c["total"], largest_category))
+                       for c in categories],
+        "clients": clients,
+        "bytes_caveat": _APP_BYTES_CAVEAT,
+    })
+
+
+@router.get("/app-visibility/client")
+async def app_visibility_client(request: Request, mac: str = "", hours: int = 24,
+                                site: str = ""):
+    """Applications seen for one client. Deferred — one upstream call on click.
+
+    Only this direction is offered. The API has no app-to-client index, so
+    answering "who talked to that domain" would mean looping every client and
+    filtering, which is one call per client.
+    """
+    import app_risk
+    from timeseries import window
+    from vendors.central_bridge import list_applications
+
+    hours = hours if hours in [h for h, _ in _APP_WINDOWS] else 24
+    mac = (mac or "").strip()
+    if not mac:
+        return HTMLResponse(
+            '<div class="empty-state"><p>Pick a client to see what it talked to.</p></div>')
+
+    error = None
+    apps: list[dict] = []
+    try:
+        _, chosen = await _app_site(site)
+        if chosen is None:
+            error = "No site to scope the lookup to."
+        else:
+            start_iso, end_iso = window(hours=hours)
+            raw = await list_applications(chosen["id"], start_iso, end_iso, client_id=mac)
+            if raw is None:
+                error = "Central did not return application data for this client."
+            else:
+                apps = app_risk.normalize_apps(raw)
+    except Exception as exc:
+        logger.exception("[app-visibility] client lookup failed for %s: %s", mac, exc)
+        error = "The client lookup failed."
+
+    largest = apps[0]["total"] if apps else 0
+    return templates.TemplateResponse(request, "lab/partials/client_apps.html", {
+        "mac": mac, "hours": hours, "error": error,
+        "rows": [(a, _app_share_meter(a["total"], largest)) for a in apps[:25]],
     })
 
 

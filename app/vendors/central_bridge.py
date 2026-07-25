@@ -391,6 +391,14 @@ def _is_low_confidence(result: Any) -> bool:
         return True
     if isinstance(result, dict) and result.get("errors"):
         return True
+    # ...and "error", singular. Not every centralmcp tool uses the plural form:
+    # a rejected request (list_applications with a window wider than 7 days,
+    # for one) comes back as {"error": "...", "endpoint_used": "..."} with no
+    # errors[] anywhere in it. Testing only the plural key cached those
+    # failures for the full 60s, which is the same defect behind the
+    # all-null gateway trends.
+    if isinstance(result, dict) and result.get("error"):
+        return True
     return False
 
 
@@ -1079,6 +1087,45 @@ async def list_insights() -> list[dict]:
 async def list_client_onboarding_events(serial: str, hours: int = 24) -> list[dict]:
     from mcp_servers.monitoring import list_client_onboarding_events as _fn
     return _unwrap(await _run(_fn, serial, hours=hours), "events")
+
+
+@_cached()
+async def list_applications(site_id: str, start_iso: str, end_iso: str,
+                            client_id: str | None = None,
+                            max_items: int = 1000) -> list[dict] | None:
+    """Application-visibility records for a site over a window, fully paged.
+
+    The offset loop runs INSIDE the wrapper on purpose: a 24h window is 344
+    rows and a 7d window is ~800, which at centralmcp's MAX_LIST_LIMIT of 200
+    is two to five upstream calls. Paging in the route would make each page a
+    separate cache entry keyed by offset, so a single page view could hit a
+    fresh entry and a cold one and still go upstream. One wrapper, one entry,
+    one thing to invalidate.
+
+    Returns None when the fetch fails, so the caller can tell "Central refused"
+    from "the window genuinely contained nothing". The window must be <= 7 days
+    or the endpoint answers 400 with the singular-key {"error": ...} envelope
+    that _is_low_confidence now recognises.
+    """
+    from mcp_servers.monitoring import list_applications as _fn
+
+    collected: list[dict] = []
+    offset = 0
+    while len(collected) < max_items:
+        kwargs: dict[str, Any] = {"limit": 200, "offset": offset}
+        if client_id:
+            kwargs["client_id"] = client_id
+        result = await _run(_fn, site_id, start_iso, end_iso, **kwargs)
+        if not isinstance(result, dict) or result.get("error"):
+            logger.warning("list_applications failed at offset %s: %s", offset,
+                           (result or {}).get("error") if isinstance(result, dict) else result)
+            return collected or None
+        page = [a for a in (result.get("items") or []) if isinstance(a, dict)]
+        collected.extend(page)
+        if len(page) < 200:
+            break
+        offset += 200
+    return collected[:max_items]
 
 
 @_cached()
