@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 
 from pagination import filter_items, paginate as _paginate
-from vendors.aruba_central import aruba
+from vendors.aruba_central import aruba, site_display_name, site_id_of
 
 from templates_shared import templates
 
@@ -34,8 +34,8 @@ def _health_fields(summary: dict | None) -> list[dict]:
 
 def _norm_site(raw: dict) -> dict:
     return {
-        "id": raw.get("id") or raw.get("siteId") or raw.get("site_id") or "",
-        "name": raw.get("siteName") or raw.get("site_name") or raw.get("name") or "",
+        "id": site_id_of(raw),
+        "name": site_display_name(raw),
         "devices": raw.get("associated_device_count") or raw.get("deviceCount") or 0,
         "clients": raw.get("client_count") or raw.get("clientCount") or 0,
         "address": raw.get("address") or "",
@@ -50,8 +50,13 @@ async def _load_sites() -> list[dict]:
         raw = await get_sites()
         return [_norm_site(s) for s in raw if isinstance(s, dict)]
     except Exception as exc:
-        logger.warning("central_bridge unavailable for sites, using mock: %s", exc)
-        return [{"id": "mem-hq", "name": "Memphis HQ", "devices": 9, "clients": 32}]
+        # Deliberately NOT a mock site. This used to invent a "Memphis HQ" with
+        # 9 devices and 32 clients, which is indistinguishable from real data on
+        # a page whose whole job is to tell you what you have — and it appeared
+        # precisely when Central was unreachable, i.e. when trusting it was most
+        # costly. The template already renders an empty state.
+        logger.warning("Sites unavailable from Central: %s", exc)
+        return []
 
 
 @router.get("/")

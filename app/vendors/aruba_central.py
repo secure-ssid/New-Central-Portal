@@ -59,6 +59,36 @@ def _norm_device(d: dict) -> dict:
     }
 
 
+def site_display_name(raw: dict) -> str:
+    """Best available human name for a site record.
+
+    Central's /network-config/v1/sites collection does not return "siteName" or
+    "name" at all — it returns "scopeName" (and "collectionName" for a site
+    collection). Three call sites independently looked for siteName/site_name/
+    name, so every site fell through to a placeholder: the dashboard's Site
+    Health card rendered "Unnamed site" for a site the device list happily
+    showed as SecureSSID. One resolver so the next payload change is one edit.
+    """
+    if not isinstance(raw, dict):
+        return ""
+    for key in ("siteName", "site_name", "scopeName", "collectionName", "name"):
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def site_id_of(raw: dict) -> str:
+    """Best available id for a site record (scopeId is Central's spelling)."""
+    if not isinstance(raw, dict):
+        return ""
+    for key in ("id", "siteId", "site_id", "scopeId", "collectionId"):
+        value = raw.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
 def _norm_client(c: dict) -> dict:
     """Normalise centralmcp client fields to the names templates expect."""
     conn_type = (c.get("clientConnectionType") or c.get("connection_type") or c.get("type") or "").lower()

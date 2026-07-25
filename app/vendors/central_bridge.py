@@ -1037,6 +1037,31 @@ async def get_classic_sites() -> list[dict]:
 
 
 @_cached()
+async def get_display_sites() -> list[dict]:
+    """Sites for display and filtering, from whichever API is answering.
+
+    The site pickers (topology filter, alert-rule dropdown, command palette)
+    all read the Classic Central gateway, which currently 401s on this tenant —
+    so every one of them silently rendered an empty list. New Central's
+    /network-config/v1/sites works and describes the same sites, so prefer it
+    and keep Classic as the fallback. Callers should resolve names through
+    aruba_central.site_display_name(), since the two payloads spell the name
+    differently (scopeName vs site_name).
+    """
+    try:
+        sites = await get_sites()
+        if sites:
+            return sites
+    except Exception as exc:
+        logger.debug("New Central sites unavailable: %s", exc)
+    try:
+        return await get_central_sites()
+    except Exception as exc:
+        logger.warning("No site source available (Classic Central: %s)", exc)
+        return []
+
+
+@_cached()
 async def get_central_sites() -> list[dict]:
     """Alias for get_classic_sites."""
     return await get_classic_sites()

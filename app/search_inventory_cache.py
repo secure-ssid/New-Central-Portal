@@ -43,7 +43,7 @@ async def _fetch_inventory() -> dict[str, list]:
         from vendors.central_bridge import (
             get_all_clients,
             get_all_devices,
-            get_central_sites,
+            get_display_sites,
             list_active_alerts,
             list_wlans,
         )
@@ -51,7 +51,7 @@ async def _fetch_inventory() -> dict[str, list]:
         fetched = await asyncio.gather(
             get_all_devices(max_items=1000),
             get_all_clients(max_items=1000),
-            get_central_sites(),
+            get_display_sites(),
             list_active_alerts(limit=50),
             list_wlans(limit=50),
             return_exceptions=True,

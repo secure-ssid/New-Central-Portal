@@ -13,6 +13,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from search_inventory_cache import get_search_inventory
+from vendors.aruba_central import site_display_name, site_id_of
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +98,8 @@ def search_sites(query: str, raw_sites: list, *, cap: int | None = PER_TYPE_CAP)
     for s in raw_sites:
         if not isinstance(s, dict):
             continue
-        site_id = s.get("site_id") or s.get("id") or s.get("siteId") or ""
-        name = s.get("site_name") or s.get("siteName") or s.get("name") or ""
+        site_id = site_id_of(s)
+        name = site_display_name(s)
         city = s.get("city") or ""
         state = s.get("state") or ""
         address = s.get("address") or ""
