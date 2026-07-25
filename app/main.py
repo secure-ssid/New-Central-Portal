@@ -139,7 +139,11 @@ def _wants_json(request: Request) -> bool:
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     # Auth disabled — pass everything through (warned loudly at startup).
-    if not settings.portal_password:
+    # Must consult auth_enabled(), not just the env var: the Change Password
+    # UI stores a DB hash and login/verify honor it — gating only on
+    # settings.portal_password would leave every route unauthenticated while
+    # the login page still demands the GUI-set password. (Cached, ~10s TTL.)
+    if not security.auth_enabled():
         return await call_next(request)
 
     path = request.url.path
@@ -183,6 +187,26 @@ async def auth_middleware(request: Request, call_next):
                 logger.debug("Audit record failed", exc_info=True)
 
     return await call_next(request)
+
+
+# ── No-store for HTML ─────────────────────────────────────────────────────────
+# HTML pages embed the Alpine component scripts (command palette, assistant,
+# notifications) INLINE, and carry no ETag/Last-Modified. Without an explicit
+# directive a browser bfcache / service worker / edge proxy can replay a stale
+# HTML body whose inline script predates a fix — which boots Alpine against
+# mismatched markup and can leave the command palette frozen open (un-closeable).
+# Stamping HTML no-store closes that vector. Static assets keep their
+# ETag/Last-Modified validation untouched (they are not text/html).
+#
+# Defined AFTER auth_middleware so it is the OUTERMOST middleware and therefore
+# stamps every HTML response, including the login page and auth redirects.
+@app.middleware("http")
+async def html_no_store_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Cache-Control"] = "no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # Static files (CSS, JS, images)

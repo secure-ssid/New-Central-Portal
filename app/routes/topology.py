@@ -63,7 +63,14 @@ async def topology(request: Request):
             get_switch_ports,
         )
         find_device_uplink = _uplink
-        raw_sites = await get_central_sites()
+        # Classic Central creds are optional — don't let a missing-config
+        # RuntimeError here dump the whole bridge path (and its port/uplink
+        # edges) into the mock-device fallback.
+        try:
+            raw_sites = await get_central_sites()
+        except Exception as exc:
+            logger.warning("Classic Central sites unavailable for topology: %s", exc)
+            raw_sites = []
         if isinstance(raw_sites, Exception):
             raw_sites = []
         site_map = _site_name_map(raw_sites if isinstance(raw_sites, list) else [])

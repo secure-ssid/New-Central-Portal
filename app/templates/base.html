@@ -469,17 +469,19 @@
 </div>
 
 <!-- ── Command palette (Ctrl+K / Cmd+K) ─────────────────────────────────── -->
-<div x-data="commandPalette()" x-cloak
+<div id="command-palette" x-data="commandPalette()" x-cloak
      @open-palette.window="openPalette()"
      @keydown.window="onGlobalKeydown($event)">
 
     <!-- Backdrop -->
-    <div x-show="open" x-transition.opacity.duration.150ms
+    <!-- x-cloak: stay CSS-hidden until Alpine evaluates x-show, so a partial /
+         aborted init can never leave this overlay frozen-open over the page. -->
+    <div x-show="open" x-cloak x-transition.opacity.duration.150ms
          class="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm"
          @click="close()" aria-hidden="true"></div>
 
     <!-- Dialog -->
-    <div x-show="open" x-ref="dialog"
+    <div x-show="open" x-cloak x-ref="dialog"
          x-transition:enter="transition ease-out duration-150"
          x-transition:enter-start="opacity-0 -translate-y-2"
          x-transition:enter-end="opacity-100 translate-y-0"
@@ -872,7 +874,9 @@
           this.toggleShortcuts();
           return;
         }
-        if ((e.key === 'w' || e.key === 'W') && !inField && !e.ctrlKey && !e.metaKey) {
+        // Bare W toggles the wallboard, but only when no G-chord is pending —
+        // otherwise it swallows the advertised G+W ("Go WLANs") navigation.
+        if ((e.key === 'w' || e.key === 'W') && !inField && !e.ctrlKey && !e.metaKey && !this._goChord) {
           e.preventDefault();
           this.toggleNoc();
           return;
@@ -963,6 +967,9 @@
           if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
             e.preventDefault();
             this.open ? this.close() : this.openPalette();
+          } else if (e.key === 'Escape' && this.open) {
+            // Safety net: close even if focus has left the dialog.
+            this.close();
           }
         },
         onDialogKeydown: function (e) {
@@ -1364,6 +1371,28 @@
       };
     });
   });
+
+  /* ── Command-palette safety net (framework-independent) ────────────────────
+     Every palette close path (backdrop @click, dialog Escape, onGlobalKeydown)
+     is an Alpine directive. If Alpine ever opened the palette and then its
+     reactivity stalled, none of those would fire and the user would be trapped
+     behind the backdrop. This capture-phase Escape handler runs regardless of
+     Alpine's state and force-hides a visible palette as a last resort. When
+     Alpine is healthy it has already closed the palette (Alpine's own handler
+     also runs), and the next openPalette() re-applies x-show, so this never
+     fights normal operation. */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var root = document.getElementById('command-palette');
+    if (!root) return;
+    var dialog = root.querySelector('[x-ref="dialog"]');
+    // getClientRects() is empty only when truly not rendered — unlike
+    // offsetParent, which is always null for position:fixed elements.
+    if (!dialog || dialog.getClientRects().length === 0) return;  // already hidden
+    root.querySelectorAll('[x-ref="dialog"], .bg-black\\/60').forEach(function (el) {
+      el.style.display = 'none';
+    });
+  }, true);
 </script>
 </body>
 </html>

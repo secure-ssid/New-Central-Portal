@@ -3,9 +3,20 @@ uvicorn[standard]==0.32.0
 jinja2==3.1.4
 python-multipart==0.0.12
 httpx==0.27.2
-pydantic==2.9.2
+# mcp>=1.28.1 (centralmcp v0.4.0) needs pydantic>=2.11; fastapi 0.115 allows <3
+pydantic>=2.11,<3
 pydantic-settings==2.6.0
 psycopg2-binary>=2.9.9
 apscheduler>=3.10.4
 # centralmcp is mounted at /centralmcp (see docker-compose.yml)
 requests>=2.31.0
+# centralmcp v0.4.0 runtime deps — the bridge imports mcp_servers.* from the
+# mount, so the interpreter in THIS image must provide its libraries
+# (upstream pyproject deps minus ingestion-only extras like playwright).
+mcp[cli]>=1.28.1
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+rich>=13.0.0
+numpy>=2.2.6
+lancedb>=0.33.0
+fastembed>=0.8.0
