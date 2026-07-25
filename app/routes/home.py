@@ -309,8 +309,10 @@ async def _site_health_cards(limit: int = 4) -> list[dict]:
         return []
 
     async def _one(site: dict) -> dict | None:
-        name = site.get("siteName") or site.get("site_name") or site.get("name") or ""
-        site_id = site.get("id") or site.get("siteId") or site.get("site_id")
+        from vendors.aruba_central import site_display_name, site_id_of
+
+        name = site_display_name(site)
+        site_id = site_id_of(site)
         try:
             summary = await get_site_health_summary(
                 site_id=str(site_id) if site_id else None,

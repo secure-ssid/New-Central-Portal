@@ -3,6 +3,7 @@ import json
 import logging
 
 from topology_graph import build_topology_edges
+from vendors.aruba_central import site_display_name, site_id_of
 from templates_shared import templates
 
 logger = logging.getLogger(__name__)
@@ -18,8 +19,8 @@ def _site_name_map(raw_sites: list) -> dict[str, str]:
     for s in raw_sites:
         if not isinstance(s, dict):
             continue
-        site_id = s.get("site_id") or s.get("id") or s.get("siteId") or ""
-        name = s.get("site_name") or s.get("siteName") or s.get("name") or ""
+        site_id = site_id_of(s)
+        name = site_display_name(s)
         if name and site_id:
             mapping[name.strip().lower()] = str(site_id)
     return mapping
@@ -58,7 +59,7 @@ async def topology(request: Request):
     try:
         from vendors.central_bridge import (
             find_device_uplink as _uplink,
-            get_central_sites,
+            get_display_sites,
             get_devices,
             get_switch_ports,
         )
@@ -67,7 +68,7 @@ async def topology(request: Request):
         # RuntimeError here dump the whole bridge path (and its port/uplink
         # edges) into the mock-device fallback.
         try:
-            raw_sites = await get_central_sites()
+            raw_sites = await get_display_sites()
         except Exception as exc:
             logger.warning("Classic Central sites unavailable for topology: %s", exc)
             raw_sites = []
@@ -158,7 +159,7 @@ async def topology(request: Request):
 
     site_names = sorted(
         {
-            s.get("site_name") or s.get("siteName") or s.get("name") or ""
+            site_display_name(s)
             for s in (raw_sites if isinstance(raw_sites, list) else [])
             if isinstance(s, dict)
         } - {""},

@@ -174,11 +174,11 @@ async def notifications_page(request: Request):
     # free-text entry when empty).
     site_names: list[str] = []
     try:
-        from vendors.central_bridge import get_central_sites
-        raw_sites = await get_central_sites()
+        from vendors.aruba_central import site_display_name
+        from vendors.central_bridge import get_display_sites
+        raw_sites = await get_display_sites()
         site_names = sorted(
-            {str(s.get("site_name") or s.get("name") or "").strip()
-             for s in raw_sites if isinstance(s, dict)} - {""},
+            {site_display_name(s) for s in raw_sites if isinstance(s, dict)} - {""},
             key=str.lower,
         )
     except Exception as exc:
