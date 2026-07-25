@@ -78,6 +78,9 @@ def close_pool() -> None:
 # a dedicated connection, so it is released automatically if that worker dies
 # and another can take over on its next start.
 _SCHEDULER_LOCK_KEY = 0x4E43_5031  # "NCP1"
+# Separate key: schema migrations serialise across workers independently of
+# which worker happens to own the background jobs.
+_MIGRATION_LOCK_KEY = 0x4E43_5032  # "NCP2"
 _scheduler_lock_conn = None
 
 
@@ -374,9 +377,19 @@ def run_migrations() -> None:
 
 def init_db():
     """Create/upgrade schema and seed defaults. Logs and re-raises on failure
-    so the caller can decide whether startup should continue degraded."""
+    so the caller can decide whether startup should continue degraded.
+
+    Serialised across workers: the app now runs more than one uvicorn worker
+    and every one of them calls this at startup, so without a lock two
+    processes could run the DDL and the first-run seeding concurrently. The
+    lock is transaction-scoped and blocking, so the second worker simply waits
+    and then finds the migrations already applied.
+    """
     try:
-        run_migrations()
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (_MIGRATION_LOCK_KEY,))
+            run_migrations()
     except Exception:
         logger.exception("Database schema initialisation failed")
         raise

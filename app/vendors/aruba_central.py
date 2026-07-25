@@ -45,16 +45,16 @@ def _norm_device(d: dict) -> dict:
         "status": status,
         "ip": d.get("ipv4") or d.get("ipAddress") or d.get("ip") or d.get("ip_address") or "",
         "site": d.get("siteName") or d.get("site_name") or d.get("site") or "",
-        # Carried through so event lookups can skip centralmcp's per-call
-        # device-inventory round trip to re-resolve site + type.
-        "site_id": str(d.get("siteId") or d.get("site_id") or "") or "",
         "persona": d.get("persona") or "",
         "deployment": d.get("deployment") or "",
         "device_function": d.get("deviceFunction") or "",
         "part_number": d.get("partNumber") or "",
         "group_name": d.get("deviceGroupName") or "",
         "group_id": d.get("deviceGroupId") or "",
-        "site_id": d.get("siteId") or "",
+        # Also read the normalized spelling so re-normalizing an already
+        # normalized dict keeps the id — event lookups use it to skip
+        # centralmcp's per-call device-inventory round trip.
+        "site_id": str(d.get("siteId") or d.get("site_id") or ""),
         "_raw": d,
     }
 
