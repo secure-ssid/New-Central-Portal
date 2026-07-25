@@ -8,6 +8,7 @@ import os
 import threading
 from typing import Callable
 
+import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import pool
 from contextlib import contextmanager
@@ -66,6 +67,87 @@ def close_pool() -> None:
             logger.exception("Error closing database connection pool")
         finally:
             _pool = None
+
+
+# ── Scheduler leader election ────────────────────────────────────────────────
+# The background jobs (device-down alerts, expiry checks, summary reports) are
+# process-global, so with more than one uvicorn worker every worker would run
+# its own copy: duplicate alert emails and a multiplied Central API load, which
+# is exactly what the response cache exists to avoid. A Postgres session-level
+# advisory lock elects exactly one worker. The lock is held for the lifetime of
+# a dedicated connection, so it is released automatically if that worker dies
+# and another can take over on its next start.
+_SCHEDULER_LOCK_KEY = 0x4E43_5031  # "NCP1"
+_scheduler_lock_conn = None
+
+
+def try_acquire_scheduler_lock() -> str:
+    """Try to become the worker that runs the background jobs.
+
+    Returns one of:
+      "acquired"    — this process owns the lock and must run the scheduler
+      "held_by_peer" — another worker owns it; nothing to do, do not retry
+      "unavailable" — the database could not be reached; the CALLER MUST RETRY,
+                      otherwise a DB blip at boot silently disables alerting for
+                      the whole life of the container.
+    """
+    global _scheduler_lock_conn
+    if _scheduler_lock_conn is not None:
+        return "acquired"
+    try:
+        conn = psycopg2.connect(**_parse_dsn(DATABASE_URL))
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (_SCHEDULER_LOCK_KEY,))
+            acquired = bool(cur.fetchone()[0])
+        if acquired:
+            _scheduler_lock_conn = conn
+            return "acquired"
+        conn.close()
+        return "held_by_peer"
+    except Exception as exc:
+        logger.warning("Scheduler advisory lock unavailable: %s", exc)
+        return "unavailable"
+
+
+def scheduler_lock_healthy() -> bool:
+    """True if this process still holds a usable scheduler lock connection."""
+    conn = _scheduler_lock_conn
+    if conn is None:
+        return False
+    try:
+        if conn.closed:
+            return False
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        return True
+    except Exception:
+        return False
+
+
+def release_scheduler_lock() -> None:
+    """Drop the advisory lock and its connection (call on shutdown)."""
+    global _scheduler_lock_conn
+    if _scheduler_lock_conn is None:
+        return
+    try:
+        _scheduler_lock_conn.close()  # closing the session releases the lock
+    except Exception:
+        logger.warning("Error releasing scheduler advisory lock", exc_info=True)
+    finally:
+        _scheduler_lock_conn = None
+
+
+def drop_scheduler_lock_connection() -> None:
+    """Forget a dead lock connection so the next attempt can re-acquire."""
+    global _scheduler_lock_conn
+    conn, _scheduler_lock_conn = _scheduler_lock_conn, None
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 @contextmanager
@@ -347,6 +429,24 @@ def init_db():
 def get_setting(key: str) -> str:
     row = fetchone("SELECT value FROM alert_settings WHERE key = %s", (key,))
     return row["value"] if row else ""
+
+
+def get_settings(keys) -> dict[str, str]:
+    """Fetch several settings in one round trip.
+
+    The notifications page used to build its settings dict with a per-key
+    comprehension — ten separate SELECTs, each taking and returning a pooled
+    connection, on the event loop. Missing keys come back as "" so callers can
+    keep treating the result like get_setting().
+    """
+    keys = list(keys)
+    if not keys:
+        return {}
+    rows = fetchall(
+        "SELECT key, value FROM alert_settings WHERE key = ANY(%s)", (keys,)
+    )
+    found = {r["key"]: r["value"] for r in rows}
+    return {k: found.get(k, "") for k in keys}
 
 
 def set_setting(key: str, value: str):

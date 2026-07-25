@@ -18,6 +18,7 @@ import shutil
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from config import settings
 import db
@@ -270,7 +271,11 @@ async def generate_reply(message: str, history: list[dict]) -> str:
     directly. The backend is resolved from the DB setting (UI-configurable),
     falling back to the ASSISTANT_BACKEND env var.
     """
-    backend = _resolve_backend()
+    # Both resolvers read a DB setting via blocking psycopg2; batch them into a
+    # single threadpool hop rather than stalling the event loop twice.
+    backend, model = await run_in_threadpool(
+        lambda: (_resolve_backend(), _resolve_model())
+    )
     if backend == "off":
         return ASSISTANT_OFF_REPLY
 
@@ -284,7 +289,7 @@ async def generate_reply(message: str, history: list[dict]) -> str:
     # Backend: local Claude Code CLI (operator's subscription).
     if backend == "claude_cli":
         try:
-            reply = await _claude_cli_complete(messages, _resolve_model())
+            reply = await _claude_cli_complete(messages, model)
         except Exception as exc:
             logger.exception("[assistant] claude CLI call failed: %s", exc)
             return UNAVAILABLE_REPLY
@@ -308,7 +313,7 @@ async def generate_reply(message: str, history: list[dict]) -> str:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": _resolve_model() or LLM_MODEL,
+                    "model": model or LLM_MODEL,
                     "max_tokens": LLM_MAX_TOKENS,
                     "messages": messages,
                 },

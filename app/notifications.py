@@ -450,11 +450,16 @@ def _fetch_devices_sync() -> list[dict] | None:
     Returns None on failure so the caller can abort without touching state.
     """
     try:
-        from vendors.central_bridge import get_devices
+        from vendors.central_bridge import fresh_data, get_devices
         import asyncio
         loop = asyncio.new_event_loop()
         try:
-            devices = loop.run_until_complete(get_devices(limit=_device_fetch_limit()))
+            # Alerting must see live state. The portal caches Central reads for
+            # 60s to stay under the rate limit, but a device-down sweep that
+            # inherited a browser tab's cached fleet would delay detection by up
+            # to a full extra interval.
+            with fresh_data():
+                devices = loop.run_until_complete(get_devices(limit=_device_fetch_limit()))
         finally:
             loop.close()
         if not isinstance(devices, list):

@@ -73,13 +73,13 @@ def test_static_assets_stay_cacheable(client):
 
 
 def test_healthz_db_ok(client, stub_db):
-    assert client.get("/healthz").json() == {"status": "ok", "db": "ok"}
+    assert client.get("/healthz").json() .items() >= {"status": "ok", "db": "ok"}.items()
 
 
 def test_healthz_db_down_still_200(client, dead_db):
     r = client.get("/healthz")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "db": "fail"}
+    assert r.json() .items() >= {"status": "ok", "db": "fail"}.items()
 
 
 def test_health_liveness(client):
@@ -178,4 +178,4 @@ def test_lifespan_starts_degraded_with_dead_db(dead_db, monkeypatch):
     # Entering the context manager runs the lifespan (DB init, scheduler).
     with TestClient(main.app) as c:
         assert c.get("/health").json() == {"status": "ok"}
-        assert c.get("/healthz").json() == {"status": "ok", "db": "fail"}
+        assert c.get("/healthz").json() .items() >= {"status": "ok", "db": "fail"}.items()

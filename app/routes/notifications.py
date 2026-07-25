@@ -144,18 +144,29 @@ async def notifications_page(request: Request):
     history: list[dict] = []
     rules: list[dict] = []
     report_cfg = dict(_DEFAULT_REPORT_CFG)
+    # psycopg2 is synchronous. This block used to run ~14 queries directly on
+    # the event loop (ten of them one-per-key), freezing every other in-flight
+    # request on a single-worker server. One threadpool hop, batched reads.
+    def _load_db_state():
+        return (
+            db.get_settings(_SETTING_KEYS),
+            db.get_recipients(),
+            db.get_notification_history(limit=50),
+        )
+
     try:
-        settings = {k: db.get_setting(k) for k in _SETTING_KEYS}
-        recipients = db.get_recipients()
-        history = db.get_notification_history(limit=50)
+        settings, recipients, history = await run_in_threadpool(_load_db_state)
     except Exception as exc:
         logger.error("Notifications page: database unavailable: %s", exc)
         db_error = True
         settings = {k: _SETTING_DEFAULTS.get(k, "") for k in _SETTING_KEYS}
     if not db_error:
+        def _load_rules_and_report():
+            return db.get_alert_rules(), db.get_report_settings()
+
         try:
-            rules = db.get_alert_rules()
-            report_cfg = _jsonable_report_cfg(db.get_report_settings())
+            rules, raw_report_cfg = await run_in_threadpool(_load_rules_and_report)
+            report_cfg = _jsonable_report_cfg(raw_report_cfg)
         except Exception as exc:
             logger.error("Notifications page: could not load alert rules/report settings: %s", exc)
 
@@ -383,9 +394,13 @@ async def api_recent():
     created_at_iso, age, read}], "unread": N}. Degrades to empty/0 if the
     database is unavailable.
     """
+    # Polled by every open tab every 60s — keep the two blocking queries off
+    # the event loop.
+    def _load():
+        return db.get_in_app_notifications(limit=15), db.count_unread_notifications()
+
     try:
-        rows = db.get_in_app_notifications(limit=15)
-        unread = db.count_unread_notifications()
+        rows, unread = await run_in_threadpool(_load)
     except Exception as exc:
         logger.warning("api/recent: database unavailable: %s", exc)
         return JSONResponse({"items": [], "unread": 0})

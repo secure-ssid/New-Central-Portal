@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request
@@ -107,7 +108,15 @@ async def _recent_events(devices: list[dict]) -> list[dict]:
 
         results = await asyncio.gather(
             *(
-                get_device_events(d["serial"], hours=EVENT_LOOKBACK_HOURS, limit=EVENT_FEED_LIMIT)
+                get_device_events(
+                    d["serial"],
+                    hours=EVENT_LOOKBACK_HOURS,
+                    limit=EVENT_FEED_LIMIT,
+                    # Already known from the device list — saves an inventory
+                    # lookup per device inside centralmcp.
+                    site_id=d.get("site_id") or None,
+                    device_type=d.get("type") or None,
+                )
                 for d in picks
             ),
             return_exceptions=True,
@@ -246,14 +255,28 @@ async def _anomaly_widgets(devices: list[dict]) -> list[dict]:
     if not candidates:
         return []
 
-    widgets: list[dict] = []
-    for dev in candidates:
+    # Both detectors, for all candidates, in one fan-out. This loop used to be
+    # sequential with only the inner pair gathered, so three devices cost three
+    # serialized round-trip pairs.
+    async def _probe(dev: dict) -> tuple[dict, Any, Any]:
         serial = dev["serial"]
         flap, ssh = await asyncio.gather(
             detect_client_flapping(serial, hours=24),
             detect_ssh_brute_force(serial, hours=24),
             return_exceptions=True,
         )
+        return dev, flap, ssh
+
+    probed = await asyncio.gather(
+        *(_probe(d) for d in candidates), return_exceptions=True
+    )
+
+    widgets: list[dict] = []
+    for probe in probed:
+        if isinstance(probe, BaseException):
+            continue
+        dev, flap, ssh = probe
+        serial = dev["serial"]
         if isinstance(flap, dict) and (flap.get("flapping") or flap.get("count")):
             widgets.append({
                 "type": "client_flapping",
@@ -318,7 +341,7 @@ async def _site_health_cards(limit: int = 4) -> list[dict]:
 async def _offline_health_notes(devices: list[dict]) -> list[dict]:
     """Fetch config/monitoring health hints for a few offline devices."""
     try:
-        from vendors.central_bridge import get_device_health
+        from vendors.central_bridge import get_fleet_health, health_entry_for
     except Exception:
         return []
 
@@ -329,16 +352,21 @@ async def _offline_health_notes(devices: list[dict]) -> list[dict]:
     if not offline:
         return []
 
-    results = await asyncio.gather(
-        *(get_device_health(d["serial"]) for d in offline),
-        return_exceptions=True,
-    )
+    # One request for the whole fleet, then filter locally. This used to fan out
+    # one call per device, each of which fetched the identical unfiltered
+    # config-health collection upstream.
+    try:
+        fleet_health = await get_fleet_health()
+    except Exception as exc:
+        logger.debug("Fleet health unavailable for dashboard: %s", exc)
+        return []
 
     notes: list[dict] = []
-    for dev, result in zip(offline, results):
-        if isinstance(result, BaseException):
+    for dev in offline:
+        entry = health_entry_for(fleet_health, dev["serial"])
+        if entry is None:
             continue
-        label = _health_issue_label(result if isinstance(result, dict) else None)
+        label = _health_issue_label({"health": [entry]})
         if label:
             notes.append({
                 "serial": dev["serial"],
@@ -468,9 +496,14 @@ async def home(request: Request, partial: int = 0, lite: int = 0):
     `?partial=1&lite=1` skips expensive widgets (events, anomalies, site
     health cards, offline health probes, tenant health) on partial refresh.
     """
-    devices, clients = await asyncio.gather(
+    async def _sites() -> list:
+        from vendors.central_bridge import get_sites
+        return await get_sites()
+
+    devices, clients, sites = await asyncio.gather(
         aruba.get_devices(),
         aruba.get_clients(),
+        _sites(),
         return_exceptions=True,
     )
     if isinstance(devices, BaseException):
@@ -479,14 +512,11 @@ async def home(request: Request, partial: int = 0, lite: int = 0):
     if isinstance(clients, BaseException):
         logger.warning("Clients unavailable for dashboard: %s", clients)
         clients = []
+    if isinstance(sites, BaseException):
+        logger.warning("Sites count unavailable for dashboard: %s", sites)
+        sites = []
 
-    sites_count = 0
-    try:
-        from vendors.central_bridge import get_sites
-        sites = await get_sites()
-        sites_count = len(sites)
-    except Exception as exc:
-        logger.warning("Sites count unavailable for dashboard: %s", exc)
+    sites_count = len(sites)
 
     total = len(devices)
     online = sum(1 for d in devices if d.get("status") == "online")
@@ -554,14 +584,47 @@ async def home(request: Request, partial: int = 0, lite: int = 0):
 
     is_lite = bool(partial and lite)
 
-    events = [] if is_lite else await _recent_events(devices)
-    alert_summary, alert_ticker = await _fetch_dashboard_alerts()
-    health_notes = [] if is_lite else await _offline_health_notes(devices)
-    tenant_health = None if is_lite else await _tenant_health()
+    # These widgets have no data dependencies on one another, but used to be
+    # awaited one after the next — so the page cost the *sum* of six round-trip
+    # chains instead of the slowest one. Fan them out and keep the existing
+    # per-widget failure tolerance: any widget that raises degrades to empty
+    # rather than taking the dashboard down.
+    async def _skip(value):
+        return value
+
+    (
+        events,
+        alerts_pair,
+        health_notes,
+        tenant_health,
+        anomalies,
+        raw_site_cards,
+    ) = await asyncio.gather(
+        _skip([]) if is_lite else _recent_events(devices),
+        _fetch_dashboard_alerts(),
+        _skip([]) if is_lite else _offline_health_notes(devices),
+        _skip(None) if is_lite else _tenant_health(),
+        _skip([]) if is_lite else _anomaly_widgets(devices),
+        _skip([]) if is_lite else _site_health_cards(),
+        return_exceptions=True,
+    )
+
+    def _ok(value, fallback):
+        if isinstance(value, BaseException):
+            logger.warning("Dashboard widget failed: %s", value)
+            return fallback
+        return value
+
+    events = _ok(events, [])
+    alert_summary, alert_ticker = _ok(
+        alerts_pair, ({"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}, [])
+    )
+    health_notes = _ok(health_notes, [])
+    tenant_health = _ok(tenant_health, None)
+    anomalies = _ok(anomalies, [])
     tenant_cards = _tenant_health_cards(tenant_health) if tenant_health else []
-    anomalies = [] if is_lite else await _anomaly_widgets(devices)
-    site_health_cards = [] if is_lite else _enrich_site_cards(
-        await _site_health_cards(), devices if isinstance(devices, list) else []
+    site_health_cards = _enrich_site_cards(
+        _ok(raw_site_cards, []), devices if isinstance(devices, list) else []
     )
 
     updated = datetime.now(timezone.utc).strftime("%I:%M %p UTC")

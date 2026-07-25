@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,9 @@ async def probe_status() -> dict:
     import db
     from vendors.aruba_central import aruba, get_data_source
 
-    db_ok = db.ping()
+    # Every open tab hits this on load and again every 60s; db.ping() is a
+    # blocking psycopg2 round trip, so keep it off the event loop.
+    db_ok = await run_in_threadpool(db.ping)
     central = "unavailable"
     data_mode = "mock"
 
