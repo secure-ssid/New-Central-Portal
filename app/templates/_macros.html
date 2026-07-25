@@ -1,0 +1,40 @@
+{#
+  Shared template macros.
+
+  page_header() replaces four hand-rolled header structures that had drifted
+  apart: eyebrow+title+subtitle, breadcrumb chips (Lab), a larger breadcrumb
+  trail with different type and spacing (device/site detail), and a bare back
+  link (client detail). Same markup, same rhythm, one place to change it.
+
+  Usage:
+    {% from "_macros.html" import page_header %}
+    {{ page_header("Devices", subtitle="13 devices across 1 site", eyebrow="Inventory") }}
+
+  Slots:
+    title      required
+    eyebrow    small uppercase label above the title
+    crumbs     list of {"label": ..., "url": ...} — url omitted renders as text
+    subtitle   one line under the title
+    actions    caller() block, right-aligned (buttons, filters)
+#}
+
+{% macro page_header(title, subtitle="", eyebrow="", crumbs=None, title_class="") %}
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
+  <div class="min-w-0">
+    {% if crumbs %}
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+      {% for c in crumbs %}
+        {% if c.url %}<a href="{{ c.url }}" class="hover:text-brand-400 transition">{{ c.label }}</a>
+        {% else %}<span>{{ c.label }}</span>{% endif %}
+        {% if not loop.last %}<span class="text-slate-600">/</span>{% endif %}
+      {% endfor %}
+    </div>
+    {% elif eyebrow %}
+    <p class="section-label mb-1">{{ eyebrow }}</p>
+    {% endif %}
+    <h1 class="text-2xl font-semibold text-white tracking-tight {{ title_class }}">{{ title }}</h1>
+    {% if subtitle %}<p class="text-sm text-slate-500 mt-1">{{ subtitle }}</p>{% endif %}
+  </div>
+  {% if caller %}<div class="flex items-center gap-2 flex-wrap">{{ caller() }}</div>{% endif %}
+</div>
+{% endmacro %}

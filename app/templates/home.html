@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - New Central Portal{% endblock %}
-{% block content %}
-
+{% block styles %}
 <style>
   /* Dashboard charts — hand-rolled SVG donut + segmented bars (no chart lib) */
   @keyframes donut-in { from { stroke-dasharray: 0 100; } }
@@ -13,19 +12,22 @@
   .alert-ticker-track:hover { animation-play-state: paused; }
   .sparkline { display: block; width: 100%; height: 22px; opacity: .85; }
   .site-gauge-ring { transform: rotate(-90deg); transform-origin: 50% 50%; }
-  /* NOC wallboard — enlarged typography when body has .noc-mode */
-  .noc-mode .stat-card .text-3xl { font-size: 2.75rem; line-height: 1; }
-  .noc-mode .page-header h1 { font-size: 2rem; }
+  /* Wallboard: the shared h1/stat scaling now lives in app.css so it applies to
+     every page. These two are dashboard-specific. */
+  .noc-mode .stat-card .text-3xl { line-height: 1; }
   .noc-mode .sparkline { height: 32px; }
   @media (prefers-reduced-motion: reduce) {
     .alert-ticker-track { animation: none !important; }
   }
 </style>
+{% endblock %}
+
+{% block content %}
 
 <!-- Page header -->
 <div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
-        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Overview</p>
+        <p class="section-label mb-1">Overview</p>
         <h1 class="text-2xl font-semibold text-white tracking-tight">Network Dashboard</h1>
         <p class="text-sm text-slate-500 mt-0.5">Real-time view of your Aruba Central infrastructure</p>
     </div>
@@ -315,18 +317,21 @@
     </div>
 </div>
 
-<!-- Row 4: recent devices + events feed -->
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+<!-- Row 4: recent devices.
+     This used to be a 3-column grid whose only child spanned 2 columns, so a
+     third of the row rendered as empty space on every load — the events feed
+     that was meant to sit there lives below, outside the HTMX poll region on
+     purpose. Full width instead; the table has five columns and wants the room. -->
 
     <!-- Recent devices table -->
-    <div class="card xl:col-span-2" style="padding:0;overflow:hidden;">
+    <div class="card card--flush">
         <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
             <p class="text-sm font-semibold text-white">Recent Devices</p>
             <a href="/devices/" class="text-xs text-brand-500 hover:text-brand-400 transition-colors">View all &rarr;</a>
         </div>
         {% if devices %}
         <div class="overflow-x-auto">
-        <table class="tbl" style="min-width:640px;">
+        <table class="tbl tbl--wide">
             <thead>
                 <tr>
                     <th scope="col">Name</th>
@@ -384,7 +389,6 @@
         </div>
         {% endif %}
     </div>
-</div>
 
 {% endblock %}
 </div>
@@ -485,7 +489,7 @@
 </div>
 {% endif %}
 
-<div class="card mb-6" style="padding:0;overflow:hidden;">
+<div class="card card--flush mb-6">
     <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
         <p class="text-sm font-semibold text-white">Recent Events</p>
         <span class="text-[10px] text-slate-600 uppercase tracking-wider">last 24h</span>

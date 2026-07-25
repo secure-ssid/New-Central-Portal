@@ -4,7 +4,7 @@
 
 <div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
-        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Operations</p>
+        <p class="section-label mb-1">Operations</p>
         <h1 class="text-2xl font-semibold text-white tracking-tight">Alerts</h1>
         <p class="text-sm text-slate-500 mt-0.5">Active Central alerts and portal notification history</p>
     </div>
@@ -27,7 +27,7 @@
            class="input flex-1 min-w-[200px]" aria-label="Search alerts">
     <div class="flex items-center gap-1.5">
         <span class="text-xs text-slate-500 whitespace-nowrap">Rows</span>
-        <select class="select text-xs" style="width:auto;padding:5px 8px;" aria-label="Rows per page"
+        <select class="select select--auto text-xs" aria-label="Rows per page"
                 onchange="var u = new URL(window.location); u.searchParams.set('per_page', this.value); u.searchParams.delete('page'); window.location = u;">
             {% for n in [25, 50, 100] %}
             {% if per_page and per_page not in [25, 50, 100] and loop.first %}<option value="{{ per_page }}" selected>{{ per_page }}</option>{% endif %}
@@ -81,7 +81,7 @@
     {% endif %}
 </div>
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
         <p class="section-label mb-1">Active</p>
         <p class="text-2xl font-bold text-white">{{ summary.total }}</p>
@@ -143,18 +143,18 @@
         </div>
         {% if total_pages and total_pages > 1 %}
         {% set qs = base_qs ~ ('&' if base_qs else '') %}
-        <nav class="flex flex-wrap items-center justify-between gap-2 mt-4 px-0.5 py-2" aria-label="Central alerts pagination">
+        <nav class="flex flex-wrap items-center justify-between gap-2 mt-4 px-0.5 py-3" aria-label="Central alerts pagination">
             <span class="text-xs text-slate-500">Page {{ page }} of {{ total_pages }} &middot; {{ total }} total</span>
             <div class="flex gap-1 items-center">
                 {% if has_prev %}
-                <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Previous page">&lsaquo; Prev</a>
+                <a href="?{{ qs }}page={{ page - 1 }}" class="btn-secondary btn--sm no-underline" aria-label="Previous page">&lsaquo; Prev</a>
                 {% else %}
-                <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Previous page">&lsaquo; Prev</button>
+                <button type="button" disabled class="btn-secondary btn--sm" aria-label="Previous page">&lsaquo; Prev</button>
                 {% endif %}
                 {% if has_next %}
-                <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary text-xs" style="padding:5px 12px;text-decoration:none;" aria-label="Next page">Next &rsaquo;</a>
+                <a href="?{{ qs }}page={{ page + 1 }}" class="btn-secondary btn--sm no-underline" aria-label="Next page">Next &rsaquo;</a>
                 {% else %}
-                <button type="button" disabled class="btn-secondary text-xs" style="padding:5px 12px;" aria-label="Next page">Next &rsaquo;</button>
+                <button type="button" disabled class="btn-secondary btn--sm" aria-label="Next page">Next &rsaquo;</button>
                 {% endif %}
             </div>
         </nav>
@@ -172,7 +172,7 @@
         {% if portal_history %}
         <div class="space-y-2">
             {% for n in portal_history %}
-            <div class="p-3 rounded-lg border border-surface-700 bg-surface-900/60">
+            <div class="panel">
                 <div class="flex items-baseline justify-between gap-2">
                     <p class="text-sm font-medium text-slate-200">{{ n.title }}</p>
                     <span class="text-[10px] text-slate-600 flex-shrink-0">{{ n.time_ago or (n.time[:19].replace('T',' ') if n.time else '') }}</span>

@@ -3,16 +3,16 @@
 {% block content %}
 
 <div class="page-header">
-    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
+    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
         <a href="/" class="hover:text-brand-500 transition-colors">Home</a>
         <span class="text-surface-600">/</span>
         <a href="/sites/" class="hover:text-brand-500 transition-colors">Sites</a>
         <span class="text-surface-600">/</span>
-        <span class="text-gray-300">{{ site.name }}</span>
+        <span class="text-slate-300">{{ site.name }}</span>
     </div>
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-white">{{ site.name }}</h1>
+            <h1 class="text-2xl font-semibold text-white tracking-tight">{{ site.name }}</h1>
             {% if site_location %}<p class="text-sm text-slate-500 mt-1">{{ site_location }}</p>{% endif %}
         </div>
         <a href="/topology/?site={{ site.name | urlencode }}" class="btn-secondary text-xs">View in topology</a>
@@ -44,7 +44,7 @@
     {% if health_fields %}
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {% for row in health_fields %}
-        <div class="p-3 rounded-lg bg-surface-900/60 border border-surface-700">
+        <div class="panel">
             <dt class="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">{{ row.label }}</dt>
             <dd class="text-sm font-medium text-slate-200">{{ row.value }}</dd>
         </div>

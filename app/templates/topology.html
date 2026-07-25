@@ -1,50 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Topology - New Central Portal{% endblock %}
-{% block content %}
 
-<div class="page-header flex items-end justify-between">
-    <div>
-        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Monitoring</p>
-        <h1 class="text-2xl font-bold text-white">Network Topology</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Interactive 3D infrastructure map &mdash; drag to rotate, scroll to zoom, click a device to open it</p>
-    </div>
-    <div class="flex items-center gap-2 flex-wrap justify-end">
-        {% if site_names %}
-        <form method="get" class="flex items-center gap-2">
-            <label for="topo-site-filter" class="text-xs text-slate-500 whitespace-nowrap">Site</label>
-            <select id="topo-site-filter" name="site" class="select text-xs" style="width:auto;min-width:140px;" aria-label="Filter topology by site"
-                    onchange="this.form.submit()">
-                <option value="">All sites</option>
-                {% for s in site_names %}
-                <option value="{{ s }}" {% if initial_site == s %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
-        {% if port_fail_count %}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
-            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-            Port data unavailable for {{ port_fail_count }} switch{{ 'es' if port_fail_count != 1 else '' }}
-        </span>
-        {% endif %}
-        {% if site_filter_active %}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(59,130,246,.1);color:#60a5fa;border:1px solid rgba(59,130,246,.3);">
-            Site: {{ initial_site }}
-        </span>
-        {% endif %}
-        {% if device_cap_hit %}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
-            Showing first {{ device_cap }} devices
-        </span>
-        {% endif %}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:#10141f;color:#94a3b8;border:1px solid #1e2535;">
-            {{ device_count }} device{{ 's' if device_count != 1 else '' }}
-        </span>
-    </div>
-</div>
-
+{% block styles %}
 <style>
-    #topo-wrap { position:relative; width:100%; height:calc(100vh - 215px); min-height:480px; background:#060a14; border:1px solid #1e2535; border-radius:12px; overflow:hidden; }
+    /* Was height:calc(100vh - 215px) — a hard-coded guess at the header +
+       page-header height that silently broke whenever either changed.
+       Fill the remaining space instead. */
+    #topo-wrap { position:relative; width:100%; flex:1 1 auto; min-height:480px; background:#060a14; border:1px solid #1e2535; border-radius:12px; overflow:hidden; }
     #graph-3d { position:absolute; inset:0; }
     .topo-overlay { position:absolute; z-index:20; }
     .topo-btn { background:#10141f; border:1px solid #1e2535; color:#94a3b8; border-radius:8px; padding:6px 13px; font-size:.72rem; font-weight:600; cursor:pointer; transition:all .15s; white-space:nowrap; }
@@ -98,6 +60,55 @@
         .topo-tier-label { font-size:.54rem; letter-spacing:.1em; }
     }
 </style>
+
+{% endblock %}
+
+{# Opt the page shell into a flex column so #topo-wrap claims the leftover
+   height without hard-coding the height of the chrome above it. #}
+{% block shell_class %}page-shell--fill{% endblock %}
+{% block content %}
+
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
+    <div>
+        <p class="section-label mb-1">Monitoring</p>
+        <h1 class="text-2xl font-semibold text-white tracking-tight">Network Topology</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Interactive 3D infrastructure map &mdash; drag to rotate, scroll to zoom, click a device to open it</p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+        {% if site_names %}
+        <form method="get" class="flex items-center gap-2">
+            <label for="topo-site-filter" class="text-xs text-slate-500 whitespace-nowrap">Site</label>
+            <select id="topo-site-filter" name="site" class="select select--auto select--site text-xs" aria-label="Filter topology by site"
+                    onchange="this.form.submit()">
+                <option value="">All sites</option>
+                {% for s in site_names %}
+                <option value="{{ s }}" {% if initial_site == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% if port_fail_count %}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            Port data unavailable for {{ port_fail_count }} switch{{ 'es' if port_fail_count != 1 else '' }}
+        </span>
+        {% endif %}
+        {% if site_filter_active %}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(59,130,246,.1);color:#60a5fa;border:1px solid rgba(59,130,246,.3);">
+            Site: {{ initial_site }}
+        </span>
+        {% endif %}
+        {% if device_cap_hit %}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.3);">
+            Showing first {{ device_cap }} devices
+        </span>
+        {% endif %}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;font-size:.7rem;font-weight:600;background:#10141f;color:#94a3b8;border:1px solid #1e2535;">
+            {{ device_count }} device{{ 's' if device_count != 1 else '' }}
+        </span>
+    </div>
+</div>
+
 
 <div id="topo-wrap">
     <div id="graph-3d"></div>
@@ -217,6 +228,9 @@
     </div>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
 <script src="/static/vendor/3d-force-graph-1.80.0.min.js"></script>
 <script>
 // Pure graph-filtering helper. Kept dependency-free (no DOM, no library
@@ -1339,5 +1353,4 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
 import * as THREE from '/static/vendor/three-0.183.2/three.module.min.js';
 if (typeof window.__topoIconInit === 'function') window.__topoIconInit(THREE);
 </script>
-
 {% endblock %}

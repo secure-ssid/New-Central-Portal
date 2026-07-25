@@ -46,6 +46,17 @@ STATIC_MOUNT_NEEDED = False
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 _templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
+# 404.html/500.html use asset_url() for their stylesheet. This env is separate
+# from templates_shared's on purpose (the error pages must render even if app
+# state is broken), so the global has to be registered here too — otherwise
+# calling an undefined name raises inside the error handler itself.
+try:
+    from templates_shared import asset_url as _asset_url
+except Exception:  # pragma: no cover - error pages must never fail to render
+    def _asset_url(path: str) -> str:
+        return path
+_templates.env.globals["asset_url"] = _asset_url
+
 
 def _wants_json(request: Request) -> bool:
     """HTMX partial swaps and API clients should get JSON, not a full page."""

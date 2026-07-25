@@ -266,16 +266,16 @@ document.addEventListener('alpine:init', () => {
 <script id="glp-users-json" type="application/json">{{ users | tojson }}</script>
 <script id="glp-audit-json" type="application/json">{{ audit_logs | tojson }}</script>
 
-<div class="page-header flex items-end justify-between">
+<div class="page-header flex flex-wrap items-end justify-between gap-3">
     <div>
-        <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Platform</p>
-        <h1 class="text-2xl font-bold text-white">HPE GreenLake</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Inventory, subscriptions, users, and audit from GLP workspace</p>
+        <p class="section-label mb-1">Platform</p>
+        <h1 class="text-2xl font-semibold text-white tracking-tight">HPE GreenLake</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Inventory, subscriptions, users, and audit from GLP workspace</p>
     </div>
     <!-- summary pills -->
-    <div style="display:flex;gap:8px;">
+    <div class="flex gap-2 flex-wrap">
         {% for label, count, color in [('Devices', devices|length, '#6366f1'), ('Subscriptions', subscriptions|length, '#10b981'), ('Users', users|length, '#3b82f6')] %}
-        <div style="padding:6px 14px;background:{{ color }}18;border:1px solid {{ color }}40;border-radius:20px;font-size:.72rem;color:{{ color }};font-weight:700;">
+        <div class="stat-pill" style="--pill-color: {{ color }};">
             {{ count }} {{ label }}
         </div>
         {% endfor %}
@@ -318,7 +318,7 @@ document.addEventListener('alpine:init', () => {
     </div>
 
     <!-- ═══════════════  DEVICES  ═══════════════ -->
-    <div x-show="tab==='devices'" x-data="devicesTab" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+    <div x-show="tab==='devices'" x-data="devicesTab" class="card card--flush card--joined-top">
 
         <!-- Reassignment modal -->
         <div x-show="modal" x-cloak @click.self="modal=false"
@@ -473,7 +473,7 @@ document.addEventListener('alpine:init', () => {
     </div>
 
     <!-- ═══════════════  SUBSCRIPTIONS  ═══════════════ -->
-    <div x-show="tab==='subscriptions'" x-data="subscriptionsTab" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+    <div x-show="tab==='subscriptions'" x-data="subscriptionsTab" class="card card--flush card--joined-top">
         <div style="padding:14px 20px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:12px;">
             <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;flex:1;"><span x-text="rows.length"></span> subscriptions</p>
             <div style="position:relative;">
@@ -521,7 +521,7 @@ document.addEventListener('alpine:init', () => {
     </div>
 
     <!-- ═══════════════  USERS  ═══════════════ -->
-    <div x-show="tab==='users'" x-data="usersTab" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+    <div x-show="tab==='users'" x-data="usersTab" class="card card--flush card--joined-top">
         <div style="padding:14px 20px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:12px;">
             <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;flex:1;"><span x-text="rows.length"></span> users</p>
             <div style="position:relative;">
@@ -557,7 +557,7 @@ document.addEventListener('alpine:init', () => {
     </div>
 
     <!-- ═══════════════  AUDIT LOG  ═══════════════ -->
-    <div x-show="tab==='audit'" x-data="auditTab" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+    <div x-show="tab==='audit'" x-data="auditTab" class="card card--flush card--joined-top">
         <div style="padding:14px 20px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:12px;">
             <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;flex:1;"><span x-text="rows.length"></span> log entries</p>
             <div style="position:relative;">
@@ -593,7 +593,7 @@ document.addEventListener('alpine:init', () => {
     </div>
 
     <!-- ═══════════════  SERVICE CATALOG  ═══════════════ -->
-    <div x-show="tab==='catalog'" class="card" style="padding:0;overflow:hidden;border-top-left-radius:0;border-top-right-radius:0;">
+    <div x-show="tab==='catalog'" class="card card--flush card--joined-top">
         <div style="padding:14px 20px;border-bottom:1px solid #1e2535;">
             <p style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280;">GLP service offers (read-only)</p>
         </div>
