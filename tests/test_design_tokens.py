@@ -120,3 +120,41 @@ def test_no_page_loads_an_external_subresource():
         for m in tag_re.finditer(f.read_text()):
             offenders.append(f"{f.name}: {m.group(1)}")
     assert not offenders, f"external subresources loaded: {offenders}"
+
+
+def test_no_template_uses_a_class_defined_only_in_another_pages_style_block():
+    """Catches an orphaned class across the whole template tree.
+
+    A page-scoped <style> block is invisible to every other page, so a class
+    borrowed from one renders as unstyled text. That shipped once: the
+    compliance board used .topo-badge, which is defined inside topology.html's
+    scoped block, so "Update available" rendered as plain text.
+    """
+    shared_css = (APP / "static" / "app.css").read_text()
+    built_css = BUILT_CSS.read_text() if BUILT_CSS.exists() else ""
+
+    # Collect the classes each page defines privately, and where.
+    private: dict[str, str] = {}
+    for template in TEMPLATES.rglob("*.html"):
+        text = template.read_text()
+        for block in re.findall(r"<style>(.*?)</style>", text, re.S):
+            for name in re.findall(r"\.([a-z][a-z0-9-]{2,})\s*[,{:]", block):
+                private.setdefault(name, template.name)
+
+    offenders = []
+    for template in TEMPLATES.rglob("*.html"):
+        own_blocks = "".join(re.findall(r"<style>(.*?)</style>",
+                                        template.read_text(), re.S))
+        for group in re.findall(r'class="([^"]*)"', template.read_text()):
+            for name in group.split():
+                if "{{" in name or "{%" in name or name not in private:
+                    continue
+                if private[name] == template.name:
+                    continue          # defined on this very page
+                if f".{name}" in own_blocks or f".{name}" in shared_css:
+                    continue          # also available globally
+                if f".{name}" in built_css:
+                    continue          # a Tailwind utility
+                offenders.append(f"{template.name} uses .{name} "
+                                 f"(defined only in {private[name]})")
+    assert not offenders, offenders
