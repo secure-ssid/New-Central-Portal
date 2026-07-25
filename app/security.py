@@ -114,20 +114,44 @@ def _verify_pbkdf2(submitted: str, stored: str) -> bool:
         return False
 
 
+# auth_enabled() is consulted by the request middleware and by every base.html
+# render; cache the DB lookup briefly so those hot paths don't hit Postgres
+# per request. set_portal_password() invalidates immediately.
+_DB_HASH_CACHE_TTL = 10.0
+_db_hash_cache: tuple[float, str | None] = (0.0, None)
+_db_hash_lock = threading.Lock()
+
+
 def _db_password_hash():
     """The DB-stored portal password hash, or None if unset/unavailable."""
+    global _db_hash_cache
+    now = time.monotonic()
+    with _db_hash_lock:
+        ts, cached = _db_hash_cache
+        if now - ts < _DB_HASH_CACHE_TTL:
+            return cached
     try:
         import db
         v = (db.get_setting("portal_password_hash") or "").strip()
-        return v or None
+        result = v or None
     except Exception:
-        return None
+        return None  # transient DB failure — don't cache
+    with _db_hash_lock:
+        _db_hash_cache = (now, result)
+    return result
+
+
+def _invalidate_db_hash_cache() -> None:
+    global _db_hash_cache
+    with _db_hash_lock:
+        _db_hash_cache = (0.0, None)
 
 
 def set_portal_password(pw: str) -> None:
     """Persist a new portal password (hashed) in the DB, superseding env."""
     import db
     db.set_setting("portal_password_hash", hash_password(pw))
+    _invalidate_db_hash_cache()
 
 
 def verify_password(submitted) -> bool:

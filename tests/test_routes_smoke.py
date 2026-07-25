@@ -54,6 +54,24 @@ def test_dashboard_partial_is_a_fragment(client, mock_central, stub_db):
     assert 'id="dashboard-live"' not in r.text
 
 
+def test_html_is_no_store(client, mock_central, stub_db):
+    # HTML embeds the Alpine component scripts (command palette etc.) inline,
+    # so a stale cached HTML body = a stale broken script. Every HTML response
+    # must be no-store to prevent bfcache / service-worker / edge replay.
+    for path in ("/", "/devices/"):
+        r = client.get(path)
+        assert "text/html" in r.headers["content-type"], path
+        assert r.headers.get("cache-control") == "no-store, must-revalidate", path
+
+
+def test_static_assets_stay_cacheable(client):
+    # The no-store rule must NOT leak onto static assets — they rely on
+    # ETag/Last-Modified validation and would be needlessly re-downloaded.
+    r = client.get("/static/vendor/alpinejs-3.15.12.min.js")
+    assert r.status_code == 200
+    assert "no-store" not in r.headers.get("cache-control", "")
+
+
 def test_healthz_db_ok(client, stub_db):
     assert client.get("/healthz").json() == {"status": "ok", "db": "ok"}
 

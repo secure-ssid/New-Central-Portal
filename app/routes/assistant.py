@@ -294,7 +294,8 @@ async def generate_reply(message: str, history: list[dict]) -> str:
     if backend != "github":
         logger.warning("[assistant] unknown backend %r — refusing to answer", backend)
         return UNAVAILABLE_REPLY
-    if not settings.github_token or settings.github_token == "your_github_pat_here":
+    from config import is_placeholder
+    if is_placeholder(settings.github_token):
         logger.warning("[assistant] no GitHub token configured — assistant disabled")
         return UNAVAILABLE_REPLY
 

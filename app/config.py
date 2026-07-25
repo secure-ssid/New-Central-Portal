@@ -29,7 +29,12 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Placeholder values that should be treated the same as "not configured".
-_PLACEHOLDERS = {"your_key_here", "your_github_pat_here", "changeme", ""}
+_PLACEHOLDERS = {"your_key_here", "your_github_pat_here", "your_token_here", "changeme", ""}
+
+
+def is_placeholder(value: str | None) -> bool:
+    """True when a setting is unset or still one of the .env placeholder values."""
+    return (value or "").strip().lower() in _PLACEHOLDERS
 
 
 def validate_settings() -> list[str]:

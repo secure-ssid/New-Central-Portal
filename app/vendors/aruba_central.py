@@ -21,8 +21,10 @@ def get_data_source() -> str:
 
 def _norm_device(d: dict) -> dict:
     """Normalise centralmcp device fields to the names templates expect."""
-    device_type_raw = (d.get("deviceType") or d.get("device_type") or "").upper()
-    if device_type_raw in ("AP", "IAP"):
+    # Also read "type" so re-normalizing an ALREADY-normalized dict (topology
+    # fallback, assistant snapshot) is lossless instead of degrading to unknown.
+    device_type_raw = (d.get("deviceType") or d.get("device_type") or d.get("type") or "").upper()
+    if device_type_raw in ("AP", "IAP", "ACCESS_POINT"):
         dtype = "access_point"
     elif device_type_raw in ("SWITCH", "AOS_S", "AOS-S", "CX", "AOS_CX"):
         dtype = "switch"

@@ -450,7 +450,8 @@
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {% for s in site_health_cards %}
-        <a href="/sites/{{ s.id }}" class="group rounded-lg border bg-surface-900/60 p-3 hover:border-brand-500/40 transition-all no-underline
+        {# sites without an id would link to the 404 /sites/None #}
+        <a href="{{ '/sites/' ~ s.id if s.id else '/sites/' }}" class="group rounded-lg border bg-surface-900/60 p-3 hover:border-brand-500/40 transition-all no-underline
             {% if s.tone == 'critical' %}border-red-500/30{% elif s.tone == 'warn' %}border-amber-500/20{% else %}border-surface-700{% endif %}">
             <div class="flex items-start gap-3">
                 <div class="relative w-11 h-11 flex-shrink-0">
