@@ -196,6 +196,47 @@ CLEARED_ALERTS = [{
 }]
 
 
+# Application-visibility rows, shaped from the live payload. The awkward parts
+# are deliberate: lastUsedTime is a STRING of epoch milliseconds, id is a
+# string, and tlsVersion/certificateExpiryDate/experience are the dead fields
+# that arrive on every real row and must never be rendered.
+RAW_APPLICATIONS = [
+    {"name": "Disney Plus", "id": "1201", "risk": "TRUSTWORTHY", "state": "ALLOWED",
+     "rxBytes": 4_250_000_000, "txBytes": 31_000_000, "categories": ["Streaming Media"],
+     "applicationHostType": "Public", "lastUsedTime": "1785009176957",
+     "destLocation": [{"countryCode": "US", "countryName": "United States"}],
+     "experience": {"groups": [{"count": 0, "name": "Poor"}, {"count": 0, "name": "Good"}]},
+     "tlsVersion": "", "certificateExpiryDate": ""},
+    # Big, flagged, and entirely legitimate — the false alarm a bytes-sorted
+    # watchlist would put at the top.
+    {"name": "githubcopilot.com", "id": "1202", "risk": "SUSPICIOUS", "state": "ALLOWED",
+     "rxBytes": 2_100_000_000, "txBytes": 4_000_000_000, "categories": ["Computer and Internet Info"],
+     "applicationHostType": "Public", "lastUsedTime": "1785009000000",
+     "destLocation": [{"countryCode": "US", "countryName": "United States"}],
+     "tlsVersion": "", "certificateExpiryDate": ""},
+    # Tiny, flagged, and unclassified — the row that actually wants a look.
+    {"name": "needost.shop", "id": "1203", "risk": "SUSPICIOUS", "state": "ALLOWED",
+     "rxBytes": 410_000, "txBytes": 250_000, "categories": ["Not Available"],
+     "applicationHostType": "Private", "lastUsedTime": "1785008000000",
+     "destLocation": [{"countryCode": "CA", "countryName": "Canada"}],
+     "tlsVersion": "", "certificateExpiryDate": ""},
+    {"name": "Apple Push Notification Service", "id": "1118", "risk": "MODERATE",
+     "state": "ALLOWED", "rxBytes": 12_891_752_573, "txBytes": 8_903_573,
+     "categories": ["Computer and Internet Info", "Web"], "applicationHostType": "Hybrid",
+     "lastUsedTime": "1785007000000",
+     "destLocation": [{"countryCode": "US", "countryName": "United States"}],
+     "tlsVersion": "", "certificateExpiryDate": ""},
+    {"name": "DNS", "id": "1010", "risk": "NOT_EVALUATED", "state": "ALLOWED",
+     "rxBytes": 4_340_000, "txBytes": 16_700_000, "categories": ["Network Protocols"],
+     "applicationHostType": "Public", "lastUsedTime": "1785006000000",
+     "destLocation": [], "tlsVersion": "", "certificateExpiryDate": ""},
+]
+
+# What one client talked to. Deliberately a strict subset — the drilldown must
+# not be able to pass by rendering the site-wide list.
+CLIENT_APPLICATIONS = [RAW_APPLICATIONS[0], RAW_APPLICATIONS[2]]
+
+
 @pytest.fixture
 def mock_central(monkeypatch):
     """Replace every central_bridge accessor the routes use with deterministic
@@ -259,6 +300,11 @@ def mock_central(monkeypatch):
     monkeypatch.setattr(cb, "list_insights", _async_return(list(INSIGHTS)))
     monkeypatch.setattr(cb, "list_client_onboarding_events", _async_return(list(ONBOARDING)))
     monkeypatch.setattr(cb, "list_all_alerts", _async_return(list(CLEARED_ALERTS)))
+
+    async def list_applications(site_id, start_iso, end_iso, client_id=None, **_kw):
+        return list(CLIENT_APPLICATIONS if client_id else RAW_APPLICATIONS)
+
+    monkeypatch.setattr(cb, "list_applications", list_applications)
     monkeypatch.setattr(cb, "get_site_health_summary", _async_return({"status": "ok"}))
     monkeypatch.setattr(cb, "get_tenant_health", _async_return({"status": "healthy"}))
     monkeypatch.setattr(cb, "get_client_details", _async_return({}))

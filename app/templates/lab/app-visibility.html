@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_header %}
+{% block title %}Application Visibility - Lab - New Central Portal{% endblock %}
+
+{% block content %}
+{{ page_header(
+     "Application Visibility",
+     subtitle="What is talking on this network, and what Aruba's DPI makes of it",
+     crumbs=[{"label": "Lab", "url": "/lab/"}, {"label": "Application Visibility"}]) }}
+
+{% if load_error %}
+<div class="card mb-6" style="border-color:rgba(239,68,68,.35);">
+    <p class="text-sm text-red-400">{{ load_error }}</p>
+</div>
+{% endif %}
+
+{# ── Window + site controls ── #}
+<div class="card card--flush mb-6">
+    <form method="get" class="flex items-center justify-between gap-3 flex-wrap px-5 py-4">
+        <div class="flex items-center gap-3 flex-wrap">
+            <label for="app-hours" class="text-xs text-slate-500">Window</label>
+            <select id="app-hours" name="hours" class="select select--auto text-xs"
+                    onchange="this.form.submit()">
+                {% for h, label in windows %}
+                <option value="{{ h }}" {% if h == hours %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            {% if sites|length > 1 %}
+            <label for="app-site" class="text-xs text-slate-500">Site</label>
+            <select id="app-site" name="site" class="select select--auto text-xs"
+                    onchange="this.form.submit()">
+                {% for s in sites %}
+                <option value="{{ s.id }}" {% if s.id == site_id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+            {% elif site_name %}
+            <input type="hidden" name="site" value="{{ site_id }}">
+            <span class="text-xs text-slate-600">Site &middot; {{ site_name }}</span>
+            {% endif %}
+        </div>
+        <p class="text-xs text-slate-600">
+            {{ apps|length }} application{{ 's' if apps|length != 1 }} seen
+        </p>
+    </form>
+</div>
+
+{# ── Risk posture ── the one field on this endpoint that is fully populated ── #}
+<div class="card mb-6">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <p class="section-label">Risk posture</p>
+        <span class="text-[11px] text-slate-600">classified by Aruba, not by this network</span>
+    </div>
+    {% if apps %}
+    <div class="flex items-center gap-2 flex-wrap">
+        {% for r in risk_strip %}
+        <span class="badge {{ r.tone }}">{{ r.label }} &middot; {{ r.count }}</span>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"><p>No applications seen in this window.</p></div>
+    {% endif %}
+</div>
+
+{# ── Watchlist ── the spine of the page ── #}
+<div class="card card--flush mb-6">
+    <div class="px-5 py-4 border-b border-surface-700">
+        <p class="text-sm font-semibold text-white">Watchlist</p>
+        <p class="text-xs text-slate-600 mt-0.5">
+            Applications Aruba rated suspicious or moderate. Split in two, because
+            the groups mean different things.
+        </p>
+    </div>
+
+    {% if watch_unknown %}
+    <div class="px-5 py-4 border-b border-surface-700">
+        <p class="section-label mb-1">Flagged and unclassified</p>
+        <p class="text-xs text-slate-600 mb-3">
+            Aruba could not say what these are and did not like them. Usually a
+            handful of rows, usually small — and the only genuinely actionable
+            thing here.
+        </p>
+        <div class="overflow-x-auto">
+            <table class="tbl tbl--wide">
+                <thead><tr>
+                    <th scope="col">Application</th><th scope="col">Risk</th>
+                    <th scope="col">Destination</th><th scope="col">Hosting</th>
+                    <th scope="col">Traffic</th>
+                </tr></thead>
+                <tbody>
+                    {% for a in watch_unknown %}
+                    <tr class="tbl-row">
+                        <td class="text-sm text-slate-200">{{ a.name }}</td>
+                        <td><span class="badge {{ a.risk_tone }}">{{ a.risk_label }}</span></td>
+                        <td class="text-xs text-slate-500">
+                            {{ a.countries|join(', ') if a.countries else '—' }}
+                        </td>
+                        <td class="text-xs text-slate-500">{{ a.host_type or '—' }}</td>
+                        <td class="text-xs font-mono text-slate-400">{{ a.total|filesizeformat }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if watch_known %}
+    <div class="px-5 py-4">
+        <div class="flex items-baseline justify-between gap-3 flex-wrap mb-1">
+            <p class="section-label">Flagged but recognised</p>
+            {% if watch_known_total > watch_known|length %}
+            <p class="text-xs text-slate-600">
+                Largest {{ watch_known|length }} of {{ watch_known_total }} by traffic
+            </p>
+            {% endif %}
+        </div>
+        <p class="text-xs text-slate-600 mb-3">
+            Aruba knows what these are and still rates them elevated. The rating is
+            vendor-wide, not tenant-aware, so expect tools your organisation
+            deliberately runs to appear here.
+        </p>
+        <div class="overflow-x-auto">
+            <table class="tbl tbl--wide">
+                <thead><tr>
+                    <th scope="col">Application</th><th scope="col">Risk</th>
+                    <th scope="col">Categories</th><th scope="col">Destination</th>
+                    <th scope="col">Traffic</th>
+                </tr></thead>
+                <tbody>
+                    {% for a in watch_known %}
+                    <tr class="tbl-row">
+                        <td class="text-sm text-slate-200">{{ a.name }}</td>
+                        <td><span class="badge {{ a.risk_tone }}">{{ a.risk_label }}</span></td>
+                        <td class="text-xs text-slate-500">{{ a.categories|join(', ') }}</td>
+                        <td class="text-xs text-slate-500">
+                            {{ a.countries|join(', ') if a.countries else '—' }}
+                        </td>
+                        <td class="text-xs font-mono text-slate-400">{{ a.total|filesizeformat }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif not watch_unknown %}
+    <div class="empty-state">
+        <p>Nothing flagged in this window.</p>
+        <p class="text-xs text-slate-600">
+            Every application Aruba saw was rated low risk or trustworthy.
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+{# ── Top talkers ── relative ranking only; see the caveat ── #}
+<div class="card card--flush mb-6">
+    <div class="px-5 py-4 border-b border-surface-700">
+        <p class="text-sm font-semibold text-white">Top talkers</p>
+        <p class="text-xs text-slate-600 mt-0.5">{{ bytes_caveat }}</p>
+    </div>
+    {% if talkers %}
+    <div class="overflow-x-auto">
+        <table class="tbl tbl--wide">
+            <thead><tr>
+                <th scope="col">Application</th><th scope="col">Share of largest</th>
+                <th scope="col">Down</th><th scope="col">Up</th><th scope="col">Risk</th>
+            </tr></thead>
+            <tbody>
+                {% for a, m in talkers %}
+                <tr class="tbl-row">
+                    <td>
+                        <span class="text-sm text-slate-200">{{ a.name }}</span>
+                        {% if a.categories %}
+                        <p class="text-xs text-slate-600">{{ a.categories|join(', ') }}</p>
+                        {% endif %}
+                    </td>
+                    <td style="min-width:190px;">
+                        <div class="meter-track" role="img"
+                             aria-label="{{ a.name }}: {{ a.total|filesizeformat }}, {{ m.pct }}% of the largest">
+                            <div class="meter-fill meter-fill--{{ m.tone }}" style="width: {{ m.fill_pct }}%"></div>
+                        </div>
+                        <p class="text-xs font-mono text-slate-500 mt-1">{{ a.total|filesizeformat }}</p>
+                    </td>
+                    <td class="text-xs font-mono text-slate-500">{{ a.rx|filesizeformat }}</td>
+                    <td class="text-xs font-mono text-slate-500">{{ a.tx|filesizeformat }}</td>
+                    <td><span class="badge {{ a.risk_tone }}">{{ a.risk_label }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><p>No traffic attributed in this window.</p></div>
+    {% endif %}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    {# ── Category rollup ── #}
+    <div class="card">
+        <p class="section-label mb-1">By category</p>
+        <p class="text-xs text-slate-600 mb-4">
+            An application counts in every category it carries, so these parts sum to
+            more than the whole. Bars are scaled against the largest category.
+        </p>
+        {% if categories %}
+        <div class="flex flex-col gap-4">
+            {% for c, m in categories %}
+            <div>
+                <div class="meter-head">
+                    <span class="text-xs text-slate-300">{{ c.name }}</span>
+                    <span class="text-xs font-mono text-slate-500">
+                        {{ c.total|filesizeformat }} &middot; {{ c.apps }} app{{ 's' if c.apps != 1 }}
+                    </span>
+                </div>
+                <div class="meter-track" role="img"
+                     aria-label="{{ c.name }}: {{ c.total|filesizeformat }}">
+                    <div class="meter-fill meter-fill--{{ m.tone }}" style="width: {{ m.fill_pct }}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state"><p>Nothing categorised in this window.</p></div>
+        {% endif %}
+    </div>
+
+    {# ── Per-client drilldown ── deferred, one upstream call on change ── #}
+    <div class="card">
+        <p class="section-label mb-1">By client</p>
+        <p class="text-xs text-slate-600 mb-4">
+            Pick a client to see what it talked to. Only this direction exists —
+            Central has no index from an application back to the clients using it.
+        </p>
+        {% if clients %}
+        <select class="select text-xs mb-4" aria-label="Client"
+                name="mac"
+                hx-get="/lab/app-visibility/client"
+                {# hx-include="this" is not redundant: it is what guarantees the
+                   selected MAC is sent. Relying on htmx's implicit "include the
+                   triggering input's own value" would make the drilldown depend
+                   on a default that is invisible in this markup. #}
+                hx-include="this"
+                hx-vals='{"hours": "{{ hours }}", "site": "{{ site_id }}"}'
+                hx-target="#client-apps" hx-swap="innerHTML"
+                hx-indicator="#client-apps-spinner">
+            <option value="">Choose a client&hellip;</option>
+            {% for c in clients %}
+            <option value="{{ c.mac }}">{{ c.hostname or c.mac }}{% if c.ip %} &middot; {{ c.ip }}{% endif %}</option>
+            {% endfor %}
+        </select>
+        <span id="client-apps-spinner" class="htmx-indicator text-xs text-slate-500">Loading&hellip;</span>
+        <div id="client-apps">
+            <div class="empty-state"><p>No client selected.</p></div>
+        </div>
+        {% else %}
+        <div class="empty-state"><p>No clients to choose from.</p></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
