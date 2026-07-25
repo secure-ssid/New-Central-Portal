@@ -245,12 +245,22 @@
                 hx-indicator="#client-apps-spinner">
             <option value="">Choose a client&hellip;</option>
             {% for c in clients %}
-            <option value="{{ c.mac }}">{{ c.hostname or c.mac }}{% if c.ip %} &middot; {{ c.ip }}{% endif %}</option>
+            <option value="{{ c.mac }}" {% if c.mac == client_mac %}selected{% endif %}>
+                {{ c.hostname or c.mac }}{% if c.ip %} &middot; {{ c.ip }}{% endif %}
+            </option>
             {% endfor %}
         </select>
         <span id="client-apps-spinner" class="htmx-indicator text-xs text-slate-500">Loading&hellip;</span>
         <div id="client-apps">
+            {% if client_mac %}
+            {# Rendered server-side for ?client=, so a link from a client page
+               lands on the answer instead of on an empty panel. #}
+            {% with mac = client_mac, rows = client_rows, error = client_error %}
+            {% include "lab/partials/client_apps.html" %}
+            {% endwith %}
+            {% else %}
             <div class="empty-state"><p>No client selected.</p></div>
+            {% endif %}
         </div>
         {% else %}
         <div class="empty-state"><p>No clients to choose from.</p></div>

@@ -17,6 +17,10 @@
             </span>
             Live
         </span>
+        {# This page shows only Active alerts — Central's own filter drops
+           Cleared ones, and on this tenant that is most of them. The resolved
+           history, with root cause and remediation, lives on /lab/activity. #}
+        <a href="/lab/activity" class="btn-secondary text-xs">Resolved history &rarr;</a>
         <a href="/notifications/" class="btn-secondary text-xs">Alert settings &rarr;</a>
     </div>
 </div>
