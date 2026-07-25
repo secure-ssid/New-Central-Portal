@@ -70,11 +70,18 @@ def _normalize_firmware_compliance(raw) -> dict:
         })
 
     compliant = sum(1 for r in rows if _is_compliant_status(r["status"]))
+    # "unknown" (no running or no recommended version) is not drift — counting
+    # it as "need attention" was what made this page claim 11 when the real
+    # drift is a handful.
+    unknown = sum(1 for r in rows
+                  if not _is_compliant_status(r["status"])
+                  and str(r["status"]).lower() in ("unknown", ""))
     return {
         "summary": {
             "total": len(rows),
             "compliant": compliant,
-            "non_compliant": max(0, len(rows) - compliant),
+            "unknown": unknown,
+            "non_compliant": max(0, len(rows) - compliant - unknown),
         },
         "rows": rows,
     }
@@ -91,11 +98,20 @@ async def nac_manager(request: Request):
         for r in raw:
             if not isinstance(r, dict):
                 continue
+            # The MAC-registration payload has none of description/status/role.
+            # Real keys: displayName, enable (bool), staticTags (list). Role has
+            # no equivalent at all — staticTags is the nearest thing.
+            tags = r.get("staticTags") or []
+            tag_labels = [t.get("name", "") if isinstance(t, dict) else str(t) for t in tags]
+            if "enable" in r:
+                status = "enabled" if r.get("enable") else "disabled"
+            else:
+                status = r.get("status") or r.get("registrationStatus") or ""
             registrations.append({
                 "mac": r.get("macAddress") or r.get("mac") or "",
-                "description": r.get("description") or r.get("name") or "",
-                "status": r.get("status") or r.get("registrationStatus") or "",
-                "role": r.get("role") or r.get("userRole") or "",
+                "description": r.get("displayName") or r.get("description") or r.get("name") or "",
+                "status": status,
+                "role": ", ".join(t for t in tag_labels if t) or r.get("role") or r.get("userRole") or "",
             })
     except Exception as exc:
         logger.warning("NAC registrations unavailable: %s", exc)
