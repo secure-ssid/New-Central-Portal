@@ -183,9 +183,8 @@ async def password_change(
 @router.get("/chat")
 async def chat_page(request: Request):
     """Network chatbot experiment - ask Claude about your network."""
-    github_token_set = bool(
-        settings.github_token and settings.github_token != "your_github_pat_here"
-    )
+    from config import is_placeholder
+    github_token_set = not is_placeholder(settings.github_token)
     return templates.TemplateResponse(
         request,
         "lab/chat.html",
@@ -196,7 +195,8 @@ async def chat_page(request: Request):
 @router.post("/chat")
 async def chat_submit(request: Request, message: str = Form(...)):
     """Handle chat messages with RAG context + MCP tool calling."""
-    if not settings.github_token or settings.github_token == "your_github_pat_here":
+    from config import is_placeholder
+    if is_placeholder(settings.github_token):
         return templates.TemplateResponse(
             request,
             "lab/partials/chat_message.html",
@@ -215,8 +215,12 @@ async def chat_submit(request: Request, message: str = Form(...)):
         docs = await search_docs(message, top_k=8)
         logger.info("[RAG] returned %s docs, first: %s", len(docs) if docs else 0, docs[0] if docs else 'none')
         if docs and "error" not in docs[0]:
-            # Filter to only reasonably relevant results (score > 0.60)
-            good_docs = [d for d in docs if d.get("score", 0) > 0.60]
+            # Keep results scoring within half of the best hit. The absolute
+            # scale differs per RAG backend (LanceDB RRF fusion ≈ 0.01–0.03,
+            # Redis cosine+boost ≈ 0–1), so a fixed cutoff like the old 0.60
+            # silently discards everything under LanceDB.
+            top_score = max((d.get("score", 0) for d in docs), default=0)
+            good_docs = [d for d in docs if d.get("score", 0) >= top_score * 0.5] if top_score > 0 else []
             logger.info("[RAG] good_docs count: %s", len(good_docs))
             if good_docs:
                 snippets = []

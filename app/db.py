@@ -5,6 +5,7 @@ lazily on first use (get_pool), so the app can start without Postgres.
 """
 import logging
 import os
+import threading
 from typing import Callable
 
 from psycopg2.extras import RealDictCursor
@@ -13,7 +14,8 @@ from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
-_pool: pool.SimpleConnectionPool | None = None
+_pool: pool.ThreadedConnectionPool | None = None
+_pool_lock = threading.Lock()
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://netlab:netlab@db:5432/netlab"
@@ -32,14 +34,24 @@ def _parse_dsn(url: str) -> dict:
     }
 
 
-def get_pool() -> pool.SimpleConnectionPool:
+def get_pool() -> pool.ThreadedConnectionPool:
+    """Return the shared pool, creating it once.
+
+    ThreadedConnectionPool (not SimpleConnectionPool): this module is reached
+    from the uvicorn event loop, the starlette threadpool AND three APScheduler
+    threads. The simple pool takes no locks, so concurrent getconn() can hand
+    the same connection to two threads. The double-checked lock likewise stops
+    two threads each building a pool and one being leaked.
+    """
     global _pool
     if _pool is None:
-        try:
-            _pool = pool.SimpleConnectionPool(1, 5, **_parse_dsn(DATABASE_URL))
-        except Exception:
-            logger.exception("Failed to create database connection pool")
-            raise
+        with _pool_lock:
+            if _pool is None:
+                try:
+                    _pool = pool.ThreadedConnectionPool(1, 10, **_parse_dsn(DATABASE_URL))
+                except Exception:
+                    logger.exception("Failed to create database connection pool")
+                    raise
     return _pool
 
 
