@@ -688,9 +688,27 @@ async def device_mac_table(request: Request, serial: str, interface: str = Form(
 
 # ── Device Management: group & site assignment ──────────────────────────────
 
+async def _json_body(request: Request) -> tuple[dict | None, JSONResponse | None]:
+    """Parse a JSON request body, or return a 400 instead of raising.
+
+    An unparseable or non-object body used to propagate straight out of the
+    handler as an unhandled 500 — a malformed request reported as a server
+    fault, and a stack trace in the log for something the caller got wrong.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return None, JSONResponse({"error": "Request body must be valid JSON."}, status_code=400)
+    if not isinstance(body, dict):
+        return None, JSONResponse({"error": "Request body must be a JSON object."}, status_code=400)
+    return body, None
+
+
 @router.post("/assign-group")
 async def assign_group(request: Request):
-    body = await request.json()
+    body, err = await _json_body(request)
+    if err:
+        return err
     group_name = body.get("group_name", "").strip()
     serials = body.get("serial_numbers", [])
     if not group_name or not serials:
@@ -705,7 +723,9 @@ async def assign_group(request: Request):
 
 @router.post("/assign-site")
 async def assign_site(request: Request):
-    body = await request.json()
+    body, err = await _json_body(request)
+    if err:
+        return err
     serials = body.get("serial_numbers", [])
     site_id = body.get("site_id")
     device_type = body.get("device_type", "").strip() or "IAP"
