@@ -12,6 +12,48 @@ import db
 logger = logging.getLogger(__name__)
 
 
+def _bucket_for(days_left: int, thresholds: list[int]) -> int | None:
+    """The warning gate an item is actually sitting in, or None if not due yet.
+
+    Thresholds are "days until expiry" gates (default 90,60,30,15) and the test
+    is ``days_left <= threshold``, so an item matches EVERY gate at or above its
+    remaining life. The band it is really in is therefore the TIGHTEST match.
+
+    Both callers used to scan ``sorted(thresholds, reverse=True)`` and break on
+    the first hit, which takes the LOOSEST — so an item that first appeared at
+    85 days was bucketed at 90 and stayed bucketed at 90 through 59, 29, 14 and
+    past expiry. Combined with a dedup row keyed on that threshold, each item
+    got exactly one email in its whole life, at the coarsest gate it ever
+    crossed, and was then silent right through expiring. Escalation was
+    impossible, which is what the "90, 60, 30, 15 day warnings" copy on the
+    settings page and the ``threshold`` column in notifications_sent both
+    assume works.
+    """
+    matching = [t for t in thresholds if days_left <= t]
+    return min(matching) if matching else None
+
+
+def _expiry_dedup_id(identity: str, expires_at: datetime) -> str:
+    """Dedup key identifying the EVENT: what expires, and when.
+
+    ``notifications_sent`` is UNIQUE(source_type, source_id, threshold,
+    recipient) and nothing ever deletes from it — there is no TTL, no retention
+    job and no admin reset. So whatever goes in source_id suppresses that alert
+    permanently.
+
+    The old keys carried no event identity at all: subscriptions used the
+    constant ``f"batch_{threshold}d"``, meaning one 90-day batch email per
+    recipient for the lifetime of the database, and SSL used the bare hostname,
+    so a host went silent forever after its first certificate. Keying on the
+    expiry instant means a renewal (new end date, new notAfter) starts a fresh
+    ladder, while re-runs within the same expiry event stay suppressed.
+
+    ``_fire_down_alert`` already used this shape (``serial@timestamp``); this is
+    the same idea applied to the expiry paths.
+    """
+    return f"{identity}@{expires_at.astimezone(timezone.utc):%Y%m%d}"
+
+
 def _parse_thresholds() -> list[int]:
     """Parse the thresholds setting defensively (ignore junk values)."""
     out = []
@@ -95,7 +137,7 @@ def _send_email(to: str, subject: str, html_body: str):
 
 # ── Subscription expiry check ────────────────────────────────────────────────
 
-def check_subscriptions(subs: list[dict] | None = None):
+def check_subscriptions(subs: list[dict] | None = None, now: datetime | None = None):
     """Check GLP subscriptions for upcoming expirations.
     
     If subs is None, fetches them (only works outside an async event loop).
@@ -120,7 +162,9 @@ def check_subscriptions(subs: list[dict] | None = None):
             logger.error("Failed to fetch GLP subscriptions: %s", e)
             return []
 
-    now = datetime.now(timezone.utc)
+    # Injectable so the escalation ladder can be tested by advancing the
+    # clock rather than by waiting 75 days. Matches run_device_status_check.
+    now = now or datetime.now(timezone.utc)
     alerts = []
 
     # Group expiring subs by threshold per recipient — one email per threshold
@@ -153,38 +197,48 @@ def check_subscriptions(subs: list[dict] | None = None):
         sub_key = sub.get("key", "unknown")
         tier = sub.get("tier") or sub.get("subscriptionType") or ""
 
-        for threshold in sorted(thresholds, reverse=True):
-            if days_left <= threshold:
-                expiring_by_threshold.setdefault(threshold, []).append({
-                    "key": sub_key, "tier": tier, "days_left": days_left,
-                    "end_date": end_str[:10], "quantity": qty,
-                    "available": avail, "in_use": in_use,
-                })
-                break
+        threshold = _bucket_for(days_left, thresholds)
+        if threshold is None:
+            continue
+        # GLP gives every subscription a stable id and key; prefer id, and pair
+        # it with the expiry date so an extended subscription alerts again.
+        identity = str(sub.get("id") or sub_key or "unknown").strip() or "unknown"
+        expiring_by_threshold.setdefault(threshold, []).append({
+            "key": sub_key, "tier": tier, "days_left": days_left,
+            "end_date": end_str[:10], "quantity": qty,
+            "available": avail, "in_use": in_use,
+            "dedup_id": _expiry_dedup_id(identity, end_date),
+        })
 
-    # Send one grouped email per threshold per recipient
+    # One grouped email per threshold per recipient, but deduped per
+    # SUBSCRIPTION. The old batch key was the constant f"batch_{threshold}d",
+    # so once any subscription had triggered a given gate for a recipient, no
+    # future subscription could ever trigger that gate again for them.
     for threshold, sub_list in sorted(expiring_by_threshold.items(), reverse=True):
+        sub_list.sort(key=lambda s: s["days_left"])
         for recip in recipients:
             email = recip["email"]
-            # Use a batch key so we don't re-send the same threshold batch
-            batch_key = f"batch_{threshold}d"
-            if db.was_notified("subscription_batch", batch_key, threshold, email):
+            pending = [
+                s for s in sub_list
+                if not db.was_notified("subscription", s["dedup_id"], threshold, email)
+            ]
+            if not pending:
                 continue
 
-            sub_list.sort(key=lambda s: s["days_left"])
-            min_days = sub_list[0]["days_left"]
-            subject = f"⚠️ {len(sub_list)} GreenLake Subscriptions Expiring — {min_days} days"
-            html = _sub_batch_email_html(sub_list, threshold)
+            min_days = pending[0]["days_left"]
+            subject = f"⚠️ {len(pending)} GreenLake Subscriptions Expiring — {min_days} days"
+            html = _sub_batch_email_html(pending, threshold)
             sent = _send_email(email, subject, html)
 
             if sent:
-                db.record_notification(
-                    "subscription_batch", batch_key, threshold, email,
-                    f"{len(sub_list)} subs, earliest {min_days}d left"
-                )
+                for s in pending:
+                    db.record_notification(
+                        "subscription", s["dedup_id"], threshold, email,
+                        f"{s['key']} expires {s['end_date']}, {s['days_left']}d left"
+                    )
             alerts.append({
-                "type": "subscription_batch", "id": batch_key,
-                "count": len(sub_list), "threshold": threshold,
+                "type": "subscription", "id": f"batch_{threshold}d",
+                "count": len(pending), "threshold": threshold,
                 "recipient": email, "sent": sent,
             })
     return alerts
@@ -232,7 +286,25 @@ def _sub_batch_email_html(subs: list[dict], threshold: int) -> str:
 
 # ── SSL certificate expiry check ────────────────────────────────────────────
 
-def check_ssl_certs():
+def _probe_cert(hostname: str, port: int, timeout: int = 10) -> datetime:
+    """Return a live certificate's notAfter as an aware UTC datetime.
+
+    Split out from check_ssl_certs purely so the expiry ladder can be tested
+    without a TLS server: this is the one line in that function that touches
+    the network, and leaving it inline meant the escalation and dedup logic
+    around it had no test at all.
+    """
+    ctx = ssl.create_default_context()
+    with socket.create_connection((hostname, port), timeout=timeout) as sock:
+        with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
+            cert = ssock.getpeercert()
+    # Format: 'Dec 31 23:59:59 2025 GMT'
+    return datetime.strptime(
+        cert.get("notAfter", ""), "%b %d %H:%M:%S %Y %Z"
+    ).replace(tzinfo=timezone.utc)
+
+
+def check_ssl_certs(now: datetime | None = None):
     """Check configured SSL endpoints for certificate expiration."""
     if db.get_setting("check_ssl") != "true":
         return []
@@ -247,7 +319,9 @@ def check_ssl_certs():
     if not recipients or not thresholds:
         return []
 
-    now = datetime.now(timezone.utc)
+    # Injectable so the escalation ladder can be tested by advancing the
+    # clock rather than by waiting 75 days. Matches run_device_status_check.
+    now = now or datetime.now(timezone.utc)
     alerts = []
 
     for host in hosts:
@@ -259,40 +333,42 @@ def check_ssl_certs():
             port = 443
 
         try:
-            ctx = ssl.create_default_context()
-            with socket.create_connection((hostname, port), timeout=10) as sock:
-                with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
-                    cert = ssock.getpeercert()
-            not_after_str = cert.get("notAfter", "")
-            # Format: 'Dec 31 23:59:59 2025 GMT'
-            not_after = datetime.strptime(not_after_str, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+            not_after = _probe_cert(hostname, port)
         except Exception as e:
             logger.error("SSL check failed for %s: %s", host, e)
             continue
 
         days_left = (not_after - now).days
 
-        for threshold in sorted(thresholds, reverse=True):
-            if days_left <= threshold:
-                for recip in recipients:
-                    email = recip["email"]
-                    if db.was_notified("ssl_cert", hostname, threshold, email):
-                        continue
+        threshold = _bucket_for(days_left, thresholds)
+        if threshold is None:
+            continue
 
-                    subject = f"🔒 SSL Certificate Expiring in {days_left} Days — {hostname}"
-                    html = _ssl_email_html(hostname, port, days_left, threshold, not_after)
-                    sent = _send_email(email, subject, html)
+        # Scoped to host:port AND the certificate's own expiry. Keyed on the
+        # bare hostname, a host went permanently silent after its first
+        # certificate: on renewal days_left jumps back to a year, and when it
+        # next reaches 90 the year-old row is still there. The port matters too
+        # — 443 and 8443 on one host previously shared a single dedup namespace.
+        cert_id = _expiry_dedup_id(f"{hostname.lower()}:{port}", not_after)
 
-                    if sent:
-                        db.record_notification(
-                            "ssl_cert", hostname, threshold, email,
-                            f"Cert expires {not_after.strftime('%Y-%m-%d')}, {days_left}d left"
-                        )
-                    alerts.append({
-                        "type": "ssl_cert", "id": hostname, "days_left": days_left,
-                        "threshold": threshold, "recipient": email, "sent": sent,
-                    })
-                break
+        for recip in recipients:
+            email = recip["email"]
+            if db.was_notified("ssl_cert", cert_id, threshold, email):
+                continue
+
+            subject = f"🔒 SSL Certificate Expiring in {days_left} Days — {hostname}"
+            html = _ssl_email_html(hostname, port, days_left, threshold, not_after)
+            sent = _send_email(email, subject, html)
+
+            if sent:
+                db.record_notification(
+                    "ssl_cert", cert_id, threshold, email,
+                    f"Cert expires {not_after.strftime('%Y-%m-%d')}, {days_left}d left"
+                )
+            alerts.append({
+                "type": "ssl_cert", "id": cert_id, "days_left": days_left,
+                "threshold": threshold, "recipient": email, "sent": sent,
+            })
     return alerts
 
 

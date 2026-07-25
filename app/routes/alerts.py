@@ -6,6 +6,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from starlette.concurrency import run_in_threadpool
 
+from alert_severity import (
+    ALERT_FETCH_LIMIT,
+    count_severities,
+    normalize_central_alert,
+    normalize_severity,
+)
 from pagination import filter_items, paginate as _paginate
 
 import db
@@ -51,33 +57,15 @@ def _time_ago(value) -> str:
     return f"{hours // 24}d ago"
 
 
-def _severity_class(sev: str) -> str:
-    s = (sev or "").lower()
-    if s in ("critical", "crit"):
-        return "critical"
-    if s in ("major", "high", "warning", "warn"):
-        return "major"
-    if s in ("minor", "medium", "low"):
-        return "minor"
-    return "other"
+# Severity vocabulary and the Central payload mapping now live in
+# alert_severity so the dashboard, this hub and the ticker cannot disagree.
+_severity_class = normalize_severity
 
 
 def _normalize_central_alert(raw: dict) -> dict:
-    time_raw = raw.get("timeAt") or raw.get("createdAt") or raw.get("timestamp") or ""
-    device = raw.get("deviceName") or raw.get("device_name") or raw.get("serialNumber") or ""
-    serial = raw.get("serialNumber") or raw.get("serial") or raw.get("device_serial") or ""
-    return {
-        "source": "central",
-        "id": raw.get("id") or raw.get("alertId") or raw.get("alert_id") or "",
-        "title": raw.get("title") or raw.get("alertName") or raw.get("name") or "Alert",
-        "body": raw.get("description") or raw.get("message") or "",
-        "severity": _severity_class(str(raw.get("severity") or raw.get("alertSeverity") or "")),
-        "device": device,
-        "device_serial": serial,
-        "site": raw.get("siteName") or raw.get("site_name") or "",
-        "time": time_raw,
-        "time_ago": _time_ago(time_raw),
-    }
+    alert = normalize_central_alert(raw)
+    alert["time_ago"] = _time_ago(alert["time"])
+    return alert
 
 
 def _normalize_portal_alert(raw: dict) -> dict:
@@ -114,15 +102,9 @@ async def _load_alerts_context(
 
     try:
         from vendors.central_bridge import list_active_alerts
-        raw = await list_active_alerts(limit=100)
+        raw = await list_active_alerts(limit=ALERT_FETCH_LIMIT)
         all_central = [_normalize_central_alert(a) for a in raw if isinstance(a, dict)]
-        for alert in all_central:
-            sev = alert.get("severity", "other")
-            summary["total"] += 1
-            if sev in summary:
-                summary[sev] += 1
-            else:
-                summary["other"] += 1
+        summary = count_severities(all_central)
         filtered = all_central
         if severity_filter:
             filtered = [a for a in filtered if a.get("severity") == severity_filter]
@@ -136,24 +118,39 @@ async def _load_alerts_context(
     try:
         # This page polls itself every 60s, so keep the blocking psycopg2 read
         # off the event loop.
-        raw_history = await run_in_threadpool(db.get_notification_history, limit=50)
+        # in_app_notifications, NOT notifications_sent. _normalize_portal_alert
+        # reads created_at/title/body/severity/device_serial, which are exactly
+        # this table's columns — notifications_sent has none of them (it is
+        # id, source_type, source_id, threshold, sent_at, recipient, details),
+        # so every portal card rendered as an empty "Portal notification".
+        #
+        # This is also the alert engine's real portal-side output, it carries
+        # the friendly device name, and it has no per-recipient fan-out — the
+        # email ledger writes one row per recipient, so N recipients meant N
+        # near-identical cards for one event. The email ledger is still shown,
+        # with its own columns and a Recipient column, at /notifications/.
+        raw_history = await run_in_threadpool(db.get_in_app_notifications, limit=50)
         portal_history = [
             _normalize_portal_alert(h) for h in raw_history if isinstance(h, dict)
         ]
+        if severity_filter:
+            portal_history = [
+                p for p in portal_history if p.get("severity") == severity_filter
+            ]
         if q:
             portal_history = filter_items(portal_history, q, "title", "body", "device", "device_serial")
     except Exception as exc:
         logger.warning("Portal notification history unavailable: %s", exc)
 
     timeline = sorted(
-        filtered + ([] if severity_filter else portal_history),
+        filtered + portal_history,
         key=lambda a: _parse_time(a.get("time")) or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )[:30]
 
     ctx = {
         "central_alerts": central_alerts,
-        "portal_history": portal_history if not severity_filter else [],
+        "portal_history": portal_history,
         "timeline": timeline,
         "summary": summary,
         "severity_filter": severity_filter or "",

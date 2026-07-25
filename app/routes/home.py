@@ -7,6 +7,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from alert_severity import ALERT_FETCH_LIMIT, count_severities, normalize_severity
 from vendors.aruba_central import aruba
 
 from templates_shared import templates
@@ -20,7 +21,8 @@ EVENT_FANOUT_DEVICES = 5
 EVENT_FEED_LIMIT = 10
 EVENT_LOOKBACK_HOURS = 24
 HEALTH_CHECK_OFFLINE_LIMIT = 5
-ALERT_SUMMARY_LIMIT = 50
+# Kept as a name for readability; the value is shared with the alerts hub.
+ALERT_SUMMARY_LIMIT = ALERT_FETCH_LIMIT
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -153,22 +155,13 @@ async def _recent_events(devices: list[dict]) -> list[dict]:
 
 
 def _count_active_alerts(alerts: list[dict]) -> dict:
-    """Summarise alert severities for the dashboard stat strip."""
-    summary = {"total": 0, "critical": 0, "major": 0, "minor": 0, "other": 0}
-    for alert in alerts:
-        if not isinstance(alert, dict):
-            continue
-        summary["total"] += 1
-        sev = str(alert.get("severity") or alert.get("alertSeverity") or "").lower()
-        if sev in ("critical", "crit"):
-            summary["critical"] += 1
-        elif sev in ("major", "high"):
-            summary["major"] += 1
-        elif sev in ("minor", "medium", "low"):
-            summary["minor"] += 1
-        else:
-            summary["other"] += 1
-    return summary
+    """Summarise alert severities for the dashboard stat strip.
+
+    Shared with the alerts hub. This used to be a private copy that omitted the
+    warning/warn -> major branch, so a "Warning" alert was counted as *other*
+    here and *major* on the hub — the same alerts, two different numbers.
+    """
+    return count_severities(alerts)
 
 
 def _health_issue_label(health_payload: dict | None) -> str | None:
@@ -462,15 +455,9 @@ def _enrich_site_cards(cards: list[dict], devices: list[dict]) -> list[dict]:
     return enriched
 
 
-def _severity_class(sev: str) -> str:
-    s = (sev or "").lower()
-    if s in ("critical", "crit"):
-        return "critical"
-    if s in ("major", "high", "warning", "warn"):
-        return "major"
-    if s in ("minor", "medium", "low"):
-        return "minor"
-    return "other"
+# Was a verbatim duplicate of the alerts hub's copy, itself different from
+# _count_active_alerts above. One definition now.
+_severity_class = normalize_severity
 
 
 def _render_live_fragment(request: Request, context: dict) -> HTMLResponse:
