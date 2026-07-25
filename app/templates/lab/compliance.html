@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_header %}
+{% block title %}Compliance Board - Lab - New Central Portal{% endblock %}
+
+{% block content %}
+{{ page_header(
+     "Compliance Board",
+     subtitle="Firmware drift, config health, and Central's own recommendations",
+     crumbs=[{"label": "Lab", "url": "/lab/"}, {"label": "Compliance Board"}]) }}
+
+{% if load_error %}
+<div class="card mb-6" style="border-color:rgba(239,68,68,.35);">
+    <p class="text-sm text-red-400">{{ load_error }}</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <p class="section-label mb-1">Firmware drift</p>
+        <p class="text-3xl font-bold {% if drift_count %}text-amber-400{% else %}text-green-400{% endif %}">{{ drift_count }}</p>
+        <p class="text-xs text-slate-600 mt-1">of {{ firmware|length }} device{{ 's' if firmware|length != 1 }}</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Config unsynced</p>
+        <p class="text-3xl font-bold {% if unsynced_count %}text-amber-400{% else %}text-green-400{% endif %}">{{ unsynced_count }}</p>
+        <p class="text-xs text-slate-600 mt-1">of {{ health|length }} device{{ 's' if health|length != 1 }}</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Insights</p>
+        <p class="text-3xl font-bold text-brand-500">{{ insights|length }}</p>
+        <p class="text-xs text-slate-600 mt-1">from Central</p>
+    </div>
+    <div class="stat-card">
+        <p class="section-label mb-1">Devices</p>
+        <p class="text-3xl font-bold text-white">{{ firmware|length }}</p>
+        <p class="text-xs text-slate-600 mt-1">reporting firmware</p>
+    </div>
+</div>
+
+<div class="card card--flush mb-6">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
+        <p class="text-sm font-semibold text-white">Firmware</p>
+        <span class="text-[10px] text-slate-600 uppercase tracking-wider">running vs recommended</span>
+    </div>
+    {% if firmware %}
+    <div class="overflow-x-auto">
+        <table class="tbl tbl--wide">
+            <thead><tr>
+                <th scope="col">Device</th><th scope="col">Running</th>
+                <th scope="col">Recommended</th><th scope="col">Assessment</th>
+            </tr></thead>
+            <tbody>
+                {% for r in firmware %}
+                <tr class="tbl-row">
+                    <td>
+                        <a href="/devices/{{ r.serial }}" class="text-slate-200 hover:text-brand-400">{{ r.name }}</a>
+                        <p class="text-xs text-slate-600 font-mono">{{ r.serial }}</p>
+                    </td>
+                    <td class="font-mono text-xs">{{ r.current or '—' }}</td>
+                    <td class="font-mono text-xs {% if r.drift %}text-amber-400{% else %}text-slate-500{% endif %}">
+                        {{ r.recommended or '—' }}
+                    </td>
+                    <td class="text-xs">
+                        {% if r.drift %}
+                        <span class="topo-badge topo-badge--warn">Update available</span>
+                        {% else %}
+                        <span class="text-slate-600">{{ r.classification or 'Up to date' }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><p>No firmware information returned.</p></div>
+    {% endif %}
+</div>
+
+<div class="card card--flush mb-6">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-surface-700">
+        <p class="text-sm font-semibold text-white">Config health</p>
+    </div>
+    {% if health %}
+    <div class="overflow-x-auto">
+        <table class="tbl tbl--wide">
+            <thead><tr>
+                <th scope="col">Device</th><th scope="col">Group</th>
+                <th scope="col">Config</th><th scope="col">Active issues</th>
+            </tr></thead>
+            <tbody>
+                {% for r in health %}
+                <tr class="tbl-row">
+                    <td>
+                        <span class="text-slate-200">{{ r.name }}</span>
+                        <p class="text-xs text-slate-600">{{ r.type }}</p>
+                    </td>
+                    <td class="text-xs text-slate-500">{{ r.group or '—' }}</td>
+                    <td>
+                        {% if r.synced %}
+                        <span class="status-badge-online">Synchronized</span>
+                        {% else %}
+                        <span class="status-badge-offline">{{ r.config_status or 'Unknown' }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs">
+                        {% if r.issues %}
+                        <button type="button" class="btn-secondary btn--sm"
+                                hx-get="/lab/compliance/{{ r.serial }}/issues"
+                                hx-target="#issues-{{ loop.index }}" hx-swap="innerHTML">
+                            {{ r.issues|length }} issue{{ 's' if r.issues|length != 1 }}
+                        </button>
+                        <div id="issues-{{ loop.index }}" class="mt-2"></div>
+                        {% else %}
+                        <span class="text-slate-600">None</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><p>No config-health information returned.</p></div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <p class="section-label mb-4">Central Insights</p>
+    {% if insights %}
+    <div class="flex flex-col gap-3">
+        {% for i in insights %}
+        <div class="panel">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <p class="text-sm font-semibold text-slate-100">{{ i.title or 'Insight' }}</p>
+                {% if i.category %}
+                <span class="topo-badge">{{ i.category }}</span>
+                {% endif %}
+            </div>
+            {% if i.description %}
+            <p class="text-xs text-slate-500 mt-2 leading-relaxed">{{ i.description }}</p>
+            {% endif %}
+            {% if i.impactedSites %}
+            <p class="text-[11px] text-slate-600 mt-2">
+                {% for s in i.impactedSites %}{{ s.siteName or s.siteId }}{% if not loop.last %}, {% endif %}{% endfor %}
+            </p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"><p>Central returned no insights for this tenant.</p></div>
+    {% endif %}
+</div>
+{% endblock %}

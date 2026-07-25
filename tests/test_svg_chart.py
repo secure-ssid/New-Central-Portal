@@ -107,8 +107,25 @@ def test_baseline_starts_at_zero_by_default():
     assert build_chart([mk(values=(40.0, 50.0))]).y_lo == 0.0
 
 
-def test_y_axis_uses_nice_ceilings():
-    assert build_chart([mk(values=(0.0, 23.7))]).y_hi in (25.0, 50.0)
+def test_y_axis_snaps_to_a_round_tick_interval():
+    chart = build_chart([mk(values=(0.0, 23.7))])
+    assert chart.y_hi == 30.0                       # step 10 -> 0/10/20/30
+    labels = [label for _, label in chart.y_ticks]
+    assert labels == ["0%", "10%", "20%", "30%"], labels
+
+
+def test_a_narrow_high_range_does_not_waste_the_plot():
+    """A 25.5-28C temperature series must not be drawn on a 0-50C axis, which
+    is what deriving the ceiling from the absolute value does."""
+    chart = build_chart([mk("temperature", "C", (25.5, 26.0, 28.0))],
+                        baseline_zero=False)
+    assert chart.y_lo >= 24.0 and chart.y_hi <= 30.0, (chart.y_lo, chart.y_hi)
+
+
+def test_a_zero_based_axis_still_starts_at_zero():
+    chart = build_chart([mk("poe", "W", (84.9, 88.0, 740.0))], y_min=0)
+    assert chart.y_lo == 0
+    assert 740.0 <= chart.y_hi <= 800.0
 
 
 def test_series_beyond_the_cap_are_dropped_not_recoloured():
@@ -152,7 +169,15 @@ def test_x_axis_is_labelled_utc_not_silently_local():
 
 def test_ticks_are_generated():
     chart = build_chart([mk(values=(1.0, 50.0))], y_ticks=4, x_ticks=3)
-    assert len(chart.y_ticks) == 5 and len(chart.x_ticks) == 4
+    assert len(chart.y_ticks) >= 3 and len(chart.x_ticks) == 4
+
+
+def test_tick_labels_are_round_numbers():
+    """Snapping the bounds but dividing the range equally puts labels at 7.5."""
+    for values in [(0.0, 23.7), (25.5, 28.0), (0.0, 740.0), (3.0, 97.0)]:
+        chart = build_chart([mk("x", "", values)], baseline_zero=False)
+        for _, label in chart.y_ticks:
+            assert "." not in label or label.endswith(".5"), (values, label)
 
 
 # ── Bars ─────────────────────────────────────────────────────────────────────

@@ -574,6 +574,38 @@ def add_in_app_notification(title: str, body: str = "", severity: str = "info",
     )
 
 
+def get_device_status_history(limit: int = 100, serial: str | None = None) -> list[dict]:
+    """Device up/down transitions, newest first.
+
+    Written on every transition by the alerting sweep; nothing has ever read it.
+    Note an empty result is the NORMAL state on a stable fleet — it means no
+    device has changed state, not that anything is broken, and the caller must
+    render those two cases differently.
+    """
+    if serial:
+        rows = fetchall(
+            "SELECT * FROM device_status_history WHERE serial = %s "
+            "ORDER BY changed_at DESC, id DESC LIMIT %s", (serial, limit))
+    else:
+        rows = fetchall(
+            "SELECT * FROM device_status_history ORDER BY changed_at DESC, id DESC "
+            "LIMIT %s", (limit,))
+    for r in rows:
+        if hasattr(r.get("changed_at"), "isoformat"):
+            r["changed_at"] = r["changed_at"].isoformat()
+    return rows
+
+
+def get_audit_log(limit: int = 100) -> list[dict]:
+    """Portal state-changing requests, newest first."""
+    rows = fetchall(
+        "SELECT * FROM audit_log ORDER BY created_at DESC, id DESC LIMIT %s", (limit,))
+    for r in rows:
+        if hasattr(r.get("created_at"), "isoformat"):
+            r["created_at"] = r["created_at"].isoformat()
+    return rows
+
+
 def get_in_app_notifications(limit: int = 15) -> list[dict]:
     return fetchall(
         "SELECT * FROM in_app_notifications ORDER BY created_at DESC, id DESC LIMIT %s",

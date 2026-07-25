@@ -119,6 +119,83 @@ def _async_return(value):
     return _fn
 
 
+
+# ── Fixtures for the new Lab tools ───────────────────────────────────────────
+# Shapes captured from the live tenant: AP trends are graph/ISO/int, switch
+# trends are response.switchMetrics/epoch-ms/str, and every envelope carries a
+# non-empty errors[] even on success.
+
+AP_TRENDS = {"graph": {"keys": ["cpu_utilization"], "samples": [
+    {"timestamp": "2026-07-25T12:30:00Z", "data": [7]},
+    {"timestamp": "2026-07-25T12:35:00Z", "data": [9]}]}}
+
+SWITCH_TRENDS = {"response": {"metric": "SwitchDeviceTrends",
+    "keys": ["cpuUtilization", "memoryUtilization", "systemTemperature",
+             "poeAvailable", "poeConsumption", "powerConsumption", "totalPowerConsumption"],
+    "switchMetrics": [{"serialNumber": "SW1SERIAL", "samples": [
+        {"timestamp": 1784982600000, "data": ["21", "17", "25.5", "740", "84.4", "97.37", "181.77"]},
+        {"timestamp": 1784982900000, "data": ["23", "17", "26.0", "740", "84.9", "97.99", "182.10"]}]}]}}
+
+IFACE_TRENDS = {"response": {"id": "SW1SERIAL", "interfaceId": "1/1/3",
+    "metric": "SwitchNetworkInterfaceTrends",
+    "keys": ["rxBytes", "txBytes", "inErrors", "outErrors"],
+    "samples": [{"timestamp": 1784982600000, "data": ["100", "200", "3", "0"]},
+                {"timestamp": 1784982900000, "data": ["150", "260", "5", "0"]}]}}
+
+SWITCH_DETAILS = {"model": "CX-6300M", "deviceName": "core-sw-1", "health": "Good",
+    "firmwareVersion": "FL.10.17.1010", "status": "Online",
+    "lastRestartReason": "Power loss or fault",
+    "switchTrends": [{"cpuUtilization": 22, "memoryUtilization": 17,
+                      "systemTemperature": 28, "poeAvailable": 740,
+                      "poeConsumption": 84.9, "powerConsumption": 97.99,
+                      "totalPowerConsumption": 182.89}]}
+
+SWITCH_POE = [{"id": "1/1/12", "interfaceId": "1/1/12",
+               "powerDrawnInWatts": 10.0, "powerDeniedCount": 0.0}]
+
+# untaggedPorts is null on a real row — it must render as a dash, not "None".
+SWITCH_VLANS = [{"id": "1", "name": "DEFAULT_VLAN_1", "type": "Default",
+                 "status": "Up", "interfaces": ["1/1/14"],
+                 "taggedPorts": ["1/1/22"], "untaggedPorts": None}]
+
+FIRMWARE_ROWS = [
+    {"serialNumber": "SW1SERIAL", "deviceName": "core-sw-1",
+     "recommendedVersion": "10.17.1020", "firmwareVersion": "FL.10.17.1010",
+     "firmwareClassification": "Firmware with bug fixes available",
+     "upgradeStatus": "DEVICE_UPGRADE_STATE_COMPLETE"},
+    {"serialNumber": "AP1SERIAL", "deviceName": "lobby-ap-1",
+     "recommendedVersion": "", "firmwareVersion": "10.8.0.1",
+     "firmwareClassification": "No recommendation"},
+]
+
+# The real serial lives in "serial"; this payload's serialNumber is always null.
+CONFIG_HEALTH = [
+    {"serial": "SW1SERIAL", "serialNumber": None, "name": "core-sw-1",
+     "type": "Switch", "configStatus": "SYNCHRONIZED", "activeIssues": [],
+     "deviceGroupName": "Wired"},
+    {"serial": "AP1SERIAL", "serialNumber": None, "name": "lobby-ap-1",
+     "type": "Access Point", "configStatus": "OUT_OF_SYNC",
+     "activeIssues": ["Config push failed"], "deviceGroupName": "Wireless"},
+]
+
+INSIGHTS = [{"category": "Wireless", "title": "Access Point Firmware Recommendation",
+             "description": "New firmware recommendation available for 6 access points.",
+             "impactedSites": [{"siteId": "1", "siteName": "HQ"}]}]
+
+ONBOARDING = [{"clientMacAddress": "00:0c:29:a9:45:38", "sourceType": "Wired Client",
+               "timeAt": "2026-07-25T18:15:36.638Z",
+               "description": "Client onboarding info on vlan 200"}]
+
+CLEARED_ALERTS = [{
+    "id": "alert-1", "name": "Config Out of Sync", "severity": "Critical",
+    "status": "Cleared", "category": "System", "priority": "Very High",
+    "deviceType": "SWITCH", "siteName": "HQ", "createdAt": "2026-07-24T10:00:00Z",
+    "summary": "Device core-sw-1 configuration is out of sync with Central",
+    "action": [{"rootCause": ['{"text": "A configuration push did not complete."}'],
+                "solution": ['{"text": "Resync the device configuration."}']}],
+}]
+
+
 @pytest.fixture
 def mock_central(monkeypatch):
     """Replace every central_bridge accessor the routes use with deterministic
@@ -166,6 +243,22 @@ def mock_central(monkeypatch):
     monkeypatch.setattr(cb, "get_glp_subscriptions", _async_return([]))
     monkeypatch.setattr(cb, "get_alerts", _async_return([]))
     monkeypatch.setattr(cb, "list_active_alerts", _async_return([]))
+    # New Lab tools. Stub these here or a page-renders test falls through to a
+    # real import and starts failing on an unrelated change.
+    monkeypatch.setattr(cb, "get_ap_trends", _async_return(dict(AP_TRENDS)))
+    monkeypatch.setattr(cb, "get_switch_hardware_trends", _async_return(dict(SWITCH_TRENDS)))
+    monkeypatch.setattr(cb, "get_switch_interface_trends", _async_return(dict(IFACE_TRENDS)))
+    monkeypatch.setattr(cb, "get_switch_details", _async_return(dict(SWITCH_DETAILS)))
+    monkeypatch.setattr(cb, "get_switch_interface_poe", _async_return(list(SWITCH_POE)))
+    monkeypatch.setattr(cb, "get_switch_vlans", _async_return(list(SWITCH_VLANS)))
+    monkeypatch.setattr(cb, "get_switch_spanning_tree", _async_return({"output": {"results": []}}))
+    monkeypatch.setattr(cb, "get_cx_arp_table", _async_return({"output": {"results": []}}))
+    monkeypatch.setattr(cb, "list_firmware_upgrades", _async_return(list(FIRMWARE_ROWS)))
+    monkeypatch.setattr(cb, "list_devices_config_health", _async_return(list(CONFIG_HEALTH)))
+    monkeypatch.setattr(cb, "get_device_config_issues", _async_return({}))
+    monkeypatch.setattr(cb, "list_insights", _async_return(list(INSIGHTS)))
+    monkeypatch.setattr(cb, "list_client_onboarding_events", _async_return(list(ONBOARDING)))
+    monkeypatch.setattr(cb, "list_all_alerts", _async_return(list(CLEARED_ALERTS)))
     monkeypatch.setattr(cb, "get_site_health_summary", _async_return({"status": "ok"}))
     monkeypatch.setattr(cb, "get_tenant_health", _async_return({"status": "healthy"}))
     monkeypatch.setattr(cb, "get_client_details", _async_return({}))
@@ -258,6 +351,11 @@ def stub_db(monkeypatch, bell_store):
     monkeypatch.setattr(db_module, "get_report_settings",
                         lambda: {"id": 1, "enabled": False, "frequency": "daily",
                                  "hour": 8, "last_sent": None})
+    # Empty by default: an empty timeline is the NORMAL state on a stable
+    # fleet, and the page must render it differently from a DB failure.
+    monkeypatch.setattr(db_module, "get_device_status_history",
+                        lambda limit=100, serial=None: [])
+    monkeypatch.setattr(db_module, "get_audit_log", lambda limit=100: [])
     monkeypatch.setattr(db_module, "ping", lambda: True)
     return bell_store
 

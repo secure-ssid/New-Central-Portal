@@ -288,3 +288,66 @@ body.noc-mode .stat-card .text-3xl { font-size: 2.75rem; }
 /* Flush card that sits directly under a tab bar — squares off the top corners
    so the two read as one surface. */
 .card--joined-top { border-top-left-radius:0; border-top-right-radius:0; }
+
+/* ── Charts ─────────────────────────────────────────────────────────────────
+   Geometry comes pre-computed from app/svg_chart.py; this is only presentation.
+
+   The three series colours were COMPUTED, not chosen: the dataviz validator
+   failed an eyeballed first guess on the lightness band, and failed the
+   portal's existing orange/blue/purple tints on colourblind separation at
+   deltaE 1.3 — indistinguishable to a red-green colourblind reader. These pass
+   all five checks against the card surface (#131824), worst pair deltaE 13.6
+   deutan / 26.4 normal. Re-run scripts/validate_palette.js before changing them.
+   -------------------------------------------------------------------------- */
+.chart { margin:0; }
+.chart-title { font-size:.65rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#64748b; margin-bottom:8px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.chart-subtitle { font-size:.62rem; font-weight:500; letter-spacing:.02em; text-transform:none; color:#475569; }
+.chart-svg { display:block; width:100%; height:auto; overflow:visible; }
+.chart-empty { padding:28px 16px; }
+
+.chart-grid { stroke:#1e2535; stroke-width:1; }
+.chart-tick { fill:#5a677d; font-size:9px; font-family:inherit; }
+.chart-line { fill:none; stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+.chart-dot { stroke:#131824; stroke-width:2; }
+.chart-bar { fill:#ea580c; }
+
+.chart-line--1 { stroke:#ea580c; }
+.chart-line--2 { stroke:#0891b2; }
+.chart-line--3 { stroke:#9333ea; }
+.chart-dot--1 { fill:#ea580c; }
+.chart-dot--2 { fill:#0891b2; }
+.chart-dot--3 { fill:#9333ea; }
+.chart-swatch--1 { background:#ea580c; }
+.chart-swatch--2 { background:#0891b2; }
+.chart-swatch--3 { background:#9333ea; }
+
+/* The legend is the data readout — these charts have no hover layer, so a
+   value must never be reachable only by hovering. */
+.chart-legend { display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:10px; }
+.chart-key { display:flex; align-items:center; gap:7px; font-size:.7rem; }
+.chart-swatch { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+.chart-key-label { color:#e2e8f0; font-weight:600; }
+.chart-key-stats { color:#64748b; font-variant-numeric:tabular-nums; }
+.chart-table { margin-top:10px; }
+.chart-table summary { font-size:.68rem; color:#64748b; cursor:pointer; }
+.chart-table summary:hover { color:#94a3b8; }
+.chart-table > div { margin-top:8px; max-height:260px; overflow-y:auto; }
+
+/* ── Meter (PoE budget and similar headroom reads) ──────────────────────── */
+.meter { margin-top:4px; }
+.meter-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:6px; }
+.meter-label { font-size:.65rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#64748b; }
+.meter-value { font-size:.75rem; font-weight:600; font-variant-numeric:tabular-nums; color:#e2e8f0; }
+.meter-value--warn { color:#fbbf24; }
+.meter-value--crit { color:#f87171; }
+.meter-value--unknown { color:#64748b; }
+.meter-track { height:10px; border-radius:9999px; background:#0d1117; border:1px solid #1e2535; overflow:hidden; }
+.meter-fill { height:100%; border-radius:9999px; transition:width .3s ease; }
+.meter-fill--ok { background:#0891b2; }
+.meter-fill--warn { background:#f59e0b; }
+.meter-fill--crit { background:#ef4444; }
+.meter-fill--unknown { background:#334155; }
+
+/* ── Small-multiple grid ────────────────────────────────────────────────── */
+.chart-grid-2 { display:grid; grid-template-columns:1fr; gap:16px; }
+@media (min-width: 900px) { .chart-grid-2 { grid-template-columns:repeat(2, minmax(0, 1fr)); } }

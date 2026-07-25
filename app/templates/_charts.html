@@ -1,0 +1,117 @@
+{#
+  Chart macros. All geometry arrives pre-computed from app/svg_chart.py — these
+  only turn numbers into elements, so escaping stays here and the maths stays
+  testable in Python.
+
+  There is no hover layer (that would need JS), so the legend and the table view
+  ARE the readout: a value must never be reachable only by hovering.
+#}
+
+{% macro line_chart(chart) %}
+<figure class="chart">
+  {% if chart.title %}
+  <figcaption class="chart-title">
+    {{ chart.title }}
+    {% if chart.subtitle %}<span class="chart-subtitle">{{ chart.subtitle }}</span>{% endif %}
+  </figcaption>
+  {% endif %}
+
+  {% if chart.empty %}
+  <div class="empty-state chart-empty"><p>{{ chart.note }}</p></div>
+  {% else %}
+  <svg class="chart-svg" viewBox="0 0 {{ chart.geom.width }} {{ chart.geom.height }}"
+       preserveAspectRatio="xMidYMid meet" role="img" aria-label="{{ chart.aria_label }}">
+    <title>{{ chart.aria_label }}</title>
+    {% for y, label in chart.y_ticks %}
+    <line class="chart-grid" x1="{{ chart.geom.x0 }}" x2="{{ chart.geom.x1 }}"
+          y1="{{ y }}" y2="{{ y }}"/>
+    <text class="chart-tick" x="{{ chart.geom.pad_left - 6 }}" y="{{ y + 3 }}"
+          text-anchor="end">{{ label }}</text>
+    {% endfor %}
+    {% for x, label in chart.x_ticks %}
+    <text class="chart-tick" x="{{ x }}" y="{{ chart.geom.height - 7 }}"
+          text-anchor="middle">{{ label }}</text>
+    {% endfor %}
+    {% for line in chart.lines %}
+      {% for pts in line.segments %}
+      <polyline class="chart-line chart-line--{{ line.slot }}" points="{{ pts }}"/>
+      {% endfor %}
+      {% for cx, cy in line.dots %}
+      <circle class="chart-dot chart-dot--{{ line.slot }}" cx="{{ cx }}" cy="{{ cy }}" r="4"/>
+      {% endfor %}
+    {% endfor %}
+  </svg>
+
+  <div class="chart-legend">
+    {% for line in chart.lines %}
+    <span class="chart-key">
+      <span class="chart-swatch chart-swatch--{{ line.slot }}" aria-hidden="true"></span>
+      <span class="chart-key-label">{{ line.label }}</span>
+      <span class="chart-key-stats">now {{ line.last_s }} &middot; min {{ line.vmin_s }}
+        &middot; avg {{ line.avg_s }} &middot; max {{ line.vmax_s }}</span>
+    </span>
+    {% endfor %}
+  </div>
+
+  <details class="chart-table">
+    <summary>Table view</summary>
+    <div class="overflow-x-auto">
+      <table class="tbl text-xs">
+        <thead><tr>{% for h in chart.headers %}<th scope="col">{{ h }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in chart.rows %}
+          <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+</figure>
+{% endmacro %}
+
+
+{% macro bar_chart(chart) %}
+<figure class="chart">
+  {% if chart.title %}<figcaption class="chart-title">{{ chart.title }}</figcaption>{% endif %}
+  {% if chart.empty %}
+  <div class="empty-state chart-empty"><p>{{ chart.note }}</p></div>
+  {% else %}
+  <svg class="chart-svg" viewBox="0 0 {{ chart.geom.width }} {{ chart.geom.height }}"
+       preserveAspectRatio="xMidYMid meet" role="img" aria-label="{{ chart.aria_label }}">
+    <title>{{ chart.aria_label }}</title>
+    {% for y, label in chart.y_ticks %}
+    <text class="chart-tick" x="{{ chart.geom.pad_left - 6 }}" y="{{ y + 3 }}"
+          text-anchor="end">{{ label }}</text>
+    {% endfor %}
+    <line class="chart-grid" x1="{{ chart.geom.x0 }}" x2="{{ chart.geom.x1 }}"
+          y1="{{ chart.geom.y1 }}" y2="{{ chart.geom.y1 }}"/>
+    {% for rect in chart.lines[0].segments %}
+      {% set parts = rect.split(',') %}
+      <rect class="chart-bar" x="{{ parts[0] }}" y="{{ parts[1] }}"
+            width="{{ parts[2] }}" height="{{ parts[3] }}" rx="1"/>
+    {% endfor %}
+  </svg>
+  <div class="chart-legend">
+    <span class="chart-key">
+      <span class="chart-key-label">{{ chart.lines[0].label }}</span>
+      <span class="chart-key-stats">peak {{ chart.lines[0].vmax_s }}
+        &middot; total window avg {{ chart.lines[0].avg_s }}</span>
+    </span>
+  </div>
+  {% endif %}
+</figure>
+{% endmacro %}
+
+
+{% macro meter(m, label) %}
+<div class="meter">
+  <div class="meter-head">
+    <span class="meter-label">{{ label }}</span>
+    <span class="meter-value meter-value--{{ m.tone }}">{{ m.label }}</span>
+  </div>
+  <div class="meter-track" role="img" aria-label="{{ label }}: {{ m.label }}">
+    <div class="meter-fill meter-fill--{{ m.tone }}" style="width: {{ m.fill_pct }}%"></div>
+  </div>
+</div>
+{% endmacro %}
