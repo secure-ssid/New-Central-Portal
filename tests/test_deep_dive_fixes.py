@@ -604,3 +604,39 @@ def test_named_vlans_none_when_scope_unresolved(monkeypatch):
         assert asyncio.run(cb.list_named_vlans()) is None
     finally:
         cb.clear_bridge_cache()
+
+
+# ── Device Groups panel on /platform/config (new feature) ────────────────────
+
+def test_config_page_shows_device_groups(client, mock_central, stub_db):
+    r = client.get("/platform/config")
+    assert r.status_code == 200
+    assert "Device Groups" in r.text
+    assert "Wireless" in r.text and ">8<" in r.text
+
+
+def test_config_device_groups_wrapper_parses_new_api_shape(monkeypatch):
+    import sys
+    import types
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+
+    def list_device_groups(*a, **k):
+        return {"items": [
+            {"scopeName": "Wireless", "deviceCount": 8, "description": ""},
+            {"scopeName": "Switches", "deviceCount": 1, "description": "core"},
+            {"scopeName": "Empty", "deviceCount": 0, "description": ""}]}
+
+    config = types.ModuleType("mcp_servers.config")
+    config.list_device_groups = list_device_groups
+    pkg = types.ModuleType("mcp_servers")
+    pkg.config = config
+    monkeypatch.setitem(sys.modules, "mcp_servers", pkg)
+    monkeypatch.setitem(sys.modules, "mcp_servers.config", config)
+    try:
+        groups = asyncio.run(cb.list_config_device_groups())
+        # Sorted by device_count desc.
+        assert [g["name"] for g in groups] == ["Wireless", "Switches", "Empty"]
+        assert groups[0]["device_count"] == 8
+    finally:
+        cb.clear_bridge_cache()
