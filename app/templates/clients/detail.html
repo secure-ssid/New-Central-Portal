@@ -48,7 +48,7 @@
             {% if client.connected_at %}
             <div class="text-right">
                 <p class="section-label">Connected Since</p>
-                <p class="text-xs text-slate-400 mt-1">{{ client.connected_at[:19].replace('T',' ') }}</p>
+                <p class="text-xs text-slate-400 mt-1">{{ client.connected_at[:19].replace('T',' ') }}{% if connected_ago %} <span class="text-slate-500">({{ connected_ago }})</span>{% endif %}</p>
             </div>
             {% endif %}
         </div>

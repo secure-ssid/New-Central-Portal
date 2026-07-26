@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request, HTTPException
 from pagination import filter_items, paginate as _paginate
+from timeutil import relative_age_of
 from vendors.aruba_central import aruba
 
 from templates_shared import templates
@@ -175,6 +176,7 @@ async def client_detail(request: Request, mac: str):
         "clients/detail.html",
         {
             "client": client,
+            "connected_ago": relative_age_of(client.get("connected_at")),
             "uplink": uplink,
             "client_details": client_details if isinstance(client_details, dict) else None,
             "detail_fields": _dict_fields(

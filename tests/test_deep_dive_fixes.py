@@ -889,7 +889,7 @@ def test_config_group_links_to_the_device_groups_panel(client, mock_central, stu
 
 def test_relative_age_buckets():
     from datetime import datetime, timezone
-    from routes.devices import _relative_age
+    from timeutil import relative_age as _relative_age
     now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
     day = 86400
     base = now.timestamp()
@@ -911,3 +911,15 @@ def test_config_info_includes_relative_age():
     info = _device_config_info({"health": [{"configStatus": "SYNCHRONIZED",
                                             "lastConfigTimestamp": str(ts_ms)}]}, now=now)
     assert info["last_changed_ago"] == "10 days ago"
+
+
+def test_relative_age_of_parses_iso_and_epoch():
+    from datetime import datetime, timezone
+    from timeutil import relative_age_of
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    assert relative_age_of("2026-07-25T12:00:00Z", now=now) == "7 days ago"
+    assert relative_age_of("2026-07-11T12:00:00Z", now=now) == "3 weeks ago"
+    assert relative_age_of(None, now=now) is None
+    # epoch ms also accepted (via timeseries.to_epoch_seconds).
+    ms = int((now.timestamp() - 3 * 86400) * 1000)
+    assert relative_age_of(ms, now=now) == "3 days ago"
