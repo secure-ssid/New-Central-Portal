@@ -5,6 +5,36 @@ Notable changes to the New Central Portal. Newest first. See
 
 ## 2026-07-25
 
+### Fixed — diagnostics, rendering & robustness
+
+- **Diagnostic panels** (LLDP, ARP, MAC table, spanning tree) render the actual
+  command output instead of a raw JSON dump of the ops-job envelope.
+- **LLDP and Find-MAC** work on AOS-CX — they were sending command strings the
+  switch rejects (`show lldp neighbors` plural, `show mac-address-table address`).
+- **Ping** shows reachability stats (packets, loss, round-trip) coloured by
+  whether the host actually replied, instead of a raw dict painted red.
+- **Switch MAC table** lists real entries instead of a single blank row.
+- **AP wireless card** shows real RF telemetry — per-radio utilization, noise
+  floor and channel quality, a working channel-utilization summary, and a
+  populated metrics panel.
+- **Running-config viewer** works (`show running-config` over the ops CLI), with
+  credential material masked on both config pages.
+- **JSON POST routes** return a clean 400 instead of a 500 when a field is the
+  wrong type.
+- **HTML pages** show a themed 400 page for a bad query parameter instead of raw
+  422 JSON (API/HTMX callers still get JSON).
+- **Gateways** show "no trend data" instead of blank chart cards.
+- The **notifications** page renders its database-unavailable banner; **`asset_url`**
+  no longer re-hashes the CSS on every render; the **Lab MCP tester** caches its
+  dispatch so re-clicking a tool no longer trips the rate limiter; the startup
+  **cache warm** now populates the keys the routes actually read.
+
+### Added — configuration surface
+
+- **Named VLANs** and **Device Groups** panels on `/platform/config`, surfacing
+  config data the portal collected but never displayed. `/platform/config` is now
+  a config overview: firmware compliance, device groups, VLANs, running-config.
+
 ### Fixed — configuration & API audit batch
 
 - **Site / device-type filtering** now happens client-side. Central `400`s on
