@@ -183,8 +183,19 @@ class TestAlertAndHealthHelpers:
         assert summary["minor"] == 1
 
     def test_health_issue_label_from_list(self):
-        label = _health_issue_label({"health": [{"status": "OUT_OF_SYNC"}]})
-        assert label == "OUT_OF_SYNC"
+        # The real signal is topPriorityIssue, not a status key.
+        label = _health_issue_label({"health": [{"topPriorityIssue": "Config Out of Sync"}]})
+        assert label == "Config Out of Sync"
+
+    def test_health_issue_label_none_when_healthy(self):
+        # A healthy device (topPriorityIssue "-", no active issues) has no label
+        # — the old code falsely returned "issue reported" for every device.
+        assert _health_issue_label({"health": [
+            {"topPriorityIssue": "-", "activeIssues": []}]}) is None
+
+    def test_health_issue_label_counts_active_issues(self):
+        assert _health_issue_label({"health": [
+            {"topPriorityIssue": "-", "activeIssues": ["a", "b"]}]}) == "2 active issues"
 
     def test_health_issue_label_none_when_empty(self):
         assert _health_issue_label({"health": []}) is None

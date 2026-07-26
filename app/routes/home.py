@@ -164,22 +164,35 @@ def _count_active_alerts(alerts: list[dict]) -> dict:
     return count_severities(alerts)
 
 
+_NO_ISSUE = {"", "-", "—", "none", "n/a", "na", "healthy", "ok"}
+
+
 def _health_issue_label(health_payload: dict | None) -> str | None:
-    """Extract a short human label from a get_device_health response."""
+    """A short issue label from a get_device_health response, or None if healthy.
+
+    The payload carries the real signal in topPriorityIssue / activeIssues, not
+    a status/healthStatus/state key (which do not exist) — so the old code fell
+    back to "issue reported" for EVERY device, healthy ones included. Return the
+    actual issue, or None when there is none (no false badge).
+    """
     if not isinstance(health_payload, dict):
         return None
     health = health_payload.get("health")
-    if health is None:
-        return None
     if isinstance(health, list):
-        if not health:
-            return None
-        first = health[0] if isinstance(health[0], dict) else {}
-        status = first.get("status") or first.get("healthStatus") or first.get("state")
-        return str(status) if status else "issue reported"
-    if isinstance(health, dict):
-        status = health.get("status") or health.get("healthStatus") or health.get("state")
-        return str(status) if status else None
+        first = next((e for e in health if isinstance(e, dict)), None)
+    elif isinstance(health, dict):
+        first = health
+    else:
+        first = None
+    if not first:
+        return None
+    issue = str(first.get("topPriorityIssue") or "").strip()
+    if issue and issue.lower() not in _NO_ISSUE:
+        return issue
+    active = first.get("activeIssues")
+    if isinstance(active, list) and active:
+        n = len(active)
+        return f"{n} active issue{'s' if n != 1 else ''}"
     return None
 
 
