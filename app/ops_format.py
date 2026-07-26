@@ -39,6 +39,43 @@ def format_ops_pre(text: str, *, monospace: bool = True) -> HTMLResponse:
     )
 
 
+def _render_ops_job(result: dict) -> HTMLResponse | None:
+    """Render the ops async-job envelope, or None if this isn't one.
+
+    centralmcp's show/diagnostic tools return
+    ``{status, output: {commands, results: [{command, output}]}, ...}`` — the
+    command output is nested two levels down under ``output.results[].output``,
+    not a top-level string. format_ops_response's string-key scan skips it
+    (``output`` is a dict), so without this every LLDP/ARP/MAC/STP panel fell
+    through to a raw JSON dump. Secrets are masked in case a show command
+    carries them.
+    """
+    output = result.get("output")
+    if not isinstance(output, dict):
+        return None
+    results = output.get("results")
+    if not isinstance(results, list) or not results:
+        return None
+    parts = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        cmd = str(item.get("command", "")).strip()
+        body = mask_config_secrets(str(item.get("output", "")).strip())
+        if not cmd and not body:
+            continue
+        head = (
+            f"<p style='font-size:.65rem;color:#f97316;margin-bottom:4px;"
+            f"font-weight:700;'>{html.escape(cmd)}</p>"
+        ) if cmd else ""
+        parts.append(
+            head + f"<pre style='font-size:.72rem;color:#94a3b8;white-space:pre-wrap;"
+            f"word-break:break-all;margin-bottom:12px;'>"
+            f"{html.escape(body or '(no output)')}</pre>"
+        )
+    return HTMLResponse("".join(parts)) if parts else None
+
+
 def format_ops_response(result) -> HTMLResponse:
     """Prefer structured tables/lists; avoid dumping raw dict repr to users."""
     if result is None:
@@ -46,6 +83,11 @@ def format_ops_response(result) -> HTMLResponse:
 
     if isinstance(result, str):
         return format_ops_pre(result)
+
+    if isinstance(result, dict):
+        job = _render_ops_job(result)
+        if job is not None:
+            return job
 
     if isinstance(result, list):
         if not result:

@@ -223,3 +223,39 @@ def test_masking_is_a_noop_on_clean_config():
     src = "hostname core-sw-1\nvlan 200\n    name data"
     assert mask_config_secrets(src) == src
     assert mask_config_secrets("") == ""
+
+
+# ── format_ops_response unwraps the ops-job envelope ─────────────────────────
+
+def test_ops_job_envelope_renders_command_output_not_raw_json():
+    """The show/diagnostic tools nest output under output.results[].output.
+    Before, this fell through to a raw JSON dump."""
+    from ops_format import format_ops_response
+    envelope = {
+        "status": "COMPLETED",
+        "output": {"commands": ["show lldp neighbor"],
+                   "results": [{"command": "show lldp neighbor",
+                                "output": "Total Neighbor Entries : 10"}]},
+        "errors": [],
+    }
+    body = format_ops_response(envelope).body.decode()
+    assert "Total Neighbor Entries : 10" in body
+    assert "show lldp neighbor" in body
+    assert '"status"' not in body and "COMPLETED" not in body  # no raw JSON dump
+
+
+def test_ops_job_masks_secrets_in_command_output():
+    from ops_format import format_ops_response
+    envelope = {"output": {"results": [
+        {"command": "show running-config",
+         "output": "user admin password ciphertext AQBsecretblob123"}]}}
+    body = format_ops_response(envelope).body.decode()
+    assert "AQBsecretblob123" not in body
+    assert "password ciphertext" in body
+
+
+def test_ops_job_falls_through_when_not_a_job_envelope():
+    """A plain structured dict must still render as a key/value table."""
+    from ops_format import format_ops_response
+    body = format_ops_response({"model": "CX6300", "uptime": "5d"}).body.decode()
+    assert "CX6300" in body and "uptime" in body
