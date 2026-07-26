@@ -90,10 +90,15 @@ class TrendSet:
 
     @property
     def ok(self) -> bool:
-        return self.error is None and bool(self.series)
+        # A series with zero real data points (n == 0) is not "present" — the
+        # AP trend endpoints answer HTTP 200 on a gateway with a well-formed
+        # payload whose every sample is [None]. Without this, ok is True, has()
+        # is True, and the page builds empty chart cards instead of rendering
+        # the "no trend data" state.
+        return self.error is None and any(s.n > 0 for s in self.series.values())
 
     def has(self, *keys: str) -> bool:
-        return all(k in self.series for k in keys)
+        return all(k in self.series and self.series[k].n > 0 for k in keys)
 
     def pick(self, *keys: str) -> list[Series]:
         """Series in the order asked for, silently skipping absent ones."""

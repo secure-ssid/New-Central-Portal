@@ -640,3 +640,40 @@ def test_config_device_groups_wrapper_parses_new_api_shape(monkeypatch):
         assert groups[0]["device_count"] == 8
     finally:
         cb.clear_bridge_cache()
+
+
+# ── All-None trend series render the empty state, not blank charts ───────────
+
+def test_all_none_series_counts_as_absent():
+    """The AP trend endpoints answer 200 on a gateway with every sample [None];
+    such a series must not build an empty chart card."""
+    from timeseries import Point, Series, TrendSet
+
+    dead = Series.build("cpu", "cpuUtilization", "CPU", "%",
+                        [Point(1, None), Point(2, None)])
+    ts = TrendSet(serial="GW", series={"cpu": dead})
+    assert dead.n == 0
+    assert ts.has("cpu") is False
+    assert ts.ok is False          # route renders the "no trend data" state
+
+    live = Series.build("cpu", "cpuUtilization", "CPU", "%",
+                        [Point(1, 5.0), Point(2, 7.0)])
+    ts2 = TrendSet(serial="AP", series={"cpu": live})
+    assert ts2.has("cpu") is True and ts2.ok is True
+
+
+def test_gateway_device_scope_shows_no_trend_data_not_blank_charts(
+        client, mock_central, stub_db, monkeypatch):
+    """A gateway whose trends are all-None must render the empty state."""
+    from vendors import central_bridge as cb
+
+    async def all_none(*a, **k):
+        return {"graph": {"keys": ["cpu_utilization"], "samples": [
+            {"timestamp": "2026-07-25T12:30:00Z", "data": [None]},
+            {"timestamp": "2026-07-25T12:35:00Z", "data": [None]}]}}
+
+    monkeypatch.setattr(cb, "get_ap_trends", all_none)
+    r = client.get("/lab/device-scope?serial=GW1SERIAL")
+    assert r.status_code == 200
+    assert "No trend data" in r.text
+    assert "<polyline" not in r.text     # no empty chart drawn
