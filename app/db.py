@@ -528,7 +528,9 @@ def record_notification(source_type: str, source_id: str, threshold: int, recipi
 
 def get_notification_history(limit: int = 100) -> list[dict]:
     rows = fetchall(
-        "SELECT * FROM notifications_sent ORDER BY sent_at DESC LIMIT %s", (limit,)
+        # id DESC tiebreak (like every sibling getter) so same-second rows
+        # order deterministically instead of by scan order.
+        "SELECT * FROM notifications_sent ORDER BY sent_at DESC, id DESC LIMIT %s", (limit,)
     )
     for r in rows:
         if hasattr(r.get("sent_at"), "isoformat"):
