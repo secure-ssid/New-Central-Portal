@@ -102,3 +102,20 @@ def test_non_object_json_is_a_client_error(client, mock_central, stub_db, path):
 def test_empty_body_is_a_client_error(client, mock_central, stub_db, path):
     r = client.post(path, content=b"", headers={"content-type": "application/json"})
     assert r.status_code == 400, f"{path} returned {r.status_code} for an empty body"
+
+
+# ── Type-confused fields (valid JSON object, wrong field types) ──────────────
+# The body parses fine and is an object, but a field is the wrong type. Reading
+# it as a string/list used to reach .strip()/int() and 500 with an HTML page.
+
+@pytest.mark.parametrize("path,body", [
+    ("/devices/assign-group", {"group_name": 123, "serial_numbers": ["X"]}),
+    ("/devices/assign-group", {"group_name": "g", "serial_numbers": "notalist"}),
+    ("/devices/assign-site", {"serial_numbers": ["X"], "site_id": "not-an-int"}),
+    ("/devices/assign-site", {"serial_numbers": "X", "site_id": 5}),
+    ("/lab/greenlake/assign-subscription", {"serial_number": ["a"], "subscription_id": "s"}),
+    ("/lab/greenlake/add-device", {"serial_number": {"o": 1}, "mac_address": "m"}),
+])
+def test_type_confused_field_is_a_client_error_not_a_500(client, mock_central, stub_db, path, body):
+    r = client.post(path, json=body)
+    assert r.status_code == 400, f"{path} returned {r.status_code} for {body}"

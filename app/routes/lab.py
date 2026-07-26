@@ -1558,13 +1558,31 @@ async def _json_body(request: Request) -> tuple[dict | None, JSONResponse | None
     return body, None
 
 
+def _field_str(body: dict, key: str) -> str:
+    """A trimmed string for a JSON field, tolerant of non-string values.
+
+    Reading `body.get(key, "").strip()` 500s when the caller sends the field as
+    a number or list. Coerce scalars to their string form and treat
+    list/dict/None as absent (which the handlers' "required" check turns into a
+    clean 400) instead of letting .strip() raise.
+    """
+    v = body.get(key)
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, bool):
+        return ""
+    if isinstance(v, (int, float)):
+        return str(v)
+    return ""
+
+
 @router.post("/greenlake/assign-subscription")
 async def assign_subscription(request: Request):
     body, err = await _json_body(request)
     if err:
         return err
-    serial = body.get("serial_number", "").strip()
-    sub_id = body.get("subscription_id", "").strip()
+    serial = _field_str(body, "serial_number")
+    sub_id = _field_str(body, "subscription_id")
     if not serial or not sub_id:
         return JSONResponse({"ok": False, "error": "serial_number and subscription_id are required"}, status_code=400)
     try:
@@ -1581,7 +1599,7 @@ async def unassign_subscription(request: Request):
     body, err = await _json_body(request)
     if err:
         return err
-    serial = body.get("serial_number", "").strip()
+    serial = _field_str(body, "serial_number")
     if not serial:
         return JSONResponse({"ok": False, "error": "serial_number is required"}, status_code=400)
     try:
@@ -1598,8 +1616,8 @@ async def add_device(request: Request):
     body, err = await _json_body(request)
     if err:
         return err
-    serial = body.get("serial_number", "").strip()
-    mac = body.get("mac_address", "").strip()
+    serial = _field_str(body, "serial_number")
+    mac = _field_str(body, "mac_address")
     if not serial or not mac:
         return JSONResponse({"ok": False, "error": "serial_number and mac_address are required"}, status_code=400)
     try:
@@ -1647,9 +1665,10 @@ async def assign_to_central(request: Request):
     body, err = await _json_body(request)
     if err:
         return err
-    serials = body.get("serial_numbers", [])
+    serials = body.get("serial_numbers")
+    serials = serials if isinstance(serials, list) else []
     if not serials:
-        serial = body.get("serial_number", "").strip()
+        serial = _field_str(body, "serial_number")
         if serial:
             serials = [serial]
     if not serials:
