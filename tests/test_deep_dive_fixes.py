@@ -877,3 +877,11 @@ def test_device_config_info_none_when_no_data():
     assert _device_config_info(None) is None
     assert _device_config_info({"health": []}) is None
     assert _device_config_info({"health": [{"configStatus": ""}]}) is None
+
+
+def test_config_group_links_to_the_device_groups_panel(client, mock_central, stub_db):
+    detail = client.get("/devices/SW1SERIAL").text
+    assert 'href="/platform/config#device-groups"' in detail
+    # And the anchor target exists on the config page.
+    cfg = client.get("/platform/config").text
+    assert 'id="device-groups"' in cfg
