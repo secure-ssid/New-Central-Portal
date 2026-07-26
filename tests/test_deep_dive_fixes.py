@@ -197,3 +197,29 @@ def test_parse_dsn_adds_timeouts_and_keeps_query_params():
     assert parsed["application_name"] == "custom"
     assert parsed["sslmode"] == "require"
     assert parsed["host"] == "h" and parsed["port"] == 5433 and parsed["dbname"] == "mydb"
+
+
+# ── Running-config secret masking (ops_format.mask_config_secrets) ───────────
+
+def test_masking_redacts_ciphertext_but_keeps_the_directive():
+    from ops_format import mask_config_secrets
+    src = "user admin password ciphertext AQBapaB6xY9zzKKuh7l0Q2\ninterface 1/1/1"
+    out = mask_config_secrets(src)
+    assert "AQBapaB6xY9zzKKuh7l0Q2" not in out
+    assert "password ciphertext" in out          # directive preserved
+    assert "interface 1/1/1" in out               # non-secret untouched
+
+
+def test_masking_covers_community_and_passphrase():
+    from ops_format import mask_config_secrets
+    out = mask_config_secrets(
+        "snmp-server community S3cr3tRO\nwlan wpa-passphrase MyWiFiPass123")
+    assert "S3cr3tRO" not in out and "MyWiFiPass123" not in out
+    assert "snmp-server community" in out
+
+
+def test_masking_is_a_noop_on_clean_config():
+    from ops_format import mask_config_secrets
+    src = "hostname core-sw-1\nvlan 200\n    name data"
+    assert mask_config_secrets(src) == src
+    assert mask_config_secrets("") == ""
