@@ -740,10 +740,16 @@ async def assign_group(request: Request):
     body, err = await _json_body(request)
     if err:
         return err
-    group_name = body.get("group_name", "").strip()
-    serials = body.get("serial_numbers", [])
-    if not group_name or not serials:
-        return JSONResponse({"ok": False, "error": "group_name and serial_numbers are required"}, status_code=400)
+    group_name = body.get("group_name")
+    serials = body.get("serial_numbers")
+    # Validate types before using string/list methods — a client sending
+    # group_name as a number used to hit .strip() and 500 with an HTML page.
+    if not isinstance(group_name, str) or not group_name.strip() \
+            or not isinstance(serials, list) or not serials:
+        return JSONResponse(
+            {"ok": False, "error": "group_name (string) and serial_numbers (non-empty list) are required"},
+            status_code=400)
+    group_name = group_name.strip()
     try:
         from vendors.central_bridge import move_device_to_group
         result = await move_device_to_group(group_name, serials)
@@ -757,14 +763,23 @@ async def assign_site(request: Request):
     body, err = await _json_body(request)
     if err:
         return err
-    serials = body.get("serial_numbers", [])
+    serials = body.get("serial_numbers")
     site_id = body.get("site_id")
-    device_type = body.get("device_type", "").strip() or "IAP"
-    if not serials or site_id is None:
-        return JSONResponse({"ok": False, "error": "serial_numbers and site_id are required"}, status_code=400)
+    device_type = body.get("device_type")
+    device_type = device_type.strip() if isinstance(device_type, str) and device_type.strip() else "IAP"
+    if not isinstance(serials, list) or not serials:
+        return JSONResponse(
+            {"ok": False, "error": "serial_numbers (non-empty list) is required"}, status_code=400)
+    # site_id must be integer-coercible — a bad value is the caller's error (400),
+    # not a server fault (the old int() threw inside the try and 500'd).
+    try:
+        site_id_int = int(site_id)
+    except (TypeError, ValueError):
+        return JSONResponse(
+            {"ok": False, "error": "site_id must be an integer"}, status_code=400)
     try:
         from vendors.central_bridge import assign_device_to_site
-        result = await assign_device_to_site(int(site_id), serials, device_type)
+        result = await assign_device_to_site(site_id_int, serials, device_type)
         return JSONResponse({"ok": True, "result": result})
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
