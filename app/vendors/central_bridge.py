@@ -1283,6 +1283,30 @@ async def get_device_running_config(serial: str) -> dict:
 
 
 @_cached()
+async def list_config_device_groups() -> list[dict] | None:
+    """Device groups via the New Central config API (network-config).
+
+    Distinct from get_device_groups, which uses the Classic Central API that
+    401s on this tenant. This one returns the real groups with device counts —
+    Wireless/8, Switches/1, and any empty groups. None on failure."""
+    from mcp_servers.config import list_device_groups as _fn
+    result = await _run(_fn)
+    if not isinstance(result, dict):
+        return None
+    out = []
+    for g in result.get("items", []) or []:
+        if not isinstance(g, dict):
+            continue
+        out.append({
+            "name": g.get("scopeName") or g.get("name") or "",
+            "device_count": g.get("deviceCount") or 0,
+            "description": g.get("description") or "",
+        })
+    out.sort(key=lambda r: (-r["device_count"], r["name"].lower()))
+    return out
+
+
+@_cached()
 async def list_named_vlans() -> list[dict] | None:
     """The tenant's named VLANs (name + VLAN-ID ranges).
 

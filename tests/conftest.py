@@ -315,6 +315,8 @@ def mock_central(monkeypatch):
     monkeypatch.setattr(cb, "get_firmware_compliance", _async_return({}))
     monkeypatch.setattr(cb, "list_named_vlans",
                         _async_return([{"name": "data", "ranges": ["200"]}]))
+    monkeypatch.setattr(cb, "list_config_device_groups",
+                        _async_return([{"name": "Wireless", "device_count": 8, "description": ""}]))
     monkeypatch.setattr(cb, "get_ap_rf_neighbors", _async_return([]))
     monkeypatch.setattr(cb, "list_glp_service_offers", _async_return([]))
     monkeypatch.setattr(cb, "detect_client_flapping", _async_return({}))

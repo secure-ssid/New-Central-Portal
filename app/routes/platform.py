@@ -166,6 +166,14 @@ async def config_viewer(request: Request):
     except Exception as exc:
         logger.warning("Named VLANs unavailable: %s", exc)
 
+    # Device groups from the New Central config API (the Classic one 401s).
+    device_groups = None
+    try:
+        from vendors.central_bridge import list_config_device_groups
+        device_groups = await list_config_device_groups()
+    except Exception as exc:
+        logger.warning("Device groups unavailable: %s", exc)
+
     return templates.TemplateResponse(
         request,
         "platform/config.html",
@@ -177,6 +185,7 @@ async def config_viewer(request: Request):
             "compliance_preview_limit": compliance_preview_limit,
             "compliance_error": compliance_error,
             "named_vlans": named_vlans,
+            "device_groups": device_groups,
             "active": "config",
         },
     )
