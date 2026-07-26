@@ -503,3 +503,39 @@ def test_notification_history_orders_by_id_tiebreak():
     import db
     src = inspect.getsource(db.get_notification_history)
     assert "ORDER BY sent_at DESC, id DESC" in src
+
+
+# ── warm_cache warms the keys the routes actually read (D5) ──────────────────
+
+def test_warm_cache_uses_route_matching_arguments(monkeypatch):
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+    calls: dict = {}
+
+    def recorder(name, ret=None):
+        async def f(*a, **k):
+            calls.setdefault(name, []).append((a, k))
+            return ret if ret is not None else []
+        return f
+
+    # One site that only carries New Central's `scopeName`, and one device.
+    monkeypatch.setattr(cb, "get_sites", recorder("get_sites",
+        ret=[{"scopeId": "79244870000394240", "scopeName": "SecureSSID"}]))
+    monkeypatch.setattr(cb, "get_devices", recorder("get_devices",
+        ret=[{"serialNumber": "AP1", "deviceType": "ACCESS_POINT",
+              "status": "Up", "siteId": "79244870000394240"}]))
+    for name in ("get_clients", "list_active_alerts", "get_tenant_health",
+                 "get_fleet_health", "get_site_health_summary", "get_device_events"):
+        monkeypatch.setattr(cb, name, recorder(name))
+
+    asyncio.run(cb.warm_cache())
+
+    # Alerts warmed at the limit the routes use (100), not the default 50.
+    assert calls["list_active_alerts"][0][1]["limit"] == 100
+    # Site health warmed with the name resolved from scopeName (was None before).
+    assert calls["get_site_health_summary"][0][1]["site_name"] == "SecureSSID"
+    # Events warmed with the same hours/limit and normalized type the route uses.
+    ev = calls["get_device_events"][0]
+    assert ev[1]["hours"] == 24 and ev[1]["limit"] == 10
+    assert ev[1]["device_type"] == "access_point"    # normalized, not ACCESS_POINT
+    cb.clear_bridge_cache()
