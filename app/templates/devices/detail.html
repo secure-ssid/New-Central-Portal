@@ -93,6 +93,39 @@
     </div>
 </div>
 
+{% if gateway_card %}
+<!-- Gateway (mobility gateway devices) — stats list_gateways carries but the
+     generic device inventory does not. -->
+<div class="card mb-6">
+    <h2 class="text-lg font-semibold text-white mb-4">Gateway</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="panel">
+            <p class="section-label mb-1">CPU</p>
+            <p class="text-2xl font-bold {% if (gateway_card.cpu or 0) >= 80 %}text-red-400{% elif (gateway_card.cpu or 0) >= 60 %}text-amber-400{% else %}text-white{% endif %}">{{ gateway_card.cpu if gateway_card.cpu is not none else '—' }}{% if gateway_card.cpu is not none %}%{% endif %}</p>
+        </div>
+        <div class="panel">
+            <p class="section-label mb-1">Memory</p>
+            <p class="text-2xl font-bold {% if (gateway_card.memory or 0) >= 80 %}text-red-400{% elif (gateway_card.memory or 0) >= 60 %}text-amber-400{% else %}text-white{% endif %}">{{ gateway_card.memory if gateway_card.memory is not none else '—' }}{% if gateway_card.memory is not none %}%{% endif %}</p>
+        </div>
+        <div class="panel">
+            <p class="section-label mb-1">Uptime</p>
+            <p class="text-sm text-slate-200 mt-1.5">{{ gateway_card.uptime or '—' }}</p>
+        </div>
+        <div class="panel">
+            <p class="section-label mb-1">Cluster</p>
+            <p class="text-sm text-slate-200 mt-1.5">{{ gateway_card.cluster or '—' }}{% if gateway_card.role %} <span class="text-xs text-slate-500">({{ gateway_card.role }})</span>{% endif %}</p>
+        </div>
+    </div>
+    <dl class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 text-[11px]">
+        <div class="flex justify-between gap-2"><dt class="text-slate-500">Function</dt><dd class="text-slate-300">{{ gateway_card.function or '—' }}</dd></div>
+        <div class="flex justify-between gap-2"><dt class="text-slate-500">IP address</dt><dd class="text-slate-300 font-mono">{{ gateway_card.ip or '—' }}</dd></div>
+        {% if gateway_card.reboot_reason %}
+        <div class="flex justify-between gap-2 md:col-span-2"><dt class="text-slate-500">Last reboot</dt><dd class="text-slate-300">{{ gateway_card.reboot_reason }}</dd></div>
+        {% endif %}
+    </dl>
+</div>
+{% endif %}
+
 {% if device.type == 'switch' %}
 {% if ports %}
 {% set top_ports = ports | selectattr('alignment', 'eq', 'top') | list %}
@@ -526,8 +559,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     <p class="text-slate-500 text-sm">No port information available for this switch.</p>
 </div>
 {% endif %}
-{% else %}
-<!-- Wireless (AP devices) -->
+{% elif device.type == 'access_point' %}
+<!-- Wireless (AP devices only — gateways get the Gateway card above) -->
 <div class="card mb-6">
     <h2 class="text-lg font-semibold text-white mb-4">Wireless</h2>
     {% if wireless_cards.radios or wireless_cards.metrics or wireless_cards.channel_util_pct %}

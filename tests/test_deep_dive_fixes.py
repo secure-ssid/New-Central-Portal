@@ -677,3 +677,36 @@ def test_gateway_device_scope_shows_no_trend_data_not_blank_charts(
     assert r.status_code == 200
     assert "No trend data" in r.text
     assert "<polyline" not in r.text     # no empty chart drawn
+
+
+# ── Gateway stats card on device detail (new feature) ────────────────────────
+
+def test_gateway_detail_shows_the_gateway_card(client, mock_central, stub_db):
+    r = client.get("/devices/GW1SERIAL")
+    assert r.status_code == 200
+    assert "Gateway" in r.text
+    assert ">16%" in r.text or "16%" in r.text      # CPU
+    assert "GW-HA" in r.text                          # cluster
+    assert "Isoleader" in r.text                      # role
+    assert "AC Power Cycle" in r.text                 # reboot reason
+
+
+def test_gateway_does_not_show_an_empty_wireless_card(client, mock_central, stub_db):
+    """Gateways used to fall into the AP branch and render an empty Wireless card."""
+    r = client.get("/devices/GW1SERIAL").text
+    # The Gateway card is present; the Wireless heading is not (gateways aren't APs).
+    assert "Gateway</h2>" in r
+    assert "Wireless</h2>" not in r
+
+
+def test_gateway_card_helper_formats_uptime_and_tolerates_nulls():
+    from routes.devices import _gateway_card
+    card = _gateway_card({"cpuUtilization": 16, "memoryUtilization": 59,
+                          "uptimeInMillis": 3983862000, "clusterName": "GW-HA",
+                          "role": "Isoleader", "rebootReason": "AC Power Cycle",
+                          "ipAddress": "10.1.0.1", "deviceFunction": "Mobility Gateway"})
+    assert card["cpu"] == 16 and card["memory"] == 59
+    assert card["uptime"].endswith("days")
+    assert _gateway_card(None) is None
+    # A brand-new/offline gateway with 0 uptime -> no uptime string.
+    assert _gateway_card({"uptimeInMillis": 0})["uptime"] is None
