@@ -389,3 +389,28 @@ def test_parse_mac_table_empty_input_is_no_rows_not_a_blank_row():
     from ops_format import parse_mac_table
     assert parse_mac_table("") == []
     assert parse_mac_table("MAC Address  VLAN  Type  Port\n----\n") == []
+
+
+# ── Bad query param on an HTML page -> themed 400, JSON stays JSON ────────────
+
+def test_bad_query_param_on_html_page_renders_themed_400(client, mock_central, stub_db):
+    """?hours=abc (hours is an int) used to return a raw 422 JSON blob to a
+    browser navigating an HTML page."""
+    r = client.get("/lab/app-visibility?hours=abc", headers={"accept": "text/html"})
+    assert r.status_code == 400
+    assert "text/html" in r.headers["content-type"]
+    assert "Bad request" in r.text
+    assert "int_parsing" not in r.text          # no raw validation JSON
+
+
+def test_bad_query_param_for_api_client_stays_json(client, mock_central, stub_db):
+    r = client.get("/lab/app-visibility?hours=abc",
+                   headers={"accept": "application/json"})
+    assert r.status_code == 422
+    assert "application/json" in r.headers["content-type"]
+
+
+def test_bad_query_param_for_htmx_stays_json(client, mock_central, stub_db):
+    r = client.get("/lab/activity?hours=xyz", headers={"hx-request": "true"})
+    assert r.status_code == 422
+    assert "application/json" in r.headers["content-type"]

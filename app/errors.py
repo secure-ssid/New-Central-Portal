@@ -32,6 +32,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler as _default_http_handler
+from fastapi.exception_handlers import (
+    request_validation_exception_handler as _default_validation_handler,
+)
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -63,6 +67,16 @@ def _wants_json(request: Request) -> bool:
     if request.headers.get("hx-request", "").lower() == "true":
         return True
     return "application/json" in request.headers.get("accept", "").lower()
+
+
+def _wants_html_page(request: Request) -> bool:
+    """True only for a real browser navigation (Accept prefers text/html) that
+    is not an HTMX swap. Used to decide whether a validation error should
+    upgrade to a themed page; everything else keeps the default JSON so API and
+    curl-style callers are unaffected."""
+    if request.headers.get("hx-request", "").lower() == "true":
+        return False
+    return "text/html" in request.headers.get("accept", "").lower()
 
 
 def _error_response(request: Request, status_code: int, detail: str,
@@ -99,6 +113,21 @@ def register_error_handlers(app: FastAPI) -> None:
             )
         # Anything else (400, 403, 422...): keep FastAPI's default behaviour.
         return await _default_http_handler(request, exc)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_exception_handler(request: Request, exc: RequestValidationError):
+        # A bad query/path parameter (e.g. ?hours=abc where hours is an int)
+        # raises this. FastAPI's default returns raw 422 JSON — fine for an API
+        # or HTMX caller, but a browser navigating an HTML page got a wall of
+        # JSON. Upgrade ONLY a real browser navigation to a themed 400 page;
+        # everything else (API clients, curl, HTMX) keeps the default JSON, so
+        # legitimate JSON 422 responses are unchanged.
+        if _wants_html_page(request):
+            return _error_response(
+                request, 400, "Bad Request", "errors/400.html",
+                page_message="One of the values in the link was not valid.",
+            )
+        return await _default_validation_handler(request, exc)
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception):
