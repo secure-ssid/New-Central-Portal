@@ -206,6 +206,8 @@ DELIBERATELY_UNCACHED = {
     "get_switch_port_errors", "get_cx_mac_table", "find_mac_on_switch",
     "get_switch_spanning_tree", "get_cx_arp_table", "get_device_running_config",
     "get_classic_client", "get_glp_subscriptions_raw",
+    # Thin filter over the cached list_gateway_stats — no upstream call of its own.
+    "get_gateway_stats",
 }
 
 

@@ -952,6 +952,26 @@ async def get_wireless_metrics(serial: str) -> dict:
     return await _run(_fn, serial)
 
 
+@_cached()
+async def list_gateway_stats() -> list[dict]:
+    """Gateway-specific stats (CPU/memory/cluster role/uptime/reboot reason).
+
+    list_gateways returns per-gateway operational data that the generic
+    device-inventory does not carry — the standard detail page shows a gateway
+    as a bare row. Cached once; get_gateway_stats filters it by serial."""
+    from mcp_servers.monitoring import list_gateways
+    result = await _run(list_gateways)
+    return result.get("items", []) if isinstance(result, dict) else []
+
+
+async def get_gateway_stats(serial: str) -> dict | None:
+    """The gateway matching `serial`, or None. Filters the cached list."""
+    for g in await list_gateway_stats():
+        if isinstance(g, dict) and g.get("serialNumber") == serial:
+            return g
+    return None
+
+
 # ── Device trends and switch physical layer ──────────────────────────────────
 #
 # Every wrapper below returns the UNWRAPPED payload, never the envelope. That is

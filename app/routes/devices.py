@@ -51,6 +51,30 @@ def _radio_field(raw: dict, *keys: str) -> str:
     return "—"
 
 
+def _gateway_card(stats: dict | None) -> dict | None:
+    """Format gateway-specific stats for the detail page, or None.
+
+    Surfaces CPU/memory/cluster-role/uptime/reboot-reason that list_gateways
+    carries but the generic device inventory does not."""
+    if not isinstance(stats, dict):
+        return None
+    ms = stats.get("uptimeInMillis")
+    uptime = None
+    if isinstance(ms, (int, float)) and ms > 0:
+        secs = ms / 1000
+        uptime = f"{secs / 86400:.1f} days" if secs >= 86400 else f"{secs / 3600:.1f} h"
+    return {
+        "cpu": stats.get("cpuUtilization"),
+        "memory": stats.get("memoryUtilization"),
+        "function": str(stats.get("deviceFunction") or ""),
+        "cluster": str(stats.get("clusterName") or ""),
+        "role": str(stats.get("role") or ""),
+        "uptime": uptime,
+        "reboot_reason": str(stats.get("rebootReason") or ""),
+        "ip": str(stats.get("ipAddress") or ""),
+    }
+
+
 def _wireless_cards(
     wireless_metrics: dict | None,
     ap_radios: dict | None,
@@ -293,6 +317,13 @@ async def device_detail(request: Request, serial: str):
     channel_util = None
     rf_neighbors: list[dict] = []
     rf_raw = None
+    gateway_stats = None
+    if device.get("type") == "gateway":
+        from vendors.central_bridge import get_gateway_stats
+        try:
+            gateway_stats = await get_gateway_stats(serial)
+        except Exception as exc:
+            logger.debug("[device] gateway stats unavailable for %s: %s", serial, exc)
 
     ports_error = False
     if device.get("type") == "switch":
@@ -392,6 +423,7 @@ async def device_detail(request: Request, serial: str):
                 channel_util if isinstance(channel_util, dict) else None,
             ),
             "rf_neighbors": rf_neighbors,
+            "gateway_card": _gateway_card(gateway_stats),
             "active": "devices",
         },
     )
