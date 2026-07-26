@@ -128,6 +128,37 @@
         <div class="flex justify-between gap-2 md:col-span-2"><dt class="text-slate-500">Last reboot</dt><dd class="text-slate-300">{{ gateway_card.reboot_reason }}</dd></div>
         {% endif %}
     </dl>
+    {% if cluster_members %}
+    <div class="mt-5 pt-4 border-t border-surface-700">
+        <p class="section-label mb-2">Cluster members</p>
+        <div class="overflow-x-auto">
+            <table class="tbl text-[11px]">
+                <thead><tr><th>Gateway</th><th>Role</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for m in cluster_members %}
+                    <tr>
+                        <td>
+                            {% if m.serial == device.serial %}
+                            <span class="text-slate-200">{{ m.name }}</span> <span class="text-slate-600">(this device)</span>
+                            {% else %}
+                            <a href="/devices/{{ m.serial }}" class="text-brand-400 hover:text-brand-300">{{ m.name }}</a>
+                            {% endif %}
+                        </td>
+                        <td class="text-slate-400">{{ m.role or '—' }}</td>
+                        <td>
+                            {% if m.status == 'online' %}
+                            <span class="status-badge-online">ONLINE</span>
+                            {% else %}
+                            <span class="status-badge-offline">{{ m.status|upper or 'UNKNOWN' }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 

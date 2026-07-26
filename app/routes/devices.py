@@ -323,10 +323,14 @@ async def device_detail(request: Request, serial: str):
     rf_neighbors: list[dict] = []
     rf_raw = None
     gateway_stats = None
+    cluster_members: list[dict] = []
     if device.get("type") == "gateway":
-        from vendors.central_bridge import get_gateway_stats
+        from vendors.central_bridge import get_cluster_members, get_gateway_stats
         try:
             gateway_stats = await get_gateway_stats(serial)
+            cluster = (gateway_stats or {}).get("clusterName")
+            if cluster:
+                cluster_members = await get_cluster_members(cluster)
         except Exception as exc:
             logger.debug("[device] gateway stats unavailable for %s: %s", serial, exc)
 
@@ -429,6 +433,7 @@ async def device_detail(request: Request, serial: str):
             ),
             "rf_neighbors": rf_neighbors,
             "gateway_card": _gateway_card(gateway_stats),
+            "cluster_members": cluster_members,
             "active": "devices",
         },
     )
