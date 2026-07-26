@@ -289,3 +289,38 @@ def test_mac_key_strips_separators_and_case():
     from vendors.central_bridge import _mac_key
     for form in ("00:0B:86:B8:C4:B8", "000b.86b8.c4b8", "00-0b-86-b8-c4-b8"):
         assert _mac_key(form) == "000b86b8c4b8"
+
+
+# ── Ping panel: structured CX stats, coloured by real reachability ───────────
+
+def test_ping_structured_stats_render_reachable_green():
+    from ops_format import format_ping_response
+    env = {"status": "COMPLETED", "output": {
+        "destination": "8.8.8.8", "resolvedIp": "8.8.8.8",
+        "transmittedPacketsCount": "3", "receivedPacketsCount": "3",
+        "packetLossPercent": "0", "averageRoundTripTimeMilliseconds": "15.670",
+        "minimumRoundTripTimeMilliseconds": "14.191",
+        "maximumRoundTripTimeMilliseconds": "16.764"}}
+    body = format_ping_response(env).body.decode()
+    assert "Reachable" in body and "#4ade80" in body      # green
+    assert "3 sent" in body and "0% loss" in body
+    assert "15.67 ms" in body                              # avg RTT
+    assert "transmittedPacketsCount" not in body           # no raw dict dump
+
+
+def test_ping_full_loss_renders_unreachable_red():
+    from ops_format import format_ping_response
+    env = {"output": {"destination": "10.0.0.9", "transmittedPacketsCount": "3",
+                      "receivedPacketsCount": "0", "packetLossPercent": "100"}}
+    body = format_ping_response(env).body.decode()
+    assert "Unreachable" in body and "#f87171" in body     # red
+
+
+def test_ping_text_output_success_detection():
+    """A CLI-text ping (AP/gateway) with 0% loss must render green, even though
+    the word 'success' never appears — the old bug."""
+    from ops_format import format_ping_response
+    env = {"output": {"results": [{"command": "ping 1.1.1.1",
+        "output": "5 packets transmitted, 5 received, 0% packet loss"}]}}
+    body = format_ping_response(env).body.decode()
+    assert "#4ade80" in body and "0% packet loss" in body

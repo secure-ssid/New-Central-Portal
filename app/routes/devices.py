@@ -476,18 +476,9 @@ async def device_ping(
     if not device:
         return _ops_error("Device not found.")
     try:
+        from ops_format import format_ping_response
         result = await run_ping(serial, device.get("type", "switch"), dest, count=count)
-        if not isinstance(result, dict):
-            result = {}
-        status = html.escape(str(result.get("status", "")))
-        outputs = result.get("output", {}).get("results", [])
-        raw_text = outputs[0].get("output", "") if outputs and isinstance(outputs[0], dict) else str(result)
-        color = "#4ade80" if "success" in str(raw_text).lower() else "#f87171"
-        text = html.escape(str(raw_text))
-        return HTMLResponse(
-            f'<p style="font-size:.72rem;color:{color};font-weight:700;margin-bottom:6px;">Status: {status}</p>'
-            f'<pre style="font-size:.72rem;color:#94a3b8;white-space:pre-wrap;">{text}</pre>'
-        )
+        return format_ping_response(result)
     except Exception as e:
         logger.exception("ping failed for %s", serial)
         return _ops_error(f"Error: {e}")
