@@ -76,6 +76,82 @@ def _render_ops_job(result: dict) -> HTMLResponse | None:
     return HTMLResponse("".join(parts)) if parts else None
 
 
+def _num(v):
+    try:
+        return float(str(v))
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_num(n, suffix: str = "") -> str:
+    if n is None:
+        return "—"
+    s = f"{n:.0f}" if n == int(n) else f"{n:.3f}".rstrip("0").rstrip(".")
+    return s + suffix
+
+
+def format_ping_response(result) -> HTMLResponse:
+    """Render a ping result.
+
+    AOS-CX ping returns a STRUCTURED stats dict under `output`
+    (transmitted/received counts, loss %, RTT) — not command text — so the old
+    handler found no `output.results`, dumped the raw Python dict, and coloured
+    it red because the literal word "success" never appears in a real ping. Read
+    the stats and colour by actual reachability; fall back to text for platforms
+    that return CLI output instead.
+    """
+    if not isinstance(result, dict):
+        return format_ops_pre(str(result))
+
+    out = result.get("output")
+    if isinstance(out, dict) and ("receivedPacketsCount" in out or "transmittedPacketsCount" in out):
+        tx, rx = _num(out.get("transmittedPacketsCount")), _num(out.get("receivedPacketsCount"))
+        loss = _num(out.get("packetLossPercent"))
+        dest = str(out.get("destination") or "")
+        resolved = str(out.get("resolvedIp") or "")
+        reachable = (rx or 0) > 0 and (loss is None or loss < 100)
+        color = "#4ade80" if reachable else "#f87171"
+        target = html.escape(dest)
+        if resolved and resolved != dest:
+            target += f" ({html.escape(resolved)})"
+        rows = [
+            ("Destination", target),
+            ("Packets", f"{_fmt_num(tx)} sent &middot; {_fmt_num(rx)} received "
+                        f"&middot; {_fmt_num(loss, '%')} loss"),
+            ("Round-trip", f"min {_fmt_num(_num(out.get('minimumRoundTripTimeMilliseconds')), ' ms')} "
+                           f"&middot; avg {_fmt_num(_num(out.get('averageRoundTripTimeMilliseconds')), ' ms')} "
+                           f"&middot; max {_fmt_num(_num(out.get('maximumRoundTripTimeMilliseconds')), ' ms')}"),
+        ]
+        body = "".join(
+            f"<tr><td style='color:#64748b;padding-right:12px;'>{k}</td>"
+            f"<td style='color:#e2e8f0;'>{v}</td></tr>" for k, v in rows
+        )
+        return HTMLResponse(
+            f"<p style='font-size:.8rem;color:{color};font-weight:700;margin-bottom:8px;'>"
+            f"{'Reachable' if reachable else 'Unreachable'}</p>"
+            f"<table class='tbl text-xs'><tbody>{body}</tbody></table>"
+        )
+
+    # Text fallback: CLI output (output.results / rawOutput), or a fail reason.
+    text = ""
+    if isinstance(out, dict) and isinstance(out.get("results"), list):
+        text = "\n".join(str(r.get("output", "")) for r in out["results"] if isinstance(r, dict))
+    if not text and isinstance(result.get("rawOutput"), str):
+        text = result["rawOutput"]
+    if not text and result.get("failReason"):
+        text = str(result["failReason"])
+    if not text:
+        return format_ops_response(result)
+    low = text.lower()
+    ok = (("0% packet loss" in low) or ("bytes from" in low) or ("reply from" in low)) \
+        and "100% packet loss" not in low
+    color = "#4ade80" if ok else "#f87171"
+    return HTMLResponse(
+        f"<pre style='font-size:.72rem;color:{color};white-space:pre-wrap;"
+        f"word-break:break-all;'>{html.escape(text)}</pre>"
+    )
+
+
 def format_ops_response(result) -> HTMLResponse:
     """Prefer structured tables/lists; avoid dumping raw dict repr to users."""
     if result is None:
