@@ -259,3 +259,33 @@ def test_ops_job_falls_through_when_not_a_job_envelope():
     from ops_format import format_ops_response
     body = format_ops_response({"model": "CX6300", "uptime": "5d"}).body.decode()
     assert "CX6300" in body and "uptime" in body
+
+
+# ── LLDP / Find-MAC use the CX-accepted command strings ──────────────────────
+
+def test_find_mac_in_table_parses_port_and_vlan():
+    from vendors.central_bridge import _find_mac_in_table
+    env = {"output": {"results": [{"command": "show mac-address-table", "output":
+        "MAC Address          VLAN     Type        Port\n"
+        "-------------------------------------------------\n"
+        "94:40:c9:12:71:d2    1        dynamic     1/1/23\n"
+        "00:0b:86:b8:c4:b8    200      dynamic     1/1/17\n"}]}}
+    hit = _find_mac_in_table(env, "00:0b:86:b8:c4:b8")
+    assert hit["port"] == "1/1/17" and hit["vlan"] == "200"
+    # Case/separator-insensitive.
+    assert _find_mac_in_table(env, "944 0.c912.71d2")["port"] == "1/1/23"
+
+
+def test_find_mac_absent_returns_a_readable_message_not_a_false_hit():
+    from vendors.central_bridge import _find_mac_in_table
+    env = {"output": {"results": [{"command": "show mac-address-table",
+        "output": "MAC Address  VLAN  Type  Port\naa:bb:cc:00:11:22  5  dynamic  1/1/1\n"}]}}
+    res = _find_mac_in_table(env, "de:ad:be:ef:00:00")
+    assert "port" not in res  # no false match
+    assert "not in the forwarding table" in res["output"]["results"][0]["output"]
+
+
+def test_mac_key_strips_separators_and_case():
+    from vendors.central_bridge import _mac_key
+    for form in ("00:0B:86:B8:C4:B8", "000b.86b8.c4b8", "00-0b-86-b8-c4-b8"):
+        assert _mac_key(form) == "000b86b8c4b8"
