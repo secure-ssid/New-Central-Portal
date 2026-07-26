@@ -58,14 +58,19 @@ def _gateway_card(stats: dict | None) -> dict | None:
     carries but the generic device inventory does not."""
     if not isinstance(stats, dict):
         return None
+    # An offline gateway still reports cpu/memory 0 and a stale uptime; showing
+    # "0%" reads as "idle" rather than "down", so blank the live metrics when it
+    # is not online.
+    online = str(stats.get("status") or "").strip().lower() == "online"
     ms = stats.get("uptimeInMillis")
     uptime = None
-    if isinstance(ms, (int, float)) and ms > 0:
+    if online and isinstance(ms, (int, float)) and ms > 0:
         secs = ms / 1000
         uptime = f"{secs / 86400:.1f} days" if secs >= 86400 else f"{secs / 3600:.1f} h"
     return {
-        "cpu": stats.get("cpuUtilization"),
-        "memory": stats.get("memoryUtilization"),
+        "online": online,
+        "cpu": stats.get("cpuUtilization") if online else None,
+        "memory": stats.get("memoryUtilization") if online else None,
         "function": str(stats.get("deviceFunction") or ""),
         "cluster": str(stats.get("clusterName") or ""),
         "role": str(stats.get("role") or ""),
