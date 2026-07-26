@@ -704,9 +704,23 @@ def test_gateway_card_helper_formats_uptime_and_tolerates_nulls():
     card = _gateway_card({"cpuUtilization": 16, "memoryUtilization": 59,
                           "uptimeInMillis": 3983862000, "clusterName": "GW-HA",
                           "role": "Isoleader", "rebootReason": "AC Power Cycle",
-                          "ipAddress": "10.1.0.1", "deviceFunction": "Mobility Gateway"})
+                          "ipAddress": "10.1.0.1", "deviceFunction": "Mobility Gateway",
+                          "status": "Online"})
     assert card["cpu"] == 16 and card["memory"] == 59
     assert card["uptime"].endswith("days")
     assert _gateway_card(None) is None
-    # A brand-new/offline gateway with 0 uptime -> no uptime string.
-    assert _gateway_card({"uptimeInMillis": 0})["uptime"] is None
+    # An online gateway with 0 uptime -> no uptime string.
+    assert _gateway_card({"uptimeInMillis": 0, "status": "Online"})["uptime"] is None
+
+
+def test_gateway_card_blanks_live_metrics_when_offline():
+    from routes.devices import _gateway_card
+    offline = _gateway_card({"cpuUtilization": 0, "memoryUtilization": 0,
+                             "uptimeInMillis": 712050000, "status": "Offline",
+                             "deviceFunction": "Mobility Gateway"})
+    assert offline["online"] is False
+    assert offline["cpu"] is None and offline["memory"] is None
+    assert offline["uptime"] is None            # stale uptime not shown
+    online = _gateway_card({"cpuUtilization": 16, "status": "Online",
+                            "uptimeInMillis": 3983862000})
+    assert online["online"] is True and online["cpu"] == 16
