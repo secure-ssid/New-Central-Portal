@@ -972,6 +972,26 @@ async def get_gateway_stats(serial: str) -> dict | None:
     return None
 
 
+@_cached()
+async def get_cluster_members(cluster_name: str) -> list[dict]:
+    """Members of a gateway cluster with role and status — the HA pair at a
+    glance. Normalized to serial/name/role/status."""
+    from mcp_servers.monitoring import get_cluster_members as _fn
+    result = await _run(_fn, cluster_name)
+    items = result.get("items", []) if isinstance(result, dict) else []
+    out = []
+    for m in items:
+        if not isinstance(m, dict):
+            continue
+        out.append({
+            "serial": str(m.get("serialNumber") or ""),
+            "name": str(m.get("deviceName") or m.get("serialNumber") or ""),
+            "role": str(m.get("role") or ""),
+            "status": str(m.get("status") or "").strip().lower(),
+        })
+    return out
+
+
 # ── Device trends and switch physical layer ──────────────────────────────────
 #
 # Every wrapper below returns the UNWRAPPED payload, never the envelope. That is

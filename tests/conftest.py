@@ -318,6 +318,9 @@ def mock_central(monkeypatch):
     monkeypatch.setattr(cb, "list_config_device_groups",
                         _async_return([{"name": "Wireless", "device_count": 8, "description": ""}]))
     monkeypatch.setattr(cb, "get_ap_rf_neighbors", _async_return([]))
+    monkeypatch.setattr(cb, "get_cluster_members", _async_return([
+        {"serial": "GW1SERIAL", "name": "branch-gw-1", "role": "Isolated Leader", "status": "online"},
+        {"serial": "GW2SERIAL", "name": "branch-gw-2", "role": "Member", "status": "offline"}]))
     monkeypatch.setattr(cb, "list_gateway_stats", _async_return([
         {"serialNumber": "GW1SERIAL", "deviceFunction": "Mobility Gateway",
          "cpuUtilization": 16, "memoryUtilization": 59, "ipAddress": "10.1.0.1",

@@ -724,3 +724,41 @@ def test_gateway_card_blanks_live_metrics_when_offline():
     online = _gateway_card({"cpuUtilization": 16, "status": "Online",
                             "uptimeInMillis": 3983862000})
     assert online["online"] is True and online["cpu"] == 16
+
+
+# ── Gateway cluster members on the detail page ───────────────────────────────
+
+def test_gateway_shows_cluster_members(client, mock_central, stub_db):
+    r = client.get("/devices/GW1SERIAL")
+    assert r.status_code == 200
+    assert "Cluster members" in r.text
+    assert "Isolated Leader" in r.text and "Member" in r.text
+    # The current device is marked, the peer links out.
+    assert "(this device)" in r.text
+    assert 'href="/devices/GW2SERIAL"' in r.text
+
+
+def test_get_cluster_members_normalizes_shape(monkeypatch):
+    import sys
+    import types
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+
+    def get_cluster_members(name):
+        return {"items": [
+            {"serialNumber": "A", "deviceName": "gw-a", "role": "Isolated Leader", "status": "ONLINE"},
+            {"serialNumber": "B", "deviceName": "gw-b", "role": "Member", "status": "OFFLINE"}]}
+
+    mon = types.ModuleType("mcp_servers.monitoring")
+    mon.get_cluster_members = get_cluster_members
+    pkg = types.ModuleType("mcp_servers")
+    pkg.monitoring = mon
+    monkeypatch.setitem(sys.modules, "mcp_servers", pkg)
+    monkeypatch.setitem(sys.modules, "mcp_servers.monitoring", mon)
+    try:
+        out = asyncio.run(cb.get_cluster_members("GW-HA"))
+        assert out == [
+            {"serial": "A", "name": "gw-a", "role": "Isolated Leader", "status": "online"},
+            {"serial": "B", "name": "gw-b", "role": "Member", "status": "offline"}]
+    finally:
+        cb.clear_bridge_cache()
