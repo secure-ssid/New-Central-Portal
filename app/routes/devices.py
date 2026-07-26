@@ -51,27 +51,6 @@ def _radio_field(raw: dict, *keys: str) -> str:
     return "—"
 
 
-def _relative_age(epoch_seconds: float, now=None) -> str | None:
-    """A short human age like "3 weeks ago" for a past epoch, or None."""
-    from datetime import datetime, timezone
-    now_ts = (now or datetime.now(timezone.utc)).timestamp()
-    delta = now_ts - epoch_seconds
-    if delta < 0:
-        return None
-    if delta < 3600:
-        return "just now" if delta < 60 else f"{int(delta // 60)}m ago"
-    if delta < 86400:
-        return f"{int(delta // 3600)}h ago"
-    days = int(delta // 86400)
-    if days < 14:
-        return f"{days} day{'s' if days != 1 else ''} ago"
-    if days < 60:
-        return f"{days // 7} weeks ago"
-    if days < 365:
-        return f"{days // 30} month{'s' if days // 30 != 1 else ''} ago"
-    return f"{days // 365} year{'s' if days // 365 != 1 else ''} ago"
-
-
 def _device_config_info(health_payload: dict | None, now=None) -> dict | None:
     """Config-status fields from a get_device_health response: sync state,
     config group, and last config change. Reuses the payload already fetched
@@ -99,7 +78,8 @@ def _device_config_info(health_payload: dict | None, now=None) -> dict | None:
         if ms > 0:
             last_changed = datetime.fromtimestamp(
                 ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-            last_changed_ago = _relative_age(ms / 1000, now=now)
+            from timeutil import relative_age
+            last_changed_ago = relative_age(ms / 1000, now=now)
     if not (status or group or last_changed):
         return None
     return {
