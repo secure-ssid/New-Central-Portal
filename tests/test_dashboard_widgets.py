@@ -15,10 +15,14 @@ def test_health_tone_mapping():
 
 
 def test_tenant_health_cards():
-    cards = _tenant_health_cards({"status": "healthy", "apiLatency": 42, "items": []})
-    assert cards[0]["label"] == "status"
+    # Real payload shape: health nested under device_health.deviceTypes[].
+    cards = _tenant_health_cards({"device_health": {"deviceTypes": [
+        {"name": "Access Points", "health": {"groups": [
+            {"name": "Poor", "value": 0}, {"name": "Fair", "value": 0},
+            {"name": "Good", "value": 6}]}}]}})
+    assert cards[0]["label"] == "Access Points"
     assert cards[0]["tone"] == "ok"
-    assert any(c["value"] == "42" for c in cards)
+    assert cards[0]["value"] == "all 6 good"
 
 
 def test_enrich_site_cards_device_counts():

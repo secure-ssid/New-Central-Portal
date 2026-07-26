@@ -819,3 +819,32 @@ def test_home_site_card_prefers_alerts_over_clients(monkeypatch):
         assert cards[0]["label"] == "3 active alerts"
     finally:
         cb.clear_bridge_cache()
+
+
+# ── Tenant health cards from nested device/client health (was empty) ─────────
+
+def test_tenant_health_cards_parse_nested_device_and_client_health():
+    from routes.home import _tenant_health_cards
+    payload = {
+        "device_health": {"deviceTypes": [
+            {"name": "Gateways", "health": {"groups": [
+                {"name": "Poor", "value": 1}, {"name": "Fair", "value": 0}, {"name": "Good", "value": 1}]}},
+            {"name": "Access Points", "health": {"groups": [
+                {"name": "Poor", "value": 0}, {"name": "Fair", "value": 0}, {"name": "Good", "value": 6}]}}]},
+        "client_health": {"clientTypes": [
+            {"name": "Wired", "health": {"groups": [
+                {"name": "Poor", "value": 0}, {"name": "Fair", "value": 2}, {"name": "Good", "value": 8}]}}]},
+    }
+    cards = {c["label"]: c for c in _tenant_health_cards(payload)}
+    assert cards["Gateways"]["tone"] == "critical" and "1 poor" in cards["Gateways"]["value"]
+    assert cards["Access Points"]["tone"] == "ok" and cards["Access Points"]["value"] == "all 6 good"
+    assert cards["Wired"]["tone"] == "warn" and "2 fair" in cards["Wired"]["value"]
+
+
+def test_tenant_health_cards_empty_for_junk():
+    from routes.home import _tenant_health_cards
+    assert _tenant_health_cards(None) == []
+    assert _tenant_health_cards({"errors": []}) == []
+    # A type with all-zero counts produces no card.
+    assert _tenant_health_cards({"device_health": {"deviceTypes": [
+        {"name": "X", "health": {"groups": [{"name": "Good", "value": 0}]}}]}}) == []
