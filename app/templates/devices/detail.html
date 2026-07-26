@@ -109,7 +109,7 @@
         <div class="flex justify-between gap-3"><dt class="text-slate-500">Config group</dt><dd><a href="/platform/config#device-groups" class="text-brand-400 hover:text-brand-300 no-underline">{{ config_info.group }}</a></dd></div>
         {% endif %}
         {% if config_info.last_changed %}
-        <div class="flex justify-between gap-3"><dt class="text-slate-500">Last config change</dt><dd class="text-slate-200 font-mono">{{ config_info.last_changed }}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">Last config change</dt><dd class="text-slate-200"><span class="font-mono">{{ config_info.last_changed }}</span>{% if config_info.last_changed_ago %} <span class="text-slate-500">({{ config_info.last_changed_ago }})</span>{% endif %}</dd></div>
         {% endif %}
         {% if config_info.recommended_action %}
         <div class="flex justify-between gap-3 md:col-span-2"><dt class="text-slate-500">Recommended action</dt><dd class="text-amber-400">{{ config_info.recommended_action }}</dd></div>
