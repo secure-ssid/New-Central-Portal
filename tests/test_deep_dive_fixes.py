@@ -848,3 +848,32 @@ def test_tenant_health_cards_empty_for_junk():
     # A type with all-zero counts produces no card.
     assert _tenant_health_cards({"device_health": {"deviceTypes": [
         {"name": "X", "health": {"groups": [{"name": "Good", "value": 0}]}}]}}) == []
+
+
+# ── Device Configuration card (from health payload; new feature) ─────────────
+
+def test_device_config_info_extracts_sync_group_and_timestamp():
+    from routes.devices import _device_config_info
+    info = _device_config_info({"health": [{
+        "configStatus": "SYNCHRONIZED", "deviceGroupName": "Switches",
+        "lastConfigTimestamp": "1783021683380", "recommendedAction": "-"}]})
+    assert info["synced"] is True
+    assert info["group"] == "Switches"
+    assert info["last_changed"].startswith("2026-")     # epoch-ms formatted
+    assert info["recommended_action"] == ""             # "-" suppressed
+
+
+def test_device_config_info_out_of_sync_and_action():
+    from routes.devices import _device_config_info
+    info = _device_config_info({"health": [{
+        "configStatus": "OUT_OF_SYNC", "deviceGroupName": "APs",
+        "recommendedAction": "Resync the device"}]})
+    assert info["synced"] is False and info["status"] == "OUT_OF_SYNC"
+    assert info["recommended_action"] == "Resync the device"
+
+
+def test_device_config_info_none_when_no_data():
+    from routes.devices import _device_config_info
+    assert _device_config_info(None) is None
+    assert _device_config_info({"health": []}) is None
+    assert _device_config_info({"health": [{"configStatus": ""}]}) is None

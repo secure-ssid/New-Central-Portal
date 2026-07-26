@@ -93,6 +93,31 @@
     </div>
 </div>
 
+{% if config_info %}
+<!-- Configuration (from device health) — sync state, group, last change. -->
+<div class="card mb-6">
+    <div class="flex items-center gap-3 mb-4">
+        <h2 class="text-lg font-semibold text-white">Configuration</h2>
+        {% if config_info.synced %}
+        <span class="status-badge-online">Synchronized</span>
+        {% elif config_info.status != '—' %}
+        <span class="status-badge-offline">{{ config_info.status }}</span>
+        {% endif %}
+    </div>
+    <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+        {% if config_info.group %}
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">Config group</dt><dd class="text-slate-200">{{ config_info.group }}</dd></div>
+        {% endif %}
+        {% if config_info.last_changed %}
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">Last config change</dt><dd class="text-slate-200 font-mono">{{ config_info.last_changed }}</dd></div>
+        {% endif %}
+        {% if config_info.recommended_action %}
+        <div class="flex justify-between gap-3 md:col-span-2"><dt class="text-slate-500">Recommended action</dt><dd class="text-amber-400">{{ config_info.recommended_action }}</dd></div>
+        {% endif %}
+    </dl>
+</div>
+{% endif %}
+
 {% if gateway_card %}
 <!-- Gateway (mobility gateway devices) — stats list_gateways carries but the
      generic device inventory does not. -->

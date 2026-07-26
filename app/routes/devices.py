@@ -51,6 +51,43 @@ def _radio_field(raw: dict, *keys: str) -> str:
     return "—"
 
 
+def _device_config_info(health_payload: dict | None) -> dict | None:
+    """Config-status fields from a get_device_health response: sync state,
+    config group, and last config change. Reuses the payload already fetched
+    for the health label — no extra upstream call. None if nothing to show."""
+    if not isinstance(health_payload, dict):
+        return None
+    health = health_payload.get("health")
+    if isinstance(health, list):
+        first = next((e for e in health if isinstance(e, dict)), None)
+    elif isinstance(health, dict):
+        first = health
+    else:
+        first = None
+    if not first:
+        return None
+    status = str(first.get("configStatus") or "").strip()
+    group = str(first.get("deviceGroupName") or "").strip()
+    action = str(first.get("recommendedAction") or "").strip()
+    last_changed = None
+    ts = first.get("lastConfigTimestamp")
+    if ts is not None and str(ts).strip().isdigit():
+        from datetime import datetime, timezone
+        ms = int(str(ts).strip())
+        if ms > 0:
+            last_changed = datetime.fromtimestamp(
+                ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    if not (status or group or last_changed):
+        return None
+    return {
+        "status": status or "—",
+        "synced": status.upper() == "SYNCHRONIZED",
+        "group": group,
+        "last_changed": last_changed,
+        "recommended_action": action if action and action not in ("-", "—") else "",
+    }
+
+
 def _gateway_card(stats: dict | None) -> dict | None:
     """Format gateway-specific stats for the detail page, or None.
 
@@ -317,6 +354,7 @@ async def device_detail(request: Request, serial: str):
         clients_task = aruba.get_clients(limit=200)
     events_task = get_device_events(serial, hours=48, limit=20)
     health_label = None
+    config_info = None
     wireless_metrics = None
     ap_radios = None
     channel_util = None
@@ -389,6 +427,7 @@ async def device_detail(request: Request, serial: str):
     elif isinstance(health, dict):
         from routes.home import _health_issue_label
         health_label = _health_issue_label(health)
+    config_info = _device_config_info(health if isinstance(health, dict) else None)
     if isinstance(wireless_metrics, Exception):
         wireless_metrics = None
     if isinstance(ap_radios, Exception):
@@ -423,6 +462,7 @@ async def device_detail(request: Request, serial: str):
             "ports_json": ports_json,
             "events": events,
             "health_label": health_label,
+            "config_info": config_info,
             "wireless_metrics": wireless_metrics if isinstance(wireless_metrics, dict) else None,
             "ap_radios": ap_radios if isinstance(ap_radios, dict) else None,
             "channel_util": channel_util if isinstance(channel_util, dict) else None,
