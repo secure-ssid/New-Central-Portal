@@ -539,3 +539,68 @@ def test_warm_cache_uses_route_matching_arguments(monkeypatch):
     assert ev[1]["hours"] == 24 and ev[1]["limit"] == 10
     assert ev[1]["device_type"] == "access_point"    # normalized, not ACCESS_POINT
     cb.clear_bridge_cache()
+
+
+# ── Named VLANs panel on /platform/config (new feature) ──────────────────────
+
+def test_config_page_shows_named_vlans(client, mock_central, stub_db):
+    r = client.get("/platform/config")
+    assert r.status_code == 200
+    assert "Named VLANs" in r.text
+    assert "data" in r.text and ">200<" in r.text
+    assert "Undefined" not in r.text
+
+
+def test_named_vlans_parses_the_profile_shape(monkeypatch):
+    """The wrapper must read profile[].vlan.vlan-id-ranges — centralmcp's own
+    tool returns [] because it parses the wrong keys."""
+    import sys
+    import types
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+
+    def get_global_scope_id():
+        return {"global_scope_id": "79236221864456192", "errors": []}
+
+    class _Client:
+        def get(self, path, params=None):
+            return {"profile": [{"name": "data", "vlan": {"vlan-id-ranges": ["200"]}},
+                                {"name": "voice", "vlan": {"vlan-id-ranges": ["30", "31"]}}]}
+
+    mon = types.ModuleType("mcp_servers.monitoring")
+    mon.get_global_scope_id = get_global_scope_id
+    shared = types.ModuleType("mcp_servers.shared")
+    shared.get_client = lambda: _Client()
+    pkg = types.ModuleType("mcp_servers")
+    pkg.monitoring = mon
+    pkg.shared = shared
+    monkeypatch.setitem(sys.modules, "mcp_servers", pkg)
+    monkeypatch.setitem(sys.modules, "mcp_servers.monitoring", mon)
+    monkeypatch.setitem(sys.modules, "mcp_servers.shared", shared)
+    try:
+        vlans = asyncio.run(cb.list_named_vlans())
+        assert vlans == [{"name": "data", "ranges": ["200"]},
+                         {"name": "voice", "ranges": ["30", "31"]}]
+    finally:
+        cb.clear_bridge_cache()
+
+
+def test_named_vlans_none_when_scope_unresolved(monkeypatch):
+    import sys
+    import types
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+    mon = types.ModuleType("mcp_servers.monitoring")
+    mon.get_global_scope_id = lambda: {"errors": ["boom"]}
+    shared = types.ModuleType("mcp_servers.shared")
+    shared.get_client = lambda: None
+    pkg = types.ModuleType("mcp_servers")
+    pkg.monitoring = mon
+    pkg.shared = shared
+    monkeypatch.setitem(sys.modules, "mcp_servers", pkg)
+    monkeypatch.setitem(sys.modules, "mcp_servers.monitoring", mon)
+    monkeypatch.setitem(sys.modules, "mcp_servers.shared", shared)
+    try:
+        assert asyncio.run(cb.list_named_vlans()) is None
+    finally:
+        cb.clear_bridge_cache()
