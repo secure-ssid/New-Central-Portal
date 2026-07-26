@@ -229,12 +229,19 @@ async def warm_cache() -> None:
 
     started = time.monotonic()
 
+    # These must match the ARGUMENTS the routes actually call with, or the warm
+    # populates a cache key nothing ever reads. The alerts limit is the one the
+    # dashboard and the alerts hub use (ALERT_FETCH_LIMIT=100); warming the
+    # default 50 warmed a key no route reads.
+    from alert_severity import ALERT_FETCH_LIMIT
+    from vendors.aruba_central import _norm_device, site_display_name, site_id_of
+
     # Round 1 — the inventory every page needs.
     devices, _clients, sites, _alerts = await asyncio.gather(
         _quiet("devices", get_devices()),
         _quiet("clients", get_clients()),
         _quiet("sites", get_sites()),
-        _quiet("alerts", list_active_alerts()),
+        _quiet("alerts", list_active_alerts(limit=ALERT_FETCH_LIMIT)),
     )
 
     # Round 2 — the dashboard's expensive widgets, which are what actually made
@@ -247,19 +254,28 @@ async def warm_cache() -> None:
     for site in (sites or [])[:4]:
         if not isinstance(site, dict):
             continue
-        site_id = site.get("id") or site.get("siteId") or site.get("site_id")
-        name = site.get("siteName") or site.get("site_name") or site.get("name") or ""
+        # Resolve via the same helpers the routes use — New Central spells the
+        # name `scopeName`, which the old inline .get() chain missed, so the
+        # warmed key carried site_name=None and never matched the route's.
+        site_id = site_id_of(site)
+        name = site_display_name(site)
         jobs.append(_quiet("site-health", get_site_health_summary(
             site_id=str(site_id) if site_id else None, site_name=name or None)))
 
-    online = [d for d in (devices or [])
-              if isinstance(d, dict) and (d.get("serialNumber") or d.get("serial"))]
+    # Events: match routes/home.py's call exactly — it normalizes the device
+    # first (so device_type is the lowercased 'access_point', site_id the
+    # normalized field) and passes hours=24, limit=10. The old warm passed the
+    # raw ACCESS_POINT and no hours/limit, so every warmed key was a miss.
+    norm = [_norm_device(d) for d in (devices or []) if isinstance(d, dict)]
+    online = [d for d in norm if d.get("serial")]
+    online.sort(key=lambda d: d.get("status") != "online")
     for dev in online[:5]:
-        serial = dev.get("serialNumber") or dev.get("serial")
         jobs.append(_quiet("events", get_device_events(
-            serial,
-            site_id=str(dev.get("siteId") or "") or None,
-            device_type=dev.get("deviceType") or None,
+            dev["serial"],
+            hours=24,               # home.EVENT_LOOKBACK_HOURS
+            limit=10,               # home.EVENT_FEED_LIMIT
+            site_id=dev.get("site_id") or None,
+            device_type=dev.get("type") or None,
         )))
 
     await asyncio.gather(*jobs)
