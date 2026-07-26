@@ -678,12 +678,19 @@ async def device_mac_table(request: Request, serial: str, interface: str = Form(
         return _ops_error("MAC table is only available on switches.")
     iface = (interface or "").strip() or None
     try:
+        from ops_format import parse_mac_table
         result = await get_cx_mac_table(serial, interface=iface)
-        entries = []
+        entries: list[dict] = []
         if isinstance(result, dict):
             entries = result.get("entries") or result.get("macs") or result.get("items") or []
+            # The CX returns the table as TEXT under output.results[].output —
+            # not per-MAC dicts. Parsing it (rather than iterating the single
+            # {command, output} result as if it were a MAC entry) is what stops
+            # the one all-blank row this used to render.
             if not entries and isinstance(result.get("output"), dict):
-                entries = result["output"].get("results", [])
+                for res in result["output"].get("results", []):
+                    if isinstance(res, dict):
+                        entries.extend(parse_mac_table(res.get("output", "")))
         elif isinstance(result, list):
             entries = result
         if entries:

@@ -76,6 +76,25 @@ def _render_ops_job(result: dict) -> HTMLResponse | None:
     return HTMLResponse("".join(parts)) if parts else None
 
 
+_MAC_RE = re.compile(r"^[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}$")
+
+
+def parse_mac_table(text: str) -> list[dict]:
+    """Parse `show mac-address-table` text into rows.
+
+    AOS-CX columns are `MAC  VLAN  Type  Port` (Port is the last token). Only
+    lines whose first token is a MAC are kept, so the header, separators and
+    summary lines are skipped.
+    """
+    rows: list[dict] = []
+    for line in (text or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and _MAC_RE.match(parts[0]):
+            rows.append({"mac": parts[0], "vlan": parts[1],
+                         "type": parts[2], "port": parts[-1]})
+    return rows
+
+
 def _num(v):
     try:
         return float(str(v))
