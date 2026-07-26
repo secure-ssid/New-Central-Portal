@@ -1283,6 +1283,44 @@ async def get_device_running_config(serial: str) -> dict:
 
 
 @_cached()
+async def list_named_vlans() -> list[dict] | None:
+    """The tenant's named VLANs (name + VLAN-ID ranges).
+
+    centralmcp's config.list_named_vlans is unusable here: its own scope
+    resolution 404s (/network-monitoring/v1/globalScopeId), and even given a
+    scope it parses the wrong keys so `vlans` is always []. The real payload is
+    {"profile": [{"name": "data", "vlan": {"vlan-id-ranges": ["200"]}}]}. Get
+    the global scope id from monitoring (which resolves correctly) and query the
+    endpoint directly. Returns None on failure so the panel can tell "couldn't
+    read" from "no VLANs defined".
+    """
+    from mcp_servers.monitoring import get_global_scope_id
+    from mcp_servers.shared import get_client
+
+    def _fetch() -> list[dict] | None:
+        gs = get_global_scope_id()
+        sid = gs.get("global_scope_id") if isinstance(gs, dict) else None
+        if not sid:
+            return None
+        result = get_client().get("/network-config/v1/named-vlan",
+                                  params={"scope-id": str(sid)})
+        if not isinstance(result, dict):
+            return None
+        out = []
+        for p in result.get("profile", []) or []:
+            if not isinstance(p, dict):
+                continue
+            ranges = (p.get("vlan") or {}).get("vlan-id-ranges") or []
+            out.append({
+                "name": p.get("name") or "",
+                "ranges": [str(r) for r in ranges] if isinstance(ranges, list) else [],
+            })
+        return out
+
+    return await _run(_fetch)
+
+
+@_cached()
 async def list_mac_registrations(limit: int = 50, offset: int = 0) -> list[dict]:
     from mcp_servers.nac import list_mac_registrations as _fn
     result = await _run(_fn, limit=limit, offset=offset)

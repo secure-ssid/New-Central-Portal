@@ -156,6 +156,16 @@ async def config_viewer(request: Request):
     compliance_rows = compliance.get("rows", []) if compliance else []
     compliance_total = len(compliance_rows)
 
+    # Named VLANs — the tenant's VLAN definitions, which no page surfaces today
+    # (the WLANs all bind to VLAN 200, defined here). None = couldn't read;
+    # [] = none defined.
+    named_vlans = None
+    try:
+        from vendors.central_bridge import list_named_vlans
+        named_vlans = await list_named_vlans()
+    except Exception as exc:
+        logger.warning("Named VLANs unavailable: %s", exc)
+
     return templates.TemplateResponse(
         request,
         "platform/config.html",
@@ -166,6 +176,7 @@ async def config_viewer(request: Request):
             "compliance_total": compliance_total,
             "compliance_preview_limit": compliance_preview_limit,
             "compliance_error": compliance_error,
+            "named_vlans": named_vlans,
             "active": "config",
         },
     )
