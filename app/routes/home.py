@@ -389,34 +389,52 @@ def _health_tone(label: str | None) -> str:
     return "neutral"
 
 
+def _health_type_card(entry: dict) -> dict | None:
+    """One tenant-health card from a {name, health:{groups:[{name,value}]}} entry.
+
+    Poor/Fair/Good are per-type device or client counts. Tone is worst-first:
+    any Poor -> critical, any Fair -> warn, else ok.
+    """
+    if not isinstance(entry, dict):
+        return None
+    name = str(entry.get("name") or "").strip()
+    groups = (entry.get("health") or {}).get("groups") or []
+    counts = {g.get("name"): (g.get("value") or 0)
+              for g in groups if isinstance(g, dict)}
+    poor, fair, good = counts.get("Poor", 0), counts.get("Fair", 0), counts.get("Good", 0)
+    if not name or (poor + fair + good) == 0:
+        return None
+    if poor:
+        value = f"{poor} poor" + (f" · {good} good" if good else "")
+        tone = "critical"
+    elif fair:
+        value = f"{fair} fair" + (f" · {good} good" if good else "")
+        tone = "warn"
+    else:
+        value = f"all {good} good"
+        tone = "ok"
+    return {"label": name, "value": value, "tone": tone}
+
+
 def _tenant_health_cards(payload: dict | None) -> list[dict]:
-    """Turn tenant health JSON into structured dashboard cards."""
+    """Turn tenant health JSON into structured dashboard cards.
+
+    The payload nests health under device_health.deviceTypes[] and
+    client_health.clientTypes[], each a {name, health:{groups}} entry. The old
+    parser read top-level status/health/connectivity keys that do not exist and
+    skipped the nested dicts, so the widget rendered "not structured".
+    """
     if not isinstance(payload, dict):
         return []
-    skip = {"items", "data", "raw"}
     cards: list[dict] = []
-    priority = (
-        "status", "healthStatus", "health", "connectivity", "connectivityStatus",
-        "subscriptionStatus", "licenseStatus", "apiLatency", "latencyMs", "lastSync",
-    )
-    for key in priority:
-        val = payload.get(key)
-        if val not in (None, "", [], {}):
-            cards.append({
-                "label": key.replace("_", " ").replace("Status", " status"),
-                "value": str(val),
-                "tone": _health_tone(str(val)),
-            })
-    for key, val in payload.items():
-        if key in skip or key in priority or val in (None, "", [], {}):
-            continue
-        if isinstance(val, (dict, list)):
-            continue
-        cards.append({
-            "label": key.replace("_", " "),
-            "value": str(val),
-            "tone": _health_tone(str(val)),
-        })
+    for section, listkey in (("device_health", "deviceTypes"),
+                             ("client_health", "clientTypes")):
+        block = payload.get(section)
+        entries = block.get(listkey) if isinstance(block, dict) else None
+        for entry in entries or []:
+            card = _health_type_card(entry)
+            if card:
+                cards.append(card)
     return cards[:6]
 
 
