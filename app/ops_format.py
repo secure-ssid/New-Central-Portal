@@ -3,8 +3,32 @@ from __future__ import annotations
 
 import html
 import json
+import re
 
 from fastapi.responses import HTMLResponse
+
+_REDACTED = "« redacted »"
+
+# Directives whose argument is a secret in AOS-CX / AOS-S / gateway configs.
+# `show running-config` returns these; the value after the keyword is redacted
+# while the directive itself stays, so the config is still readable and
+# auditable without disclosing the credential. `ciphertext` covers every hashed
+# secret (password/key/radius/tacacs) because AOS-CX renders them all that way.
+_SECRET_ARG = re.compile(
+    r"(?i)\b(ciphertext|plaintext|wpa-passphrase|pre-shared-key|passphrase|"
+    r"psk|community|md5|sha256|sha512)\s+(\S+)"
+)
+
+
+def mask_config_secrets(text: str) -> str:
+    """Redact credential material in a device running-config dump.
+
+    Conservative and line-preserving: only the token following a known secret
+    keyword is replaced. Non-secret config is untouched.
+    """
+    if not text:
+        return text
+    return _SECRET_ARG.sub(lambda m: f"{m.group(1)} {_REDACTED}", text)
 
 
 def format_ops_pre(text: str, *, monospace: bool = True) -> HTMLResponse:

@@ -173,23 +173,41 @@ async def config_viewer(request: Request):
 
 @router.post("/config/running")
 async def running_config(request: Request, serial: str = Form(...)):
-    from vendors.central_bridge import get_device_running_config
+    # get_device_running_config's four candidate endpoints all fail on this
+    # tenant (400/404), so the old handler dumped a Python dict repr — internal
+    # API paths and all — into the page. `show running-config` over the ops CLI
+    # is the path that actually works (it is what /lab/config uses). Secrets in
+    # the output are masked before they reach the browser.
+    from vendors.aruba_central import _norm_device
+    from vendors.central_bridge import run_show
+    from ops_format import mask_config_secrets
 
     serial = (serial or "").strip()
-    device = await aruba.get_device(serial)
-    if not device:
+    raw = await aruba.get_device(serial)
+    if not raw:
         return HTMLResponse("<p style='color:#f87171;'>Device not found.</p>")
+    device = _norm_device(raw)
     try:
-        result = await get_device_running_config(serial)
-        text = ""
-        if isinstance(result, dict):
-            text = result.get("config") or result.get("output") or str(result)
-        else:
-            text = str(result)
-        return HTMLResponse(
-            f"<pre style='font-size:.72rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;'>"
-            f"{html.escape(str(text))}</pre>"
-        )
+        result = await run_show(serial, device.get("type") or "", ["show running-config"])
+        if isinstance(result, dict) and result.get("errors") and not result.get("output"):
+            reason = "; ".join(str(e) for e in result["errors"])[:300]
+            return HTMLResponse(
+                f"<p style='color:#f87171;'>Could not read the running config: "
+                f"{html.escape(reason)}</p>"
+            )
+        results = (result.get("output") or {}).get("results", []) if isinstance(result, dict) else []
+        parts = []
+        for item in results:
+            body = mask_config_secrets(item.get("output", "") or "")
+            if not body.strip():
+                continue
+            parts.append(
+                f"<pre style='font-size:.72rem;color:#94a3b8;white-space:pre-wrap;"
+                f"word-break:break-all;'>{html.escape(body)}</pre>"
+            )
+        if not parts:
+            return HTMLResponse("<p style='color:#64748b;'>No configuration returned.</p>")
+        return HTMLResponse("".join(parts))
     except Exception:
         logger.exception("Running config fetch failed for %s", serial)
         return HTMLResponse(

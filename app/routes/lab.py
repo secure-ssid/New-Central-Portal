@@ -1357,11 +1357,13 @@ async def config_fetch(request: Request, serial: str = Form(...), command: str =
     try:
         result = await run_show(serial, device["type"], cmds)
         outputs = result.get("output", {}).get("results", [])
+        from ops_format import mask_config_secrets
         html_parts = []
         for item in outputs:
+            body = mask_config_secrets(item.get("output", "") or "")
             html_parts.append(
                 f'<p style="font-size:.65rem;color:#f97316;margin-bottom:4px;font-weight:700;">{html_mod.escape(item.get("command", ""))}</p>'
-                f'<pre style="font-size:.75rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-bottom:16px;">{html_mod.escape(item.get("output", ""))}</pre>'
+                f'<pre style="font-size:.75rem;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-bottom:16px;">{html_mod.escape(body)}</pre>'
             )
         return HTMLResponse("".join(html_parts) or "<p class='text-gray-500'>No output.</p>")
     except Exception as e:
