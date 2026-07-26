@@ -362,3 +362,30 @@ def test_wireless_card_empty_when_nothing_reported():
     from routes.devices import _wireless_cards
     cards = _wireless_cards(None, None, None)
     assert cards == {"radios": [], "metrics": [], "channel_util_pct": None}
+
+
+# ── MAC table: parse the text into rows (no blank row) ───────────────────────
+
+def test_parse_mac_table_extracts_rows_and_skips_chrome():
+    from ops_format import parse_mac_table
+    text = (
+        "MAC age-time            : 300 seconds\n"
+        "Number of MAC addresses : 3\n"
+        "\n"
+        "MAC Address          VLAN     Type        Port\n"
+        "-----------------------------------------------\n"
+        "94:40:c9:12:71:d2    1        dynamic     1/1/23\n"
+        "f4:e1:fc:c9:4f:a0    5        dynamic     1/1/15\n"
+        "00:0b:86:b8:c4:b8    200      dynamic     1/1/17\n"
+    )
+    rows = parse_mac_table(text)
+    assert len(rows) == 3          # header/separator/summary all skipped
+    assert rows[0] == {"mac": "94:40:c9:12:71:d2", "vlan": "1",
+                       "type": "dynamic", "port": "1/1/23"}
+    assert rows[2]["port"] == "1/1/17" and rows[2]["vlan"] == "200"
+
+
+def test_parse_mac_table_empty_input_is_no_rows_not_a_blank_row():
+    from ops_format import parse_mac_table
+    assert parse_mac_table("") == []
+    assert parse_mac_table("MAC Address  VLAN  Type  Port\n----\n") == []
