@@ -762,3 +762,60 @@ def test_get_cluster_members_normalizes_shape(monkeypatch):
             {"serial": "B", "name": "gw-b", "role": "Member", "status": "offline"}]
     finally:
         cb.clear_bridge_cache()
+
+
+# ── Site health label/fields from real data (was permanent em-dash) ──────────
+
+def test_site_health_fields_flatten_nested_totals():
+    from routes.sites import _health_fields
+    rows = _health_fields({"site": "SecureSSID", "devices": {"total": 0},
+                           "clients": {"total": 40},
+                           "alerts": {"total": 2, "by_severity": {"critical": 1, "minor": 1}}})
+    labels = {r["label"].strip(): r["value"] for r in rows}
+    assert labels["Clients"] == "40"
+    assert labels["Active alerts"] == "2"
+    assert labels["critical"] == "1"
+    # The broken devices.total (0 from Central's siteId filter) is not shown.
+    assert not any("Device" in r["label"] for r in rows)
+
+
+def test_home_site_card_label_uses_real_totals(monkeypatch):
+    """The card showed em-dash because it read status/healthStatus/summary,
+    none of which exist."""
+    import routes.home as home
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+
+    async def sites(limit=4):
+        return [{"scopeId": "1", "scopeName": "SecureSSID"}]
+
+    async def summary(site_id=None, site_name=None):
+        return {"clients": {"total": 40}, "alerts": {"total": 0, "by_severity": {}}}
+
+    monkeypatch.setattr(cb, "get_sites", sites)
+    monkeypatch.setattr(cb, "get_site_health_summary", summary)
+    try:
+        cards = asyncio.run(home._site_health_cards(limit=4))
+        assert cards and cards[0]["label"] == "40 clients"
+    finally:
+        cb.clear_bridge_cache()
+
+
+def test_home_site_card_prefers_alerts_over_clients(monkeypatch):
+    import routes.home as home
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+
+    async def sites(limit=4):
+        return [{"scopeId": "1", "scopeName": "S"}]
+
+    async def summary(site_id=None, site_name=None):
+        return {"clients": {"total": 40}, "alerts": {"total": 3, "by_severity": {}}}
+
+    monkeypatch.setattr(cb, "get_sites", sites)
+    monkeypatch.setattr(cb, "get_site_health_summary", summary)
+    try:
+        cards = asyncio.run(home._site_health_cards(limit=4))
+        assert cards[0]["label"] == "3 active alerts"
+    finally:
+        cb.clear_bridge_cache()

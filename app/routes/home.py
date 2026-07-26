@@ -313,17 +313,21 @@ async def _site_health_cards(limit: int = 4) -> list[dict]:
             )
         except Exception:
             return None
-        label = None
+        # No status/healthStatus/summary key exists in the payload; derive the
+        # label from the figures that ARE populated (site-scoped alert and
+        # client totals) rather than always rendering an em-dash.
+        label = "—"
         if isinstance(summary, dict):
-            label = (
-                summary.get("status")
-                or summary.get("healthStatus")
-                or summary.get("summary")
-            )
+            alerts = (summary.get("alerts") or {}).get("total") or 0
+            clients = (summary.get("clients") or {}).get("total")
+            if alerts:
+                label = f"{alerts} active alert{'s' if alerts != 1 else ''}"
+            elif clients is not None:
+                label = f"{clients} client{'s' if clients != 1 else ''}"
         return {
             "id": site_id,
             "name": name or "Unnamed site",
-            "label": str(label) if label else "—",
+            "label": label,
         }
 
     results = await asyncio.gather(*(_one(s) for s in picks), return_exceptions=True)

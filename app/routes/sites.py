@@ -13,23 +13,29 @@ logger = logging.getLogger(__name__)
 
 
 def _health_fields(summary: dict | None) -> list[dict]:
-    """Turn a site health summary dict into label/value rows for the template."""
+    """Turn a site health summary into label/value rows.
+
+    The payload nests its useful figures under devices/clients/alerts dicts
+    (e.g. {"clients": {"total": 40}, "alerts": {"total": 0, "by_severity": …}}).
+    The old code skipped every dict-valued entry and looked for top-level
+    status/healthStatus/summary keys that do not exist, so it surfaced nothing.
+    The site's own device count is shown elsewhere on the page from a reliable
+    fetch, and the summary's devices.total is 0 here (Central 400s the siteId
+    device filter inside centralmcp), so devices are deliberately omitted.
+    """
     if not isinstance(summary, dict):
         return []
-    skip = {"status", "healthStatus", "summary", "siteId", "siteName", "site_id", "site_name"}
     rows: list[dict] = []
-    for key, val in summary.items():
-        if key in skip or val in (None, "", [], {}):
-            continue
-        label = key.replace("_", " ").replace("Id", " ID")
-        if isinstance(val, (dict, list)):
-            continue
-        rows.append({"label": label, "value": str(val)})
-    for key in ("status", "healthStatus", "summary"):
-        if summary.get(key) not in (None, ""):
-            rows.insert(0, {"label": "Overall", "value": str(summary[key])})
-            break
-    return rows[:8]
+    clients = summary.get("clients")
+    if isinstance(clients, dict) and clients.get("total") is not None:
+        rows.append({"label": "Clients", "value": str(clients["total"])})
+    alerts = summary.get("alerts")
+    if isinstance(alerts, dict) and alerts.get("total") is not None:
+        rows.append({"label": "Active alerts", "value": str(alerts["total"])})
+        for sev, count in (alerts.get("by_severity") or {}).items():
+            if count:
+                rows.append({"label": f"  {sev}", "value": str(count)})
+    return rows[:10]
 
 
 def _norm_site(raw: dict) -> dict:
@@ -126,17 +132,16 @@ async def site_detail(request: Request, site_id: str):
         devices = [d for d in devices if (d.get("site") or "").lower() == site_name.lower()]
         clients = [c for c in clients if (c.get("site") or "").lower() == site_name.lower()]
     online_count = sum(1 for d in devices if d.get("status") == "online")
+    device_total = len(devices)
     preview_limit = 25
 
+    # The payload has no status/healthStatus/summary key, so derive the label
+    # from the reliable device count the page already computed.
     health_label = None
-    if isinstance(health_summary, dict):
-        health_label = (
-            health_summary.get("status")
-            or health_summary.get("healthStatus")
-            or health_summary.get("summary")
-        )
-        if health_label is not None:
-            health_label = str(health_label)
+    if device_total:
+        offline = device_total - online_count
+        health_label = (f"All {device_total} devices online" if offline == 0
+                        else f"{offline} of {device_total} devices offline")
 
     return templates.TemplateResponse(
         request,
@@ -146,7 +151,7 @@ async def site_detail(request: Request, site_id: str):
             "site_location": site_location,
             "devices": devices[:preview_limit],
             "clients": clients[:preview_limit],
-            "device_total": len(devices),
+            "device_total": device_total,
             "client_total": len(clients),
             "preview_limit": preview_limit,
             "online_count": online_count,
