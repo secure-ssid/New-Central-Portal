@@ -885,3 +885,29 @@ def test_config_group_links_to_the_device_groups_panel(client, mock_central, stu
     # And the anchor target exists on the config page.
     cfg = client.get("/platform/config").text
     assert 'id="device-groups"' in cfg
+
+
+def test_relative_age_buckets():
+    from datetime import datetime, timezone
+    from routes.devices import _relative_age
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    day = 86400
+    base = now.timestamp()
+    assert _relative_age(base - 30, now=now) == "just now"
+    assert _relative_age(base - 5 * 3600, now=now) == "5h ago"
+    assert _relative_age(base - 3 * day, now=now) == "3 days ago"
+    assert _relative_age(base - 21 * day, now=now) == "3 weeks ago"
+    assert _relative_age(base - 90 * day, now=now) == "3 months ago"
+    assert _relative_age(base - 400 * day, now=now) == "1 year ago"
+    assert _relative_age(base + 100, now=now) is None      # future -> None
+
+
+def test_config_info_includes_relative_age():
+    from datetime import datetime, timezone
+    from routes.devices import _device_config_info
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    # lastConfigTimestamp is ms; pick ~10 days before `now`.
+    ts_ms = int((now.timestamp() - 10 * 86400) * 1000)
+    info = _device_config_info({"health": [{"configStatus": "SYNCHRONIZED",
+                                            "lastConfigTimestamp": str(ts_ms)}]}, now=now)
+    assert info["last_changed_ago"] == "10 days ago"
