@@ -27,47 +27,80 @@ def _device_tab_qs(request: Request, type_value: str | None) -> str:
     return urlencode(pairs)
 
 
+# AP metrics worth surfacing, in display order. These are the keys the wireless
+# payload actually carries (nested under `metrics`) — the previous list looked
+# for noiseFloor/cpu/memory, none of which exist there, so the panel was always
+# empty. meshRole is skipped when it is the "-" placeholder.
+_AP_METRIC_FIELDS = (
+    ("Mode", "mode"),
+    ("Uplink", "currentUplinkInUse"),
+    ("Last reboot", "lastRebootReason"),
+    ("Country", "countryCode"),
+    ("Mesh role", "meshRole"),
+    ("Firmware", "firmwareVersion"),
+)
+
+
+def _radio_field(raw: dict, *keys: str) -> str:
+    """First present value across candidate keys. Treats 0 as a real value
+    (the old `x or y or '—'` chain rendered a genuine 0 clients/util as '—')."""
+    for k in keys:
+        v = raw.get(k)
+        if v not in (None, ""):
+            return str(v)
+    return "—"
+
+
 def _wireless_cards(
     wireless_metrics: dict | None,
     ap_radios: dict | None,
     channel_util: dict | None,
 ) -> dict:
-    """Normalize AP wireless payloads into template-friendly cards."""
+    """Normalize AP wireless payloads into template-friendly cards.
+
+    The real RF fields are channelUtilization / noiseFloor / power /
+    channelQuality on each radio (centralmcp's normalized `utilization_pct`
+    view is all-null); the AP summary metrics live one level down under
+    `metrics`. Both were being read at the wrong level, so the panel showed
+    nulls or nothing.
+    """
     radios: list[dict] = []
+    util_values: list[float] = []
     if isinstance(ap_radios, dict):
         items = ap_radios.get("radios") or ap_radios.get("items") or ap_radios.get("data") or []
         if isinstance(items, list):
             for raw in items:
                 if not isinstance(raw, dict):
                     continue
+                util = _radio_field(raw, "channelUtilization", "utilization", "utilization_pct")
+                try:
+                    util_values.append(float(util))
+                except (TypeError, ValueError):
+                    pass
                 radios.append({
-                    "band": str(raw.get("band") or raw.get("radioBand") or raw.get("wirelessBand") or "—"),
-                    "channel": str(raw.get("channel") or raw.get("wirelessChannel") or "—"),
-                    "power": str(raw.get("txPower") or raw.get("power") or raw.get("eirp") or "—"),
-                    "clients": str(raw.get("numClients") or raw.get("clientCount") or raw.get("clients") or "—"),
-                    "util": str(raw.get("utilization") or raw.get("channelUtilization") or "—"),
+                    "band": _radio_field(raw, "band", "radioBand", "wirelessBand"),
+                    "channel": _radio_field(raw, "channel", "wirelessChannel"),
+                    "power": _radio_field(raw, "power", "txPower", "tx_power_dbm", "eirp"),
+                    "clients": _radio_field(raw, "clientCount", "numClients", "client_count", "clients"),
+                    "util": util if util != "—" else "—",
+                    "noise": _radio_field(raw, "noiseFloor", "noise_floor_dbm"),
+                    "quality": _radio_field(raw, "channelQuality"),
                 })
 
-    metrics: list[dict] = []
+    # AP summary metrics live under `metrics` on the envelope, not at the top.
+    mdict = {}
     if isinstance(wireless_metrics, dict):
-        for key in (
-            "noiseFloor", "clientCount", "cpu", "memory", "txBytes", "rxBytes",
-            "txRate", "rxRate", "uptime", "status",
-        ):
-            val = wireless_metrics.get(key)
-            if val not in (None, ""):
-                label = key.replace("_", " ")
-                metrics.append({"label": label, "value": str(val)})
+        inner = wireless_metrics.get("metrics")
+        mdict = inner if isinstance(inner, dict) else wireless_metrics
+    metrics: list[dict] = []
+    for label, key in _AP_METRIC_FIELDS:
+        val = mdict.get(key)
+        if val not in (None, "", "-"):
+            metrics.append({"label": label, "value": str(val)})
 
-    util_pct = None
-    if isinstance(channel_util, dict):
-        util_pct = (
-            channel_util.get("utilization")
-            or channel_util.get("channelUtilization")
-            or channel_util.get("avgUtilization")
-        )
-        if util_pct is not None:
-            util_pct = str(util_pct)
+    # The channel-utilization summary: average of the radios that reported one.
+    # The old code read a top-level key that does not exist, so it was None.
+    util_pct = f"{sum(util_values) / len(util_values):.0f}" if util_values else None
 
     return {"radios": radios, "metrics": metrics[:8], "channel_util_pct": util_pct}
 
