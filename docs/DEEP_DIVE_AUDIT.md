@@ -33,10 +33,33 @@ portal is shared beyond its owner.
 | D17 | GLP service-offer catalog always blank (wrong envelope key) | **fixed** — read `data.items` | `246d43f` |
 | D12 | `/platform/config` "Fetch config" dumps a raw dict with internal API paths | **fixed** — `show running-config` via ops CLI, secrets masked | `794d793` |
 | S13 | Running-config exposes `password ciphertext …` verbatim | **fixed** — `mask_config_secrets` on both config pages | `794d793` |
+| HTTP | 8 diagnostic panels (LLDP/ARP/MAC/STP) render raw JSON | **fixed** — `format_ops_response` unwraps the ops-job envelope | `bd87f7d` |
+| D13 | LLDP and Find-MAC send commands the CX rejects | **fixed** — corrected command strings via `run_show` | `b3aa5b7` |
+| HTTP | Ping panel dumps a raw dict and paints a successful ping red | **fixed** — structured ping formatter coloured by reachability | `dd2f8bc` |
+| HTTP | Switch MAC table always renders one blank row | **fixed** — parse the text table into rows | `7e025b8` |
+| HTTP | 4 JSON POST routes 500 on a type-confused body | **fixed** — validate field types, return 400 | `6bba8a2` |
+| D14 | AP wireless card renders null RF metrics | **fixed** — read the real keys / aggregate util / unwrap metrics | `272c0aa` |
+| errors | Bad query param on an HTML route returns raw 422 JSON | **fixed** — themed 400 page for browser navigations | `26b75f5` |
+| — | Notifications DB-unavailable banner never rendered | **fixed** — render the `warning` | `4c999f8` |
+| — | `asset_url` re-hashes 59 KB of CSS every render | **fixed** — memoize on mtime/size | `4c999f8` |
+| D26 | Lab MCP tester dispatch uncached (trivial 429 source) | **fixed** — `@_cached()` on `run_tool` | `58a210d` |
+| — | `get_notification_history` nondeterministic order | **fixed** — `id DESC` tiebreak | `58a210d` |
+| D5 | Startup warm populates keys no route reads | **fixed** — warm with route-matching args | `e5527df` |
+| known | Gateways render blank chart cards (all-null trends) | **fixed** — all-None series counts as absent | `3f825af` |
+
+**New features added** (surfacing data the portal collected but never showed):
+Named VLANs panel (`bfb3b51`) and Device Groups panel (`1dce76f`) on
+`/platform/config`.
+
+**Investigated, not viable:** the UXI sensor backend (hardware CNNCKYT02W is in
+the GLP inventory) requires `UXI_CLIENT_ID`/`UXI_CLIENT_SECRET` credentials that
+are not configured; every UXI tool returns "UXI not configured". Set those
+credentials to enable a UXI feature.
 
 All other findings below are **open**. The Classic-Central and device-inventory
 items are gated on the mutation experiments in Part 7, which require live writes
-to settle.
+to settle. Security items (Part 3) are deferred by the owner until the portal is
+shared more widely.
 
 # New Central Portal — Consolidated Deep-Dive
 
