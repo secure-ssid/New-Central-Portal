@@ -28,6 +28,13 @@ if _want_built and not _built_present:
 templates.env.globals["use_built_tailwind"] = _want_built and _built_present
 
 
+# path -> (st_mtime_ns, st_size, digest). Avoids re-reading and re-hashing
+# ~59 KB of CSS on every single page render — a stat() is cheap, the hash is
+# recomputed only when the file's mtime or size changes (i.e. after a rebuild),
+# which keeps the cache-busting correct.
+_asset_hash_cache: dict[str, tuple[int, int, str]] = {}
+
+
 def asset_url(path: str) -> str:
     """Return a static path with a content-hash query string.
 
@@ -41,12 +48,22 @@ def asset_url(path: str) -> str:
     rel = path.lstrip("/")
     if rel.startswith("static/"):
         rel = rel[len("static/"):]
+    full = os.path.join("static", rel)
     try:
-        with open(os.path.join("static", rel), "rb") as fh:
+        st = os.stat(full)
+    except OSError:
+        logger.debug("asset_url: %s not readable; serving unversioned", path)
+        return path
+    cached = _asset_hash_cache.get(path)
+    if cached is not None and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+        return f"{path}?v={cached[2]}"
+    try:
+        with open(full, "rb") as fh:
             digest = hashlib.blake2b(fh.read(), digest_size=8).hexdigest()
     except OSError:
         logger.debug("asset_url: %s not readable; serving unversioned", path)
         return path
+    _asset_hash_cache[path] = (st.st_mtime_ns, st.st_size, digest)
     return f"{path}?v={digest}"
 
 
