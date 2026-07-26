@@ -3,12 +3,14 @@ from routes.sites import _health_fields
 
 
 def test_health_fields_structured():
-    rows = _health_fields({"status": "healthy", "deviceCount": 5, "clientCount": 12})
-    assert rows[0]["label"] == "Overall"
-    assert rows[0]["value"] == "healthy"
-    values = {r["value"] for r in rows}
-    assert "5" in values
-    assert "12" in values
+    # Real payload shape: figures nested under clients/alerts dicts.
+    rows = _health_fields({"site": "HQ", "devices": {"total": 0},
+                           "clients": {"total": 12},
+                           "alerts": {"total": 1, "by_severity": {"critical": 1}}})
+    labels = {r["label"].strip(): r["value"] for r in rows}
+    assert labels["Clients"] == "12"
+    assert labels["Active alerts"] == "1"
+    assert labels["critical"] == "1"
 
 
 def test_site_detail_renders(client, mock_central, stub_db):
