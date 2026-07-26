@@ -550,10 +550,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
             <p class="section-label mb-2">Radios</p>
             <div class="overflow-x-auto">
                 <table class="tbl text-[11px]">
-                    <thead><tr><th>Band</th><th>Channel</th><th>Power</th><th>Clients</th><th>Util</th></tr></thead>
+                    <thead><tr><th>Band</th><th>Channel</th><th>Power</th><th>Clients</th><th>Util</th><th>Noise</th><th>Quality</th></tr></thead>
                     <tbody>
                         {% for r in wireless_cards.radios %}
-                        <tr><td>{{ r.band }}</td><td>{{ r.channel }}</td><td>{{ r.power }}</td><td>{{ r.clients }}</td><td>{{ r.util }}</td></tr>
+                        <tr><td>{{ r.band }}</td><td>{{ r.channel }}</td><td>{{ r.power }}</td><td>{{ r.clients }}</td>
+                            <td>{% if r.util != '—' %}{{ r.util }}%{% else %}—{% endif %}</td>
+                            <td>{% if r.noise != '—' %}{{ r.noise }} dBm{% else %}—{% endif %}</td>
+                            <td>{{ r.quality }}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

@@ -324,3 +324,41 @@ def test_ping_text_output_success_detection():
         "output": "5 packets transmitted, 5 received, 0% packet loss"}]}}
     body = format_ping_response(env).body.decode()
     assert "#4ade80" in body and "0% packet loss" in body
+
+
+# ── AP wireless card: real RF values, aggregated util, 0 != dash ─────────────
+
+def test_wireless_card_reads_real_rf_keys_and_aggregates_util():
+    from routes.devices import _wireless_cards
+    ap_radios = {"radios": [
+        {"band": "5 GHz", "channel": "104E", "channelUtilization": "3",
+         "noiseFloor": "-99", "power": "15", "channelQuality": "99", "clientCount": 1},
+        {"band": "2.4 GHz", "channel": "6", "channelUtilization": "11",
+         "noiseFloor": "-92", "power": "8", "channelQuality": "94", "clientCount": 0},
+    ]}
+    cards = _wireless_cards(None, ap_radios, None)
+    r0 = cards["radios"][0]
+    assert r0["util"] == "3" and r0["noise"] == "-99" and r0["power"] == "15"
+    assert r0["quality"] == "99"
+    # 0 clients renders "0", not "—"
+    assert cards["radios"][1]["clients"] == "0"
+    # channel-util summary is the average of the two radios (3, 11 -> 7)
+    assert cards["channel_util_pct"] == "7"
+
+
+def test_wireless_metrics_unwraps_the_metrics_envelope():
+    from routes.devices import _wireless_cards
+    env = {"serial_number": "x", "endpoint_used": "y", "errors": [],
+           "metrics": {"mode": "Client Access", "currentUplinkInUse": "Ethernet",
+                       "lastRebootReason": "Power-reset", "meshRole": "-"}}
+    cards = _wireless_cards(env, None, None)
+    labels = {m["label"]: m["value"] for m in cards["metrics"]}
+    assert labels["Mode"] == "Client Access"
+    assert labels["Uplink"] == "Ethernet"
+    assert "Mesh role" not in labels          # "-" placeholder skipped
+
+
+def test_wireless_card_empty_when_nothing_reported():
+    from routes.devices import _wireless_cards
+    cards = _wireless_cards(None, None, None)
+    assert cards == {"radios": [], "metrics": [], "channel_util_pct": None}
