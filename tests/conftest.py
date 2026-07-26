@@ -334,7 +334,10 @@ def mock_central(monkeypatch):
     monkeypatch.setattr(cb, "get_switch_port_errors", _async_return({"ports": []}))
     monkeypatch.setattr(cb, "find_mac_on_switch", _async_return({}))
     monkeypatch.setattr(cb, "run_traceroute", _async_return({"status": "ok", "output": {"results": []}}))
-    monkeypatch.setattr(cb, "get_device_health", _async_return({"health": None, "errors": []}))
+    monkeypatch.setattr(cb, "get_device_health", _async_return({"health": [{
+        "configStatus": "SYNCHRONIZED", "deviceGroupName": "Switches",
+        "lastConfigTimestamp": "1783021683380", "topPriorityIssue": "-",
+        "activeIssues": [], "recommendedAction": "-"}], "errors": []}))
     monkeypatch.setattr(cb, "find_device_uplink", _async_return(
         {"switch_serial": "SW1SERIAL", "switch_name": "core-sw-1", "port": "1/1/1"}))
     return {

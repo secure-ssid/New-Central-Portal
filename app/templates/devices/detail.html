@@ -106,7 +106,7 @@
     </div>
     <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-xs">
         {% if config_info.group %}
-        <div class="flex justify-between gap-3"><dt class="text-slate-500">Config group</dt><dd class="text-slate-200">{{ config_info.group }}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">Config group</dt><dd><a href="/platform/config#device-groups" class="text-brand-400 hover:text-brand-300 no-underline">{{ config_info.group }}</a></dd></div>
         {% endif %}
         {% if config_info.last_changed %}
         <div class="flex justify-between gap-3"><dt class="text-slate-500">Last config change</dt><dd class="text-slate-200 font-mono">{{ config_info.last_changed }}</dd></div>
