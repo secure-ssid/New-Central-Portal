@@ -414,3 +414,44 @@ def test_bad_query_param_for_htmx_stays_json(client, mock_central, stub_db):
     r = client.get("/lab/activity?hours=xyz", headers={"hx-request": "true"})
     assert r.status_code == 422
     assert "application/json" in r.headers["content-type"]
+
+
+# ── asset_url memoization + notifications db-error banner ─────────────────────
+
+def test_asset_url_memoizes_until_the_file_changes(tmp_path, monkeypatch):
+    import templates_shared as ts
+    ts._asset_hash_cache.clear()
+    # Point "static" at a temp dir with a known file.
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "app.css").write_bytes(b"body{}")
+    monkeypatch.chdir(tmp_path)
+
+    reads = {"n": 0}
+    real_open = open
+
+    def counting_open(path, *a, **k):
+        if str(path).endswith("app.css") and "b" in (a[0] if a else k.get("mode", "")):
+            reads["n"] += 1
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr("builtins.open", counting_open)
+    u1 = ts.asset_url("/static/app.css")
+    u2 = ts.asset_url("/static/app.css")
+    u3 = ts.asset_url("/static/app.css")
+    assert u1 == u2 == u3 and "?v=" in u1
+    assert reads["n"] == 1, "the file should be hashed once, not on every call"
+
+
+def test_asset_url_missing_file_serves_unversioned(monkeypatch, tmp_path):
+    import templates_shared as ts
+    ts._asset_hash_cache.clear()
+    monkeypatch.chdir(tmp_path)
+    assert ts.asset_url("/static/nope.css") == "/static/nope.css"
+
+
+def test_notifications_db_error_banner_renders(client, mock_central, dead_db):
+    """The route computes `warning` on DB failure; the template must show it."""
+    r = client.get("/notifications/")
+    assert r.status_code == 200
+    assert "Database unavailable" in r.text
