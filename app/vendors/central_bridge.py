@@ -17,6 +17,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import time
 import threading
 import weakref
@@ -810,6 +811,14 @@ def health_entry_for(fleet_health: list[dict], serial: str) -> dict | None:
 
 @_cached()
 async def get_lldp_neighbors(serial: str) -> dict:
+    # centralmcp's ops.get_lldp_neighbors sends `show lldp neighbors` (plural),
+    # which AOS-CX rejects with "Command not allowed" — so the LLDP panel has
+    # never shown data on the switch. The accepted command is the singular
+    # `show lldp neighbor` (verified: 10 neighbor entries). centralmcp is
+    # mounted read-only, so run the corrected command directly for CX; other
+    # platforms keep the original path.
+    if _resolve_troubleshoot_type(serial, "") == "cx":
+        return await run_show(serial, "switch", ["show lldp neighbor"])
     from mcp_servers.ops import get_lldp_neighbors as _lldp
     return await _run(_lldp, serial)
 
@@ -877,7 +886,41 @@ async def get_switch_port_errors(serial: str, interface: str | None = None) -> d
     return await _run(_fn, serial, interface=interface)
 
 
+def _mac_key(mac: str) -> str:
+    """A comparable hex-only key for a MAC, separator- and case-insensitive.
+
+    (Distinct from _normalize_mac below, which formats a MAC *to* colon form.)
+    """
+    return re.sub(r"[^0-9a-f]", "", str(mac or "").lower())
+
+
+def _find_mac_in_table(envelope: dict, mac_address: str) -> dict:
+    """Locate a MAC in `show mac-address-table` output.
+
+    Columns are `MAC  VLAN  Type  Port` (verified live). Returns a dict with
+    port/vlan when found (the handler's success path reads `port`), or an
+    ops-job envelope carrying a clear message so it renders as readable text.
+    """
+    want = _mac_key(mac_address)
+    results = (envelope.get("output") or {}).get("results") or [] if isinstance(envelope, dict) else []
+    text = results[0].get("output", "") if results else ""
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and _mac_key(parts[0]) == want:
+            return {"mac": parts[0], "vlan": parts[1],
+                    "type": parts[2], "port": parts[-1]}
+    return {"output": {"results": [{
+        "command": "show mac-address-table",
+        "output": f"MAC {mac_address} is not in the forwarding table.\n\n{text}"}]}}
+
+
 async def find_mac_on_switch(serial: str, mac_address: str) -> dict:
+    # centralmcp sends `show mac-address-table address <mac>`, which AOS-CX
+    # rejects. `show mac-address-table` (whole table) is accepted; filter it
+    # client-side. centralmcp is read-only, so do this here for CX.
+    if _resolve_troubleshoot_type(serial, "") == "cx":
+        env = await run_show(serial, "switch", ["show mac-address-table"])
+        return _find_mac_in_table(env, mac_address)
     from mcp_servers.ops import find_mac_on_switch as _fn
     return await _run(_fn, serial, mac_address)
 
