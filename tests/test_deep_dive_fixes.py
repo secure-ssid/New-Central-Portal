@@ -455,3 +455,51 @@ def test_notifications_db_error_banner_renders(client, mock_central, dead_db):
     r = client.get("/notifications/")
     assert r.status_code == 200
     assert "Database unavailable" in r.text
+
+
+# ── Lab MCP tester dispatch is cached; notification history is deterministic ─
+
+def test_run_tool_is_cached_so_repeated_clicks_do_not_re_hit_upstream(monkeypatch):
+    import sys
+    import types
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+
+    calls = {"n": 0}
+
+    def list_sites(**kw):
+        calls["n"] += 1
+        return {"items": [{"id": "1", "scopeName": "S"}]}
+
+    monitoring = types.ModuleType("mcp_servers.monitoring")
+    monitoring.list_sites = list_sites
+    pkg = types.ModuleType("mcp_servers")
+    pkg.monitoring = monitoring
+    monkeypatch.setitem(sys.modules, "mcp_servers", pkg)
+    monkeypatch.setitem(sys.modules, "mcp_servers.monitoring", monitoring)
+
+    import asyncio
+    r1 = asyncio.run(cb.run_tool("list_sites", "{}"))
+    r2 = asyncio.run(cb.run_tool("list_sites", "{}"))
+    assert r1["status"] == "success" and r1 == r2
+    assert calls["n"] == 1, "identical (tool, params) must be served from cache"
+    # Different params => different key => a second upstream call.
+    asyncio.run(cb.run_tool("list_sites", '{"limit": 5}'))
+    assert calls["n"] == 2
+    cb.clear_bridge_cache()
+
+
+def test_run_tool_invalid_json_is_a_clean_error_not_a_crash():
+    import asyncio
+    from vendors import central_bridge as cb
+    cb.clear_bridge_cache()
+    r = asyncio.run(cb.run_tool("whatever", "{not json"))
+    assert r["status"] == "error" and "Invalid JSON" in r["error"]
+
+
+def test_notification_history_orders_by_id_tiebreak():
+    """Same-second rows must order deterministically, like the sibling getters."""
+    import inspect
+    import db
+    src = inspect.getsource(db.get_notification_history)
+    assert "ORDER BY sent_at DESC, id DESC" in src

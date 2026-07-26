@@ -1800,8 +1800,16 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
 }
 
 
+@_cached()
 async def run_tool(tool_name: str, params_json: str) -> dict:
-    """Execute a named centralmcp tool and return a result dict."""
+    """Execute a named centralmcp tool and return a result dict.
+
+    Cached: the Lab MCP tester is the one path where a human trivially
+    generates 429s by re-clicking the same tool, and the upstream limiter is
+    10 req/s. params_json is a string, so the (tool_name, params_json) cache
+    key is stable. On error the result carries a truthy `error`, so
+    _is_low_confidence keeps it only briefly (5s) rather than the full 60s.
+    Read-only dispatch only (invoke_read_tool blocks write tools)."""
     try:
         params = json.loads(params_json) if params_json.strip() else {}
     except json.JSONDecodeError as exc:
