@@ -1,14 +1,15 @@
 name: CI
 
+# Branches are listed by target, not by who (or what) wrote them: a tool-added
+# `claude/**` glob used to decide whether CI ran at all. A pull request always
+# targets main, so every change is covered without naming a contributor.
 on:
   push:
     branches:
       - main
-      - "claude/**"
   pull_request:
     branches:
       - main
-      - "claude/**"
 
 jobs:
   tests:
