@@ -18,7 +18,9 @@
 
     {% for result in results %}
     <div class="card hover:border-brand-500 transition-colors" x-data="{ open: false }">
-        <div class="flex items-start justify-between gap-3 mb-2 cursor-pointer" @click="open = !open">
+        <div class="flex items-start justify-between gap-3 mb-2 cursor-pointer" role="button" tabindex="0"
+             @click="open = !open" @keydown.enter="open = !open" @keydown.space.prevent="open = !open"
+             :aria-expanded="open ? 'true' : 'false'">
             <div class="flex items-center gap-2 min-w-0">
                 <svg :class="{ 'rotate-90': open }" class="w-4 h-4 text-slate-500 transition-transform flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>

@@ -121,21 +121,22 @@ document.addEventListener('alpine:init', () => {
         <table class="tbl tbl--wide">
             <thead>
                 <tr>
-                    <th scope="col" class="sortable" @click="sortBy('mac')">MAC Address <span aria-hidden="true" x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('hostname')">Hostname <span aria-hidden="true" x-text="sortIcon('hostname')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('category')">Device <span aria-hidden="true" x-text="sortIcon('category')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('type')">Type <span aria-hidden="true" x-text="sortIcon('type')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('ip')">IP Address <span aria-hidden="true" x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('vlan')">VLAN <span aria-hidden="true" x-text="sortIcon('vlan')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('connected_to')">Connected To <span aria-hidden="true" x-text="sortIcon('connected_to')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('site')">Site <span aria-hidden="true" x-text="sortIcon('site')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('role')">Role <span aria-hidden="true" x-text="sortIcon('role')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('mac')" @keydown.space.prevent="sortBy('mac')" scope="col" class="sortable" @click="sortBy('mac')">MAC Address <span aria-hidden="true" x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('hostname')" @keydown.space.prevent="sortBy('hostname')" scope="col" class="sortable" @click="sortBy('hostname')">Hostname <span aria-hidden="true" x-text="sortIcon('hostname')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('category')" @keydown.space.prevent="sortBy('category')" scope="col" class="sortable" @click="sortBy('category')">Device <span aria-hidden="true" x-text="sortIcon('category')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('type')" @keydown.space.prevent="sortBy('type')" scope="col" class="sortable" @click="sortBy('type')">Type <span aria-hidden="true" x-text="sortIcon('type')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('ip')" @keydown.space.prevent="sortBy('ip')" scope="col" class="sortable" @click="sortBy('ip')">IP Address <span aria-hidden="true" x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('vlan')" @keydown.space.prevent="sortBy('vlan')" scope="col" class="sortable" @click="sortBy('vlan')">VLAN <span aria-hidden="true" x-text="sortIcon('vlan')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('connected_to')" @keydown.space.prevent="sortBy('connected_to')" scope="col" class="sortable" @click="sortBy('connected_to')">Connected To <span aria-hidden="true" x-text="sortIcon('connected_to')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('site')" @keydown.space.prevent="sortBy('site')" scope="col" class="sortable" @click="sortBy('site')">Site <span aria-hidden="true" x-text="sortIcon('site')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('role')" @keydown.space.prevent="sortBy('role')" scope="col" class="sortable" @click="sortBy('role')">Role <span aria-hidden="true" x-text="sortIcon('role')" style="opacity:.45;font-size:.6rem;"></span></th>
                 </tr>
             </thead>
             <tbody>
                 <template x-for="client in rows" :key="client.mac">
                     <tr class="tbl-row" @click="window.location='/clients/'+client.mac">
-                        <td class="font-mono text-xs text-slate-200" x-text="client.mac"></td>
+                        <td class="font-mono text-xs"><a :href="'/clients/' + client.mac" @click.stop
+                            class="text-slate-200 hover:underline" x-text="client.mac"></a></td>
                         <td x-text="client.hostname || '—'"></td>
                         <td>
                             <template x-if="client.category || client.os">

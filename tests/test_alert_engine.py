@@ -418,7 +418,7 @@ class TestSummaryReport:
 # permanently dead engine coexisted with a green suite. These tests drive the
 # real _fetch_devices_sync() path with live-shaped payloads.
 
-RAW_ONLINE = {"serialNumber": "SG30LMR164", "deviceName": "CX6300-CORE",
+RAW_ONLINE = {"serialNumber": "SAMPLE0002", "deviceName": "SAMPLE-SWITCH",
               "deviceType": "SWITCH", "status": "ONLINE", "siteName": "HQ"}
 RAW_OFFLINE = {**RAW_ONLINE, "status": "OFFLINE"}
 
@@ -438,7 +438,7 @@ class TestRawBridgePayloads:
         _patch_bridge(monkeypatch, [RAW_ONLINE])
         assert run(devices=None, now=T0) == []
         # Was set() — every device was skipped because dev.get("serial") was None.
-        assert set(engine.snapshot) == {"SG30LMR164"}
+        assert set(engine.snapshot) == {"SAMPLE0002"}
 
     def test_down_alert_fires_from_raw_payload(self, engine, monkeypatch):
         _patch_bridge(monkeypatch, [RAW_ONLINE])
@@ -456,8 +456,8 @@ class TestRawBridgePayloads:
         run(devices=None, now=at(1))
         run(devices=None, now=at(7))
         _to, subject, html = engine.outbox[0]
-        assert "CX6300-CORE" in subject
-        assert "CX6300-CORE" in html and "HQ" in html
+        assert "SAMPLE-SWITCH" in subject
+        assert "SAMPLE-SWITCH" in html and "HQ" in html
 
     def test_summary_report_rows_are_not_placeholders(self, report_db):
         """run_summary_report is handed raw devices by /notifications/reports/test."""
@@ -465,8 +465,8 @@ class TestRawBridgePayloads:
                                           subs=[], now=T0)
         assert result["ok"] is True
         _to, _subject, html = report_db.outbox[0]
-        assert "CX6300-CORE" in html          # was "?" — deviceName never read
-        assert "SG30LMR164" in html           # was blank — serialNumber never read
+        assert "SAMPLE-SWITCH" in html          # was "?" — deviceName never read
+        assert "SAMPLE0002" in html           # was blank — serialNumber never read
         assert "unknown" not in html.lower()  # was the type for every device
 
 

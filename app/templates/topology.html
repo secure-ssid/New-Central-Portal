@@ -314,7 +314,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/vendor/3d-force-graph-1.80.0.min.js"></script>
+<script src="/static/vendor/3d-force-graph-1.80.1.min.js"></script>
 <script>
 // Pure graph-filtering helper. Kept dependency-free (no DOM, no library
 // globals) so it can be unit-tested standalone in Node.
@@ -1451,7 +1451,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = { topoFi
 // permanently keeps its sphere nodes (graceful degradation, no error).
 // Must match the three revision bundled inside the 3d-force-graph UMD
 // (r183) — sprites built from a mismatched three instance render blank.
-import * as THREE from '/static/vendor/three-0.183.2/three.module.min.js';
+import * as THREE from '/static/vendor/three-0.185.1/three.module.min.js';
 if (typeof window.__topoIconInit === 'function') window.__topoIconInit(THREE);
 </script>
 {% endblock %}

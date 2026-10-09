@@ -21,7 +21,7 @@ TEMPLATE = (
 
 @pytest.fixture(scope="module")
 def parts():
-    html = TEMPLATE.read_text()
+    html = TEMPLATE.read_text(encoding="utf-8")
     marker = "{% block scripts %}"
     assert marker in html, "topology.html should keep its scripts in a block"
     return html[: html.index(marker)], html[html.index(marker):]
@@ -118,7 +118,7 @@ def test_header_badges_use_the_shared_class(parts):
     """
     markup, _ = parts
     assert markup.count('class="badge') >= 4
-    shared = (TEMPLATE.parent.parent / "static" / "app.css").read_text()
+    shared = (TEMPLATE.parent.parent / "static" / "app.css").read_text(encoding="utf-8")
     assert ".badge {" in shared, "the badge must live in the shared stylesheet"
     assert ".topo-badge" not in markup, "the page-scoped copy should be gone"
 

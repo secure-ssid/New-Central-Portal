@@ -71,7 +71,9 @@ def test_html_is_no_store(client, mock_central, stub_db):
 def test_static_assets_stay_cacheable(client):
     # The no-store rule must NOT leak onto static assets — they rely on
     # ETag/Last-Modified validation and would be needlessly re-downloaded.
-    r = client.get("/static/vendor/alpinejs-3.15.12.min.js")
+    # Point at a file with an unversioned name: naming a vendored release in
+    # here makes the next dependency bump break a test about cache headers.
+    r = client.get("/static/app.css")
     assert r.status_code == 200
     assert "no-store" not in r.headers.get("cache-control", "")
 
@@ -156,7 +158,7 @@ def test_devices_page_survives_bridge_failure(client, monkeypatch, stub_db):
     r = client.get("/devices/")
     assert r.status_code == 200
     # aruba_central falls back to its built-in mock fleet.
-    assert "CX6300-CORE" in r.text
+    assert "SAMPLE-SWITCH" in r.text
 
     assert client.get("/").status_code == 200
 

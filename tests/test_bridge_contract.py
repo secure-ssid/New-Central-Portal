@@ -25,8 +25,8 @@ from vendors.aruba_central import _norm_device  # noqa: E402
 
 # Live-tenant shape (verified against Central): uppercase status, camelCase keys.
 RAW_DEVICE = {
-    "serialNumber": "SG30LMR164",
-    "deviceName": "CX6300-CORE",
+    "serialNumber": "SAMPLE0002",
+    "deviceName": "SAMPLE-SWITCH",
     "deviceType": "SWITCH",
     "status": "ONLINE",
     "siteName": "HQ",
@@ -65,8 +65,8 @@ def test_get_devices_returns_raw_centralmcp_keys(fake_monitoring):
 def test_norm_device_maps_every_key_the_engine_reads():
     """notifications.py reads serial/name/site/type/status — all must resolve."""
     d = _norm_device(dict(RAW_DEVICE))
-    assert d["serial"] == "SG30LMR164"
-    assert d["name"] == "CX6300-CORE"
+    assert d["serial"] == "SAMPLE0002"
+    assert d["name"] == "SAMPLE-SWITCH"
     assert d["site"] == "HQ"
     assert d["type"] == "switch"
     assert d["status"] == "online"
@@ -95,11 +95,11 @@ def test_norm_device_handles_uppercase_access_point():
 # silently become the most refetched call in the portal.
 
 TRENDS_ENVELOPE = {
-    "serial_number": "SG30LMR164",
-    "endpoint_used": "/network-monitoring/v1/switches/SG30LMR164/hardware-trends",
-    "errors": ["404 at /network-monitoring/v1alpha1/switch/SG30LMR164/hardware-trends"],
+    "serial_number": "SAMPLE0002",
+    "endpoint_used": "/network-monitoring/v1/switches/SAMPLE0002/hardware-trends",
+    "errors": ["404 at /network-monitoring/v1alpha1/switch/SAMPLE0002/hardware-trends"],
     "trends": {"response": {"metric": "SwitchDeviceTrends", "keys": ["cpuUtilization"],
-        "switchMetrics": [{"serialNumber": "SG30LMR164", "samples": [
+        "switchMetrics": [{"serialNumber": "SAMPLE0002", "samples": [
             {"timestamp": 1784982600000, "data": ["21"]}]}]}},
 }
 
@@ -143,7 +143,7 @@ def test_trend_wrapper_unwraps_the_envelope_so_it_keeps_the_full_ttl(monkeypatch
     rec = _Recorder(TRENDS_ENVELOPE)
     _install(monkeypatch, get_device_trends=rec)
 
-    out = asyncio.run(cb.get_switch_hardware_trends("SG30LMR164", "S", "E"))
+    out = asyncio.run(cb.get_switch_hardware_trends("SAMPLE0002", "S", "E"))
 
     assert "response" in out, "must return the inner payload, not the envelope"
     assert "errors" not in out
@@ -166,8 +166,8 @@ def test_switch_trends_are_fetched_once_not_once_per_metric(monkeypatch):
 
     async def run():
         return await asyncio.gather(
-            cb.get_switch_hardware_trends("SG30LMR164", "S", "E"),
-            cb.get_switch_hardware_trends("SG30LMR164", "S", "E"),
+            cb.get_switch_hardware_trends("SAMPLE0002", "S", "E"),
+            cb.get_switch_hardware_trends("SAMPLE0002", "S", "E"),
         )
 
     asyncio.run(run())
@@ -187,7 +187,7 @@ def test_poe_tolerates_a_null_items_list(monkeypatch):
     """`items` can be present and null — the get_switch_ports lesson."""
     _install(monkeypatch, get_switch_interface_poe=_Recorder(
         {"poe": {"response": {"count": 0, "items": None}}, "errors": []}))
-    assert asyncio.run(cb.get_switch_interface_poe("SG30LMR164")) == []
+    assert asyncio.run(cb.get_switch_interface_poe("SAMPLE0002")) == []
 
 
 def test_vlans_accept_either_payload_shape(monkeypatch):
@@ -195,7 +195,7 @@ def test_vlans_accept_either_payload_shape(monkeypatch):
     value may be a list or the whole dict."""
     _install(monkeypatch, get_switch_vlans=_Recorder(
         {"vlans": {"items": [{"id": "1"}]}, "errors": []}))
-    assert asyncio.run(cb.get_switch_vlans("SG30LMR164")) == [{"id": "1"}]
+    assert asyncio.run(cb.get_switch_vlans("SAMPLE0002")) == [{"id": "1"}]
 
 
 # Diagnostics that poll an async job: mcp_servers/shared.py sleeps 5s BEFORE
@@ -231,3 +231,67 @@ def test_every_read_wrapper_is_cached():
     assert not offenders, (
         f"{offenders} bypass the response cache — add @_cached(), or add the "
         f"name to DELIBERATELY_UNCACHED with a reason")
+
+
+# The upstream paths this app calls directly (the rest goes through centralmcp).
+# Checked against Central on 2026-10-09: monitoring/config paths answer on the
+# v1/v1alpha1 gateways, GreenLake device management is v2beta1, and the Classic
+# client keeps its /central and /configuration v1/v2 paths.
+PINNED_ENDPOINTS = (
+    "/network-notifications/v1/alerts",
+    "/network-services/v1alpha1/firmware-details",
+    "/network-config/v1/named-vlan",
+    "/network-troubleshooting/v1alpha1/aps/",
+    "/network-troubleshooting/v1alpha1/cx/",
+    "/network-troubleshooting/v1alpha1/gateways/",
+    "/devices/v2beta1/devices",
+    "/devices/v1/devices",
+    "/configuration/v2/groups",
+    "/central/v2/sites",
+    "/configuration/v1/devices/move",
+    "/central/v2/sites/associations",
+)
+
+
+def test_direct_upstream_endpoints_are_pinned():
+    """A version segment changes without notice, so every path is listed here.
+
+    Nothing else in the suite would notice a rename: the call sites answer from
+    stubs, and a wrong version returns 404 at runtime, which the bridge turns
+    into a quiet empty list. Changing a string in this list means re-verifying
+    it against Central (or centralmcp), not editing the test.
+    """
+    src = Path(cb.__file__).read_text(encoding="utf-8")
+    missing = [p for p in PINNED_ENDPOINTS if p not in src]
+    assert not missing, (
+        f"these Central/GreenLake paths are no longer called by the bridge: {missing}"
+    )
+
+
+def test_mock_fallback_fleet_is_placeholders():
+    """The demo fleet is rendered in a public repo and shipped to every
+    deployment without a Central token, so it may not carry real identifiers:
+    no vendor-OUI MAC, no routable-looking address, no tenant site name.
+
+    (Documentation/test IPs come from RFC 5737 TEST-NET-1, 192.0.2.0/24.)
+    """
+    from vendors.aruba_central import _mock_clients, _mock_devices
+
+    offenders = []
+    for d in _mock_devices():
+        if not d["serial"].startswith("SAMPLE"):
+            offenders.append(f"device serial {d['serial']!r}")
+        if not d["mac"].startswith("02:00:00"):
+            offenders.append(f"device mac {d['mac']!r}")
+        if not d["ip"].startswith("192.0.2."):
+            offenders.append(f"device ip {d['ip']!r}")
+        if d["site"] != "Example HQ":
+            offenders.append(f"device site {d['site']!r}")
+    for c in _mock_clients():
+        if not c["mac"].startswith("02:00:00"):
+            offenders.append(f"client mac {c['mac']!r}")
+        if not c["ip"].startswith("192.0.2."):
+            offenders.append(f"client ip {c['ip']!r}")
+    assert not offenders, (
+        f"the mock fallback leaks identifying values — use SAMPLE*/02:00:00:*/"
+        f"192.0.2.x: {offenders}")

@@ -11,6 +11,10 @@
 __pycache__/
 *.py[cod]
 
+# Virtualenv (local test runs)
+.venv/
+venv/
+
 # Environment files
 .env
 

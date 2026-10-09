@@ -8,8 +8,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "/static/vendor/three-0.183.2/three.module.min.js",
-    "three/addons/": "/static/vendor/three-addons-0.160.0/"
+    "three": "/static/vendor/three-0.185.1/three.module.min.js",
+    "three/addons/": "/static/vendor/three-addons-0.185.1/"
   }
 }
 </script>
@@ -950,7 +950,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
                 <input type="hidden" name="destination" value="">
             </form>
             <div class="flex gap-1.5 mt-1.5">
-                {% for t in ['8.8.8.8','1.1.1.1','10.11.154.1'] %}
+                {% for t in ['8.8.8.8','1.1.1.1','192.0.2.1'] %}
                 <button type="button" @click="pingDest='{{ t }}'"
                     class="px-2 py-0.5 bg-surface-700 border border-surface-600 rounded text-slate-500 text-[0.68rem] cursor-pointer hover:text-slate-300 transition-colors">{{ t }}</button>
                 {% endfor %}

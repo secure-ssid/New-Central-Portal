@@ -56,7 +56,7 @@ async def _load_sites() -> list[dict]:
         raw = await get_sites()
         return [_norm_site(s) for s in raw if isinstance(s, dict)]
     except Exception as exc:
-        # Deliberately NOT a mock site. This used to invent a "Memphis HQ" with
+        # Deliberately NOT a mock site. This used to invent a "Example HQ" with
         # 9 devices and 32 clients, which is indistinguishable from real data on
         # a page whose whole job is to tell you what you have — and it appeared
         # precisely when Central was unreachable, i.e. when trusting it was most

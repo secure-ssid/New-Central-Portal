@@ -49,7 +49,7 @@
 
     <!-- Quick targets -->
     <div class="flex gap-2 mt-3 flex-wrap">
-        {% for target in ['8.8.8.8', '1.1.1.1', '10.11.154.1', '192.168.1.1'] %}
+        {% for target in ['8.8.8.8', '1.1.1.1', '192.0.2.1', '192.168.1.1'] %}
         <button type="button" class="btn-secondary text-xs py-1 px-2.5 font-mono"
                 onclick="document.querySelector('[name=destination]').value='{{ target }}'">
             {{ target }}
