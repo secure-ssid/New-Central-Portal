@@ -24,7 +24,7 @@ TOKEN_RE = re.compile(r"[a-z]*:?[a-z-]*(?:surface|brand)-\d+(?:/\d+)?")
 def _tokens_used() -> set[str]:
     found = set()
     for f in TEMPLATES.rglob("*.html"):
-        found.update(TOKEN_RE.findall(f.read_text()))
+        found.update(TOKEN_RE.findall(f.read_text(encoding="utf-8")))
     return found
 
 
@@ -39,25 +39,25 @@ def test_config_and_theme_files_exist():
 
 def test_config_reads_the_shared_theme():
     """Dev (Play CDN) and prod (CLI build) must not be able to drift apart."""
-    assert "tailwind-theme" in CONFIG_JS.read_text()
+    assert "tailwind-theme" in CONFIG_JS.read_text(encoding="utf-8")
 
 
 def test_build_paths_pass_the_config():
-    dockerfile = (APP / "Dockerfile").read_text()
-    script = (APP.parent / "scripts" / "build-tailwind.sh").read_text()
+    dockerfile = (APP / "Dockerfile").read_text(encoding="utf-8")
+    script = (APP.parent / "scripts" / "build-tailwind.sh").read_text(encoding="utf-8")
     assert "--config tailwind.config.js" in dockerfile
     assert "--config tailwind.config.js" in script
 
 
 def test_base_html_no_longer_carries_its_own_theme():
     """The duplicated inline tailwind.config is what the CLI build never saw."""
-    base = (TEMPLATES / "base.html").read_text()
+    base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "tailwind.config = {" not in base
 
 
 @pytest.mark.skipif(not BUILT_CSS.exists(), reason="tailwind.css not built")
 def test_every_theme_class_used_by_a_template_exists_in_the_built_css():
-    css = BUILT_CSS.read_text()
+    css = BUILT_CSS.read_text(encoding="utf-8")
     used = _tokens_used()
     assert used, "expected the templates to use brand-*/surface-* utilities"
     missing = sorted(t for t in used if _css_selector(t) not in css)
@@ -70,14 +70,14 @@ def test_every_theme_class_used_by_a_template_exists_in_the_built_css():
 @pytest.mark.skipif(not BUILT_CSS.exists(), reason="tailwind.css not built")
 def test_built_css_carries_the_palette_values():
     """A build that lost the config would still emit CSS — just without these."""
-    css = BUILT_CSS.read_text()
+    css = BUILT_CSS.read_text(encoding="utf-8")
     # brand-500 #f97316 -> rgb(249 115 22), surface-700 #1e2535 -> rgb(30 37 53)
     assert "249 115 22" in css, "brand-500 missing from built CSS"
     assert "30 37 53" in css, "surface-700 missing from built CSS"
 
 
 def test_theme_defines_every_shade_the_templates_reference():
-    theme = THEME_JS.read_text()
+    theme = THEME_JS.read_text(encoding="utf-8")
     shades = {t.split("-")[-2] + "-" + t.split("-")[-1].split("/")[0]
               if False else re.search(r"(surface|brand)-(\d+)", t).groups()
               for t in _tokens_used()}
@@ -91,7 +91,7 @@ def test_theme_defines_every_shade_the_templates_reference():
 
 def test_design_system_is_an_external_stylesheet():
     """Keeping it inline made it uncacheable and re-sent on every page load."""
-    base = (TEMPLATES / "base.html").read_text()
+    base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert '/static/app.css' in base
     assert (APP / "static" / "app.css").exists()
 
@@ -99,7 +99,7 @@ def test_design_system_is_an_external_stylesheet():
 def test_standalone_pages_share_the_design_system():
     """login/404/500 each used to restate the whole theme, and it had drifted."""
     for name in ("login.html", "errors/404.html", "errors/500.html"):
-        html = (TEMPLATES / name).read_text()
+        html = (TEMPLATES / name).read_text(encoding="utf-8")
         assert "/static/app.css" in html, f"{name} does not use the shared stylesheet"
         assert "<style>" not in html, f"{name} still carries an inline theme"
 
@@ -117,7 +117,7 @@ def test_no_page_loads_an_external_subresource():
     )
     offenders = []
     for f in TEMPLATES.rglob("*.html"):
-        for m in tag_re.finditer(f.read_text()):
+        for m in tag_re.finditer(f.read_text(encoding="utf-8")):
             offenders.append(f"{f.name}: {m.group(1)}")
     assert not offenders, f"external subresources loaded: {offenders}"
 
@@ -130,13 +130,13 @@ def test_no_template_uses_a_class_defined_only_in_another_pages_style_block():
     compliance board used .topo-badge, which is defined inside topology.html's
     scoped block, so "Update available" rendered as plain text.
     """
-    shared_css = (APP / "static" / "app.css").read_text()
-    built_css = BUILT_CSS.read_text() if BUILT_CSS.exists() else ""
+    shared_css = (APP / "static" / "app.css").read_text(encoding="utf-8")
+    built_css = BUILT_CSS.read_text(encoding="utf-8") if BUILT_CSS.exists() else ""
 
     # Collect the classes each page defines privately, and where.
     private: dict[str, str] = {}
     for template in TEMPLATES.rglob("*.html"):
-        text = template.read_text()
+        text = template.read_text(encoding="utf-8")
         for block in re.findall(r"<style>(.*?)</style>", text, re.S):
             for name in re.findall(r"\.([a-z][a-z0-9-]{2,})\s*[,{:]", block):
                 private.setdefault(name, template.name)
@@ -144,8 +144,8 @@ def test_no_template_uses_a_class_defined_only_in_another_pages_style_block():
     offenders = []
     for template in TEMPLATES.rglob("*.html"):
         own_blocks = "".join(re.findall(r"<style>(.*?)</style>",
-                                        template.read_text(), re.S))
-        for group in re.findall(r'class="([^"]*)"', template.read_text()):
+                                        template.read_text(encoding="utf-8"), re.S))
+        for group in re.findall(r'class="([^"]*)"', template.read_text(encoding="utf-8")):
             for name in group.split():
                 if "{{" in name or "{%" in name or name not in private:
                     continue

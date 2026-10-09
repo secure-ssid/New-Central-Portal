@@ -43,23 +43,23 @@ AP_CPU = {
 }
 
 SWITCH_HW = {
-    "serial_number": "SG30LMR164", "metric": "cpu",
-    "endpoint_used": "/network-monitoring/v1/switches/SG30LMR164/hardware-trends",
-    "errors": ["404 at /network-monitoring/v1alpha1/switch/SG30LMR164/hardware-trends"],
+    "serial_number": "SAMPLE0002", "metric": "cpu",
+    "endpoint_used": "/network-monitoring/v1/switches/SAMPLE0002/hardware-trends",
+    "errors": ["404 at /network-monitoring/v1alpha1/switch/SAMPLE0002/hardware-trends"],
     "trends": {"response": {"metric": "SwitchDeviceTrends",
         "keys": ["cpuUtilization", "memoryUtilization", "systemTemperature",
                  "poeAvailable", "poeConsumption", "powerConsumption",
                  "totalPowerConsumption"],
-        "switchMetrics": [{"serialNumber": "SG30LMR164", "samples": [
+        "switchMetrics": [{"serialNumber": "SAMPLE0002", "samples": [
             {"timestamp": 1784982600000, "data": ["21", "17", "25.5", "740", "84.4", "97.37", "181.77"]},
             {"timestamp": 1784982900000, "data": ["23", "17", "25.5", "740", "84.9", "97.99", "182.10"]},
             {"timestamp": 1784983200000, "data": ["19", "17", "26.0", "740", "84.4", "97.37", "181.77"]}]}]}},
 }
 
 IFACE = {
-    "serial_number": "SG30LMR164",
+    "serial_number": "SAMPLE0002",
     "errors": [],
-    "trends": {"response": {"id": "SG30LMR164", "interfaceId": "1/1/3",
+    "trends": {"response": {"id": "SAMPLE0002", "interfaceId": "1/1/3",
         "metric": "SwitchNetworkInterfaceTrends",
         "keys": ["rxBytes", "txBytes", "inErrors", "outErrors", "inGiants"],
         "samples": [
@@ -81,7 +81,7 @@ def test_ap_and_switch_shapes_normalise_to_one_contract():
     """graph{}/ISO/int and response.switchMetrics[]/epoch-ms/str must land on
     the same contract. Both fixtures describe the same three instants."""
     ap = normalize_device_trends(AP_CPU, serial="PHQHKZ21HK")
-    sw = normalize_device_trends(SWITCH_HW, serial="SG30LMR164")
+    sw = normalize_device_trends(SWITCH_HW, serial="SAMPLE0002")
 
     # Two different raw spellings reach the same canonical key.
     assert "cpu" in ap.series and "cpu" in sw.series
@@ -141,7 +141,7 @@ def test_envelope_error_prefers_a_real_reason_over_404_noise():
 # ── The two switch shapes share one parser ───────────────────────────────────
 
 def test_interface_trends_use_the_same_parser_as_hardware_trends():
-    iface = normalize_interface_trends(IFACE, serial="SG30LMR164", interface_id="1/1/3")
+    iface = normalize_interface_trends(IFACE, serial="SAMPLE0002", interface_id="1/1/3")
     assert iface.ok
     assert iface.kind == "interface"
     assert iface.series["in_errors"].points[-1].v == 5.0
@@ -291,7 +291,7 @@ def test_bits_per_second_uses_the_bucket_width():
 
 
 def test_error_counters_suppress_all_zero_series():
-    iface = normalize_interface_trends(IFACE, serial="SG30LMR164")
+    iface = normalize_interface_trends(IFACE, serial="SAMPLE0002")
     keys = [s.key for s in error_counter_series(iface)]
     assert "out_errors" not in keys, "an all-zero counter should not get a chart"
     assert keys[0] == "in_errors", "worst counter first"

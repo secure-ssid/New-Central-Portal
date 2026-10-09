@@ -28,7 +28,7 @@ NEW_CENTRAL_SITE = {
 # The Classic Central gateway shape the code used to assume.
 CLASSIC_SITE = {
     "site_id": 42,
-    "site_name": "Memphis HQ",
+    "site_name": "Example HQ",
     "city": "Memphis",
 }
 
@@ -42,7 +42,7 @@ def test_resolves_the_id_new_central_actually_returns():
 
 
 def test_still_resolves_the_classic_gateway_shape():
-    assert site_display_name(CLASSIC_SITE) == "Memphis HQ"
+    assert site_display_name(CLASSIC_SITE) == "Example HQ"
     assert site_id_of(CLASSIC_SITE) == "42"
 
 
@@ -68,7 +68,7 @@ def test_explicit_site_name_wins_over_scope_name():
 
 
 def test_sites_page_no_longer_invents_a_site_when_central_is_down():
-    """It used to return a fabricated "Memphis HQ" with 9 devices and 32 clients
+    """It used to return a fabricated "Example HQ" with 9 devices and 32 clients
     — indistinguishable from real data, on the page whose job is to say what you
     have, exactly when Central was unreachable."""
     import asyncio

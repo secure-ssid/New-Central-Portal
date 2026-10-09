@@ -375,7 +375,7 @@ def test_parse_mac_table_extracts_rows_and_skips_chrome():
         "MAC Address          VLAN     Type        Port\n"
         "-----------------------------------------------\n"
         "94:40:c9:12:71:d2    1        dynamic     1/1/23\n"
-        "f4:e1:fc:c9:4f:a0    5        dynamic     1/1/15\n"
+        "02:00:00:00:00:11    5        dynamic     1/1/15\n"
         "00:0b:86:b8:c4:b8    200      dynamic     1/1/17\n"
     )
     rows = parse_mac_table(text)

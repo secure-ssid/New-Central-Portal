@@ -246,13 +246,13 @@ document.addEventListener('alpine:init', () => {
         <table class="tbl tbl--wide">
             <thead>
                 <tr>
-                    <th scope="col" class="sortable" @click="sortBy('name')">Name <span aria-hidden="true" x-text="sortIcon('name')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('serial')">Serial <span aria-hidden="true" x-text="sortIcon('serial')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('model')">Model <span aria-hidden="true" x-text="sortIcon('model')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('mac')">MAC <span aria-hidden="true" x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('status')">Status <span aria-hidden="true" x-text="sortIcon('status')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('ip')">IP <span aria-hidden="true" x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
-                    <th scope="col" class="sortable" @click="sortBy('site')">Site <span aria-hidden="true" x-text="sortIcon('site')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('name')" @keydown.space.prevent="sortBy('name')" scope="col" class="sortable" @click="sortBy('name')">Name <span aria-hidden="true" x-text="sortIcon('name')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('serial')" @keydown.space.prevent="sortBy('serial')" scope="col" class="sortable" @click="sortBy('serial')">Serial <span aria-hidden="true" x-text="sortIcon('serial')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('model')" @keydown.space.prevent="sortBy('model')" scope="col" class="sortable" @click="sortBy('model')">Model <span aria-hidden="true" x-text="sortIcon('model')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('mac')" @keydown.space.prevent="sortBy('mac')" scope="col" class="sortable" @click="sortBy('mac')">MAC <span aria-hidden="true" x-text="sortIcon('mac')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('status')" @keydown.space.prevent="sortBy('status')" scope="col" class="sortable" @click="sortBy('status')">Status <span aria-hidden="true" x-text="sortIcon('status')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('ip')" @keydown.space.prevent="sortBy('ip')" scope="col" class="sortable" @click="sortBy('ip')">IP <span aria-hidden="true" x-text="sortIcon('ip')" style="opacity:.45;font-size:.6rem;"></span></th>
+                    <th role="button" tabindex="0" @keydown.enter="sortBy('site')" @keydown.space.prevent="sortBy('site')" scope="col" class="sortable" @click="sortBy('site')">Site <span aria-hidden="true" x-text="sortIcon('site')" style="opacity:.45;font-size:.6rem;"></span></th>
                     <th scope="col" style="width:40px;"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
@@ -263,7 +263,8 @@ document.addEventListener('alpine:init', () => {
                             <div class="flex items-center gap-2.5">
                                 <img :src="typeIcon(d)" alt="" aria-hidden="true" width="18" height="18" class="flex-shrink-0" loading="lazy">
                                 <div class="min-w-0">
-                                    <p class="font-medium text-slate-100 text-sm" x-text="d.name"></p>
+                                    <a :href="'/devices/' + d.serial" @click.stop
+                                       class="font-medium text-slate-100 text-sm hover:underline" x-text="d.name"></a>
                                     <p class="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5" x-text="typeLabel(d)"></p>
                                 </div>
                             </div>

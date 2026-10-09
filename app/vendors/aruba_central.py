@@ -67,7 +67,7 @@ def site_display_name(raw: dict) -> str:
     collection). Three call sites independently looked for siteName/site_name/
     name, so every site fell through to a placeholder: the dashboard's Site
     Health card rendered "Unnamed site" for a site the device list happily
-    showed as SecureSSID. One resolver so the next payload change is one edit.
+    showed as "Example HQ". One resolver so the next payload change is one edit.
     """
     if not isinstance(raw, dict):
         return ""
@@ -207,22 +207,22 @@ aruba = ArubaCentralClient()
 
 def _mock_devices() -> list[dict]:
     return [
-        {"serial": "VNVQMPJ028", "name": "BY-AP763", "type": "access_point",
-         "model": "AP-763", "mac": "f4:e1:fc:c9:4f:a0", "status": "online",
-         "ip": "10.11.154.56", "site": "Memphis HQ"},
-        {"serial": "SG30LMR164", "name": "CX6300-CORE", "type": "switch",
-         "model": "CX-6300M", "mac": "4c:d5:87:32:c0:80", "status": "online",
-         "ip": "10.11.154.1", "site": "Memphis HQ"},
-        {"serial": "PHSXM52029", "name": "LR-AP735", "type": "access_point",
-         "model": "AP-735", "mac": "48:00:20:c9:ab:0a", "status": "online",
-         "ip": "10.11.154.55", "site": "Memphis HQ"},
+        {"serial": "SAMPLE0001", "name": "SAMPLE-AP-1", "type": "access_point",
+         "model": "AP-763", "mac": "02:00:00:00:00:11", "status": "online",
+         "ip": "192.0.2.56", "site": "Example HQ"},
+        {"serial": "SAMPLE0002", "name": "SAMPLE-SWITCH", "type": "switch",
+         "model": "CX-6300M", "mac": "02:00:00:00:00:12", "status": "online",
+         "ip": "192.0.2.1", "site": "Example HQ"},
+        {"serial": "SAMPLE0003", "name": "SAMPLE-AP-2", "type": "access_point",
+         "model": "AP-735", "mac": "02:00:00:00:00:13", "status": "online",
+         "ip": "192.0.2.55", "site": "Example HQ"},
     ]
 
 
 def _mock_clients() -> list[dict]:
     return [
-        {"mac": "00:0c:29:54:69:96", "ip": "10.11.154.19", "type": "wired",
-         "vlan": 5, "connected_to": "CX6300-CORE", "port": "1/1/23", "role": "-"},
-        {"mac": "3c:a9:ab:7c:a9:51", "ip": "192.168.1.89", "type": "wireless",
-         "vlan": 200, "connected_to": "LR-AP735", "port": "-", "role": "aruba-home"},
+        {"mac": "02:00:00:00:01:01", "ip": "192.0.2.19", "type": "wired",
+         "vlan": 5, "connected_to": "SAMPLE-SWITCH", "port": "1/1/23", "role": "-"},
+        {"mac": "02:00:00:00:01:02", "ip": "192.0.2.89", "type": "wireless",
+         "vlan": 200, "connected_to": "SAMPLE-AP-2", "port": "-", "role": "aruba-home"},
     ]

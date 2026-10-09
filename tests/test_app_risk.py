@@ -186,7 +186,7 @@ def test_every_bucket_has_a_label_and_a_defined_css_tone():
     exact failure that shipped on the compliance board."""
     import pathlib
     css = (pathlib.Path(__file__).resolve().parent.parent
-           / "app" / "static" / "app.css").read_text()
+           / "app" / "static" / "app.css").read_text(encoding="utf-8")
     for bucket in app_risk.RISK_BUCKETS:
         assert app_risk.risk_label(bucket)
         tone = app_risk.risk_tone(bucket)
